@@ -90,7 +90,7 @@ namespace DotNetOutdated
                 {
                     return solutionFiles.Select(DiscoverProjectsFromSolution)
                         .SelectMany(p => p)
-                        .GroupBy(p => p.FullPath) // Do GroupBy and Select to ensure we only select distinc projects
+                        .GroupBy(p => p.FullPath) // Do GroupBy and Select to ensure we only select distinct projects
                         .Select(g => g.First())
                         .ToList();
                 }
@@ -99,7 +99,10 @@ namespace DotNetOutdated
                 var projectFiles = _fileSystem.Directory.GetFiles(path, "*.csproj");
                 if (projectFiles.Length > 0)
                 {
-                    
+                    AnalyzerManager manager = new AnalyzerManager();
+                    return projectFiles.Select(manager.GetProject)
+                        .Select(pa => pa.Project)
+                        .ToList();
                 }
                 
                 // At this point the path contains no solutions or projects, so throw an exception
