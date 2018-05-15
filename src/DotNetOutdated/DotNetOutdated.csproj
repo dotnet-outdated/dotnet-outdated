@@ -1,0 +1,20 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <LangVersion>7.1</LangVersion>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>netcoreapp2.1</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>dotnet-outdated</ToolCommandName>
+    <AssemblyName>dotnet-outdated</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Buildalyzer" Version="0.4.0" />
+    <PackageReference Include="McMaster.Extensions.CommandLineUtils" Version="2.2.3" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="2.1.0-rc1-final" />
+    <PackageReference Include="System.IO.Abstractions" Version="2.1.0.178" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="Attributes" />
+  </ItemGroup>
+</Project>
