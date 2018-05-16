@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Abstractions;
 using System.Linq;
+using System.Net.Http.Headers;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
@@ -82,14 +83,40 @@ namespace DotNetOutdated
                 {
                     console.WriteHeader(project.FullPath);
                     
-                    var packageRerefences = project.Items.Where(i => i.ItemType == "PackageReference" && i.IsImported == false);
-                
-                    foreach (var packageRerefence in packageRerefences)
+                    List<ReportedPackage> reportedPackages = new List<ReportedPackage>();
+
+                    // Get package references
+                    var packageRerefences = project.Items.Where(i => i.ItemType == "PackageReference" && i.IsImported == false).ToList();
+                    if (packageRerefences.Count == 0)
                     {
-                        NuGetVersion referencedVersion = NuGetVersion.Parse(packageRerefence.GetMetadataValue("version"));
-                        NuGetVersion latestVersion = await _nugetService.GetLatestVersion(packageRerefence.EvaluatedInclude, referencedVersion.IsPrerelease);
-                        
-                        console.WriteLine($"- {packageRerefence.EvaluatedInclude} ({referencedVersion}) {latestVersion}");
+                        console.WriteLine("-- Project contains no package references --");
+                    }
+                    else
+                    {
+                        // Analyze packages
+                        console.Write("Analyzing packages...");
+                        foreach (var packageRerefence in packageRerefences)
+                        {
+                            NuGetVersion referencedVersion = NuGetVersion.Parse(packageRerefence.GetMetadataValue("version"));
+                            NuGetVersion latestVersion = await _nugetService.GetLatestVersion(packageRerefence.EvaluatedInclude, referencedVersion.IsPrerelease);
+
+                            reportedPackages.Add(new ReportedPackage(packageRerefence.EvaluatedInclude, referencedVersion, latestVersion));
+                        }
+
+                        // Report on packages
+                        console.Write("\r");
+                        int[] columnWidths = reportedPackages.DetermineColumnWidths();
+                        foreach (var reportedPackage in reportedPackages)
+                        {
+                            console.Write(reportedPackage.Name.PadRight(columnWidths[0]),
+                                reportedPackage.LatestVersion > reportedPackage.ReferencedVersion ? ConsoleColor.Red : ConsoleColor.Green);
+                            console.Write("  ");
+                            console.Write(reportedPackage.ReferencedVersion.ToString().PadRight(columnWidths[1]));
+                            console.Write("  ");
+                            console.Write(reportedPackage.LatestVersion.ToString().PadRight(columnWidths[2]),
+                                reportedPackage.LatestVersion > reportedPackage.ReferencedVersion ? ConsoleColor.Blue : console.ForegroundColor);
+                            console.WriteLine();
+                        }
                     }
 
                     console.WriteLine();
@@ -149,6 +176,19 @@ namespace DotNetOutdated
             AnalyzerManager manager = new AnalyzerManager(solutionPath);
 
             return manager.Projects.Values.Select(pa => pa.Project).ToList();
+        }
+    }
+
+    public static class ReportingExtensions
+    {
+        public static int[] DetermineColumnWidths(this List<ReportedPackage> packages)
+        {
+            List<int> columnWidths = new List<int>();
+            columnWidths.Add(packages.Select(p => p.Name).Aggregate("", (max, cur) => max.Length > cur.Length ? max : cur).Length);
+            columnWidths.Add(packages.Select(p => p.ReferencedVersion.ToString()).Aggregate("", (max, cur) => max.Length > cur.Length ? max : cur).Length);
+            columnWidths.Add(packages.Select(p => p.LatestVersion.ToString()).Aggregate("", (max, cur) => max.Length > cur.Length ? max : cur).Length);
+
+            return columnWidths.ToArray();
         }
     }
 }
