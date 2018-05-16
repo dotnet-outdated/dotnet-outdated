@@ -1,6 +1,6 @@
 ﻿using McMaster.Extensions.CommandLineUtils;
 
-namespace GitStatusCli
+namespace DotNetOutdated
 {
     [HelpOption]
     internal abstract class CommandBase

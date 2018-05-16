@@ -1,7 +1,7 @@
 ﻿using System;
 using McMaster.Extensions.CommandLineUtils;
 
-namespace GitStatusCli
+namespace DotNetOutdated
 {
     public static class ConsoleExtensions
     {
@@ -12,6 +12,12 @@ namespace GitStatusCli
             console.ForegroundColor = color;
             console.Write(value);
             console.ForegroundColor = currentColor;
+        }
+        
+        public static void WriteHeader(this IConsole console, string value)
+        {
+            console.Write($"» {value}", ConsoleColor.DarkYellow);
+            console.WriteLine();
         }
     }
 }

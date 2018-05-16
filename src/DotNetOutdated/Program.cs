@@ -1,6 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel.DataAnnotations;
+﻿using System.Collections.Generic;
 using System.IO;
 using System.IO.Abstractions;
 using System.Linq;
@@ -8,10 +6,11 @@ using System.Reflection;
 using System.Threading.Tasks;
 using Buildalyzer;
 using DotNetOutdated.Exceptions;
-using GitStatusCli;
+using DotNetOutdated.Services;
 using McMaster.Extensions.CommandLineUtils;
 using Microsoft.Build.Evaluation;
 using Microsoft.Extensions.DependencyInjection;
+using NuGet.Versioning;
 
 namespace DotNetOutdated
 {
@@ -22,6 +21,8 @@ namespace DotNetOutdated
     class Program : CommandBase
     {
         private readonly IFileSystem _fileSystem;
+        private readonly IReporter _reporter;
+        private readonly INuGetPackageInfoService _nugetService;
 
         [Argument(0, Description = "The path to a .sln or .csproj file, or to a directory containing a .NET Core solution/project. " +
                                    "If none is specified, the current directory will be used.")]
@@ -31,8 +32,9 @@ namespace DotNetOutdated
         {
             var services = new ServiceCollection()
                 .AddSingleton<IConsole, PhysicalConsole>()
-                .AddSingleton<IFileSystem, FileSystem>() 
                 .AddSingleton<IReporter>(provider => new ConsoleReporter(provider.GetService<IConsole>()))
+                .AddSingleton<IFileSystem, FileSystem>()
+                .AddSingleton<INuGetPackageInfoService, NuGetPackageInfoService>()
                 .BuildServiceProvider();
 
             var app = new CommandLineApplication<Program>
@@ -51,28 +53,52 @@ namespace DotNetOutdated
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
             .InformationalVersion;
 
-        public Program(IFileSystem fileSystem)
+        public Program(IFileSystem fileSystem, IReporter reporter, INuGetPackageInfoService nugetService)
         {
             _fileSystem = fileSystem;
+            _reporter = reporter;
+            _nugetService = nugetService;
         }
         
         public async Task<int> OnExecute(CommandLineApplication app, IConsole console)
         {
-            // If no path is set, use the current directory
-            if (string.IsNullOrEmpty(Path))
-                Path = _fileSystem.Directory.GetCurrentDirectory();
-            
-            // Get all the projects
-            var projects = DiscoverProjects(Path);
-            
-            foreach (var project in projects)
+            //var v = NuGetVersion.Parse("1.7.0.1540");
+            try
             {
-                console.WriteLine(project.FullPath);
-            }
+                // If no path is set, use the current directory
+                if (string.IsNullOrEmpty(Path))
+                    Path = _fileSystem.Directory.GetCurrentDirectory();
             
-            return 0;
-        }
+                // Get all the projects
+                var projects = DiscoverProjects(Path);
+            
+                foreach (var project in projects)
+                {
+                    console.WriteHeader(project.FullPath);
+                    
+                    var packageRerefences = project.Items.Where(i => i.ItemType == "PackageReference" && i.IsImported == false);
+                
+                    foreach (var packageRerefence in packageRerefences)
+                    {
+                        NuGetVersion referencedVersion = NuGetVersion.Parse(packageRerefence.GetMetadataValue("version"));
+                        NuGetVersion latestVersion = await _nugetService.GetLatestVersion(packageRerefence.EvaluatedInclude, referencedVersion.IsPrerelease);
+                        
+                        console.WriteLine($"- {packageRerefence.EvaluatedInclude} ({referencedVersion}) {latestVersion}");
+                    }
 
+                    console.WriteLine();
+                }
+            
+                return 0;
+
+            }
+            catch (CommandValidationException e)
+            {
+                _reporter.Error(e.Message);
+                
+                return 1;
+            }
+        }
         
         private IEnumerable<Project> DiscoverProjects(string path)
         {
