@@ -1,8 +1,10 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.IO.Abstractions;
 using System.Linq;
 using System.Reflection;
+using System.Threading;
 using System.Threading.Tasks;
 using Buildalyzer;
 using DotNetOutdated.Exceptions;
@@ -10,6 +12,8 @@ using DotNetOutdated.Services;
 using McMaster.Extensions.CommandLineUtils;
 using Microsoft.Build.Evaluation;
 using Microsoft.Extensions.DependencyInjection;
+using NuGet.Protocol;
+using NuGet.Protocol.Core.Types;
 using NuGet.Versioning;
 
 namespace DotNetOutdated
@@ -30,22 +34,25 @@ namespace DotNetOutdated
         
         public static int Main(string[] args)
         {
-            var services = new ServiceCollection()
-                .AddSingleton<IConsole, PhysicalConsole>()
-                .AddSingleton<IReporter>(provider => new ConsoleReporter(provider.GetService<IConsole>()))
-                .AddSingleton<IFileSystem, FileSystem>()
-                .AddSingleton<INuGetPackageInfoService, NuGetPackageInfoService>()
-                .BuildServiceProvider();
-
-            var app = new CommandLineApplication<Program>
+            using (var nuGetPackageInfoService = new NuGetPackageInfoService())
             {
-                ThrowOnUnexpectedArgument = false
-            };
-            app.Conventions
-                .UseDefaultConventions()
-                .UseConstructorInjection(services);
-         
-            return app.Execute(args);
+                var services = new ServiceCollection()
+                    .AddSingleton<IConsole, PhysicalConsole>()
+                    .AddSingleton<IReporter>(provider => new ConsoleReporter(provider.GetService<IConsole>()))
+                    .AddSingleton<IFileSystem, FileSystem>()
+                    .AddSingleton<INuGetPackageInfoService>(nuGetPackageInfoService)
+                    .BuildServiceProvider();
+
+                var app = new CommandLineApplication<Program>
+                {
+                    ThrowOnUnexpectedArgument = false
+                };
+                app.Conventions
+                    .UseDefaultConventions()
+                    .UseConstructorInjection(services);
+
+                return app.Execute(args);
+            }
         }
         
         public static string GetVersion() => typeof(Program)
@@ -62,7 +69,6 @@ namespace DotNetOutdated
         
         public async Task<int> OnExecute(CommandLineApplication app, IConsole console)
         {
-            //var v = NuGetVersion.Parse("1.7.0.1540");
             try
             {
                 // If no path is set, use the current directory

@@ -1,54 +1,49 @@
 ﻿using System;
 using System.Linq;
-using System.Net.Http;
+using System.Threading;
 using System.Threading.Tasks;
-using Newtonsoft.Json;
+using NuGet.Protocol;
+using NuGet.Protocol.Core.Types;
 using NuGet.Versioning;
 
 namespace DotNetOutdated.Services
 {
-    public class NuGetPackageInfoService : INuGetPackageInfoService
+    public class NuGetPackageInfoService : INuGetPackageInfoService, IDisposable
     {
-        private class NuGetVersionConverter : JsonConverter<NuGetVersion>
+        private SourceCacheContext _context;
+        private FindPackageByIdResource _findPackageById;
+        private NullLogger _logger;
+
+        private async Task<FindPackageByIdResource> GetFindPackageByIdResource()
         {
-            public override void WriteJson(JsonWriter writer, NuGetVersion value, JsonSerializer serializer)
+            if (_findPackageById == null)
             {
-                writer.WriteValue(value.ToString());
+                _logger = new NullLogger();
+                _context = new SourceCacheContext()
+                {
+                    NoCache = true
+                };
+                
+                var sourceUrl = "https://api.nuget.org/v3/index.json";
+                var sourceRepository = Repository.Factory.GetCoreV3(sourceUrl);
+                _findPackageById = await sourceRepository.GetResourceAsync<FindPackageByIdResource>();
             }
 
-            public override NuGetVersion ReadJson(JsonReader reader, Type objectType, NuGetVersion existingValue, bool hasExistingValue, JsonSerializer serializer)
-            {
-                string s = (string)reader.Value;
-
-                return NuGetVersion.Parse(s);
-            }
+            return _findPackageById;
         }
-        private class NuGetVersions
-        {
-            [JsonProperty("versions", NullValueHandling = NullValueHandling.Ignore)]
-            public NuGetVersion[] Versions { get; set; }
-        }
-
-        // TODO: This is horrible. We are hardcoding working against NuGet.org, but until such time that the NuGet
-        // client libraries support .NET Standard, this is the way we'll do it.
-        private const string PackageBaseAddress = "https://api.nuget.org/v3-flatcontainer/{0}/index.json";
         
         public async Task<NuGetVersion> GetLatestVersion(string package, bool includePrerelease)
         {
-            string url = string.Format(PackageBaseAddress, package.ToLowerInvariant());
+            var findPackageById = await GetFindPackageByIdResource();
 
-            HttpClient httpClient = new HttpClient();
-            var response = await httpClient.GetAsync(url);
+            return (await findPackageById.GetAllVersionsAsync(package, _context, _logger, CancellationToken.None))
+                .OrderByDescending(version => version)
+                .FirstOrDefault();
+        }
 
-            if (response.IsSuccessStatusCode)
-            {
-                string content = await response.Content.ReadAsStringAsync();
-                var result = JsonConvert.DeserializeObject<NuGetVersions>(content, new NuGetVersionConverter());
-
-                return result.Versions.OrderByDescending(version => version).FirstOrDefault();
-            }
-
-            return null;
+        public void Dispose()
+        {
+            _context?.Dispose();
         }
     }
     
