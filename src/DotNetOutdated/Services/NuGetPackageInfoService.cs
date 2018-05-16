@@ -36,8 +36,11 @@ namespace DotNetOutdated.Services
         {
             var findPackageById = await GetFindPackageByIdResource();
 
-            return (await findPackageById.GetAllVersionsAsync(package, _context, _logger, CancellationToken.None))
-                .OrderByDescending(version => version)
+            var availableVersions = (await findPackageById.GetAllVersionsAsync(package, _context, _logger, CancellationToken.None));
+            if (!includePrerelease)
+                availableVersions = availableVersions.Where(v => v.IsPrerelease == false);
+                
+            return availableVersions.OrderByDescending(version => version)
                 .FirstOrDefault();
         }
 
