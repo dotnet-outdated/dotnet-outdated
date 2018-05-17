@@ -35,15 +35,13 @@ namespace DotNetOutdated
         
         public static int Main(string[] args)
         {
-            using (var nuGetPackageInfoService = new NuGetPackageInfoService())
-            {
-                var services = new ServiceCollection()
+            using (var services = new ServiceCollection()
                     .AddSingleton<IConsole, PhysicalConsole>()
                     .AddSingleton<IReporter>(provider => new ConsoleReporter(provider.GetService<IConsole>()))
                     .AddSingleton<IFileSystem, FileSystem>()
-                    .AddSingleton<INuGetPackageInfoService>(nuGetPackageInfoService)
-                    .BuildServiceProvider();
-
+                    .AddSingleton<INuGetPackageInfoService, NuGetPackageInfoService>()
+                    .BuildServiceProvider())
+            {
                 var app = new CommandLineApplication<Program>
                 {
                     ThrowOnUnexpectedArgument = false
