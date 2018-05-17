@@ -15,7 +15,7 @@ A .NET Core global tool to display outdated NuGet packages in a project
 
 ## Installation
 
-The latest release of github-issues-cli requires the [.NET Core SDK 2.1.300-rc1](https://www.microsoft.com/net/download/dotnet-core/sdk-2.1.300-rc1) or newer.
+The latest release of dotnet-outdated requires the [.NET Core SDK 2.1.300-rc1](https://www.microsoft.com/net/download/dotnet-core/sdk-2.1.300-rc1) or newer.
 
 Once installed, run this command:
 
