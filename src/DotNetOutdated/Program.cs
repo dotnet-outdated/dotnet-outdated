@@ -136,10 +136,10 @@ namespace DotNetOutdated
             if (!(_fileSystem.File.Exists(path) || _fileSystem.Directory.Exists(path)))
                 throw new CommandValidationException($"The directory or file '{path}' does not exist");
 
-            var fileInfo = _fileSystem.File.GetAttributes(path);
+            var fileAttributes = _fileSystem.File.GetAttributes(path);
             
             // 
-            if (fileInfo.HasFlag(FileAttributes.Directory))
+            if (fileAttributes.HasFlag(FileAttributes.Directory))
             {
                 // Search for solution(s)
                 var solutionFiles = _fileSystem.Directory.GetFiles(path, "*.sln");
@@ -164,6 +164,17 @@ namespace DotNetOutdated
                 
                 // At this point the path contains no solutions or projects, so throw an exception
                 throw new CommandValidationException($"The path '{path} does not contain any solutions or projects.");
+            }
+            else
+            {
+                if (string.Compare(_fileSystem.Path.GetExtension(path), ".sln", StringComparison.OrdinalIgnoreCase) == 0)
+                    return DiscoverProjectsFromSolution(path);
+                
+                if (string.Compare(_fileSystem.Path.GetExtension(path), ".csproj", StringComparison.OrdinalIgnoreCase) == 0)
+                {
+                    AnalyzerManager manager = new AnalyzerManager();
+                    return new[] { manager.GetProject(path).Project };
+                }
             }
 
             return null;
