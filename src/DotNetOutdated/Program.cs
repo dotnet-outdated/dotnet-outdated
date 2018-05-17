@@ -163,7 +163,7 @@ namespace DotNetOutdated
                 }
                 
                 // At this point the path contains no solutions or projects, so throw an exception
-                throw new CommandValidationException($"The path '{path} does not contain any solutions or projects.");
+                throw new CommandValidationException($"The directory '{path}' does not contain any solutions or projects.");
             }
             else
             {
