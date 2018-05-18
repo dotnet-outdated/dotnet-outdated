@@ -32,6 +32,11 @@ namespace DotNetOutdated
         [Argument(0, Description = "The path to a .sln or .csproj file, or to a directory containing a .NET Core solution/project. " +
                                    "If none is specified, the current directory will be used.")]
         public string Path { get; set; }
+
+        [Option(CommandOptionType.SingleValue, Description = "Specifies whether to look for pre-release versions of packages. " +
+                                                             "Possible Values: Auto (default), Always or Never.",
+            ShortName = "pr", LongName = "pre-release")]
+        public PrereleaseReporting Prerelease { get; set; } = PrereleaseReporting.Auto;
         
         public static int Main(string[] args)
         {
@@ -95,8 +100,16 @@ namespace DotNetOutdated
                         console.Write("Analyzing packages...");
                         foreach (var packageRerefence in packageRerefences)
                         {
+                            // Get the current version
                             NuGetVersion referencedVersion = NuGetVersion.Parse(packageRerefence.GetMetadataValue("version"));
-                            NuGetVersion latestVersion = await _nugetService.GetLatestVersion(packageRerefence.EvaluatedInclude, referencedVersion.IsPrerelease);
+                            
+                            // Get the latest version
+                            bool includePrerelease = referencedVersion.IsPrerelease;
+                            if (Prerelease == PrereleaseReporting.Always)
+                                includePrerelease = true;
+                            else if (Prerelease == PrereleaseReporting.Never)
+                                includePrerelease = false;
+                            NuGetVersion latestVersion = await _nugetService.GetLatestVersion(packageRerefence.EvaluatedInclude, includePrerelease);
 
                             reportedPackages.Add(new ReportedPackage(packageRerefence.EvaluatedInclude, referencedVersion, latestVersion));
                         }
