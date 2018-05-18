@@ -1,6 +1,7 @@
 # Changelog
 
-## [Unreleased]
+## Unreleased
+- Display column headers #1
 - Fix bug when latest version cannot be found (#10)
 
 ## [v0.1.0]

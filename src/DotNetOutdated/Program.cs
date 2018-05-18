@@ -104,6 +104,8 @@ namespace DotNetOutdated
                         // Report on packages
                         console.Write("\r");
                         int[] columnWidths = reportedPackages.DetermineColumnWidths();
+                        WriteHeader(console, columnWidths);
+
                         foreach (var reportedPackage in reportedPackages)
                         {
                             string referencedVersion = reportedPackage.ReferencedVersion?.ToString() ?? Constants.Reporting.UnknownValue;
@@ -133,7 +135,22 @@ namespace DotNetOutdated
                 return 1;
             }
         }
-        
+
+        private static void WriteHeader(IConsole console, int[] columnWidths)
+        {
+            console.Write(Constants.Reporting.Headers.PackageName.PadRight(columnWidths[0]));
+            console.Write("  ");
+            console.Write(Constants.Reporting.Headers.ReferencedVersion.PadRight(columnWidths[1]));
+            console.Write("  ");
+            console.WriteLine(Constants.Reporting.Headers.LatestVersion.PadRight(columnWidths[2]));
+
+            console.Write(new String('-', columnWidths[0]));
+            console.Write("  ");
+            console.Write(new String('-', columnWidths[1]));
+            console.Write("  ");
+            console.WriteLine(new String('-', columnWidths[2]));
+        }
+
         private IEnumerable<Project> DiscoverProjects(string path)
         {
             if (!(_fileSystem.File.Exists(path) || _fileSystem.Directory.Exists(path)))
