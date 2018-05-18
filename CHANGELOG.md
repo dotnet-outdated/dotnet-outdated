@@ -1,8 +1,8 @@
 # Changelog
 
 ## Unreleased
-- Display column headers #1
-- Fix bug when latest version cannot be found (#10)
+- Display column headers ([#1](https://github.com/jerriep/dotnet-outdated/issues/1))
+- Fix bug when latest version cannot be found ([#10](https://github.com/jerriep/dotnet-outdated/issues/10))
 
 ## [v0.1.0]
 Initial release
