@@ -29,14 +29,23 @@ dotnet tool install --global dotnet-outdated
 Usage: dotnet outdated [arguments] [options]
 
 Arguments:
-  Path          The path to a .sln or .csproj file, or to a directory containing a .NET Core solution/project. If none is specified, the current directory will be used.
+  Path                            The path to a .sln or .csproj file, or to a directory containing a .NET Core solution/project. If none is specified, the current directory will be used.
 
 Options:
-  --version     Show version information
-  -?|-h|--help  Show help information
+  --version                       Show version information
+  -?|-h|--help                    Show help information
+  -pr|--pre-release <PRERELEASE>  Specifies whether to look for pre-release versions of packages. Possible Values: Auto (default), Always or Never.
 ```
 
 ![](screenshot.png)
+
+### Handling pre-release versions
+
+**dotnet-outdated** allows you to specify whether to use pre-release versions of packages or not, but passing the `-pr|--pre-release` option.
+
+The default value of `Auto` will determine whether to use pre-release versions of a package based on whether the referenced version itself is a pre-release version. If the referenced version is a pre-release version, **dotnet-outdated** will include newer pre-release versions of the package. If the referenced version is not a pre-release version, **dotnet-outdated** will ignore pre-release versions.
+
+You can also tell **dotnet-outdated** to always include pre-release versions by passing the `Always` value for the option. Conversely, you can tell it to never include pre-release versions by passing the `Never` value for the option.
 
 ## Examples
 
