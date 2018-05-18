@@ -1,5 +1,8 @@
 # Changelog
 
+## [Unreleased]
+- Fix bug when latest version cannot be found (#10)
+
 ## [v0.1.0]
 Initial release
  - A .NET Core global tool to display outdated NuGet packages in a project

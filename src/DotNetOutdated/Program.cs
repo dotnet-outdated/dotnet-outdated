@@ -106,12 +106,15 @@ namespace DotNetOutdated
                         int[] columnWidths = reportedPackages.DetermineColumnWidths();
                         foreach (var reportedPackage in reportedPackages)
                         {
+                            string referencedVersion = reportedPackage.ReferencedVersion?.ToString() ?? Constants.Reporting.UnknownValue;
+                            string latestVersion = reportedPackage.LatestVersion?.ToString() ?? Constants.Reporting.UnknownValue;
+                            
                             console.Write(reportedPackage.Name.PadRight(columnWidths[0]),
                                 reportedPackage.LatestVersion > reportedPackage.ReferencedVersion ? ConsoleColor.Red : ConsoleColor.Green);
                             console.Write("  ");
-                            console.Write(reportedPackage.ReferencedVersion.ToString().PadRight(columnWidths[1]));
+                            console.Write(referencedVersion.PadRight(columnWidths[1]));
                             console.Write("  ");
-                            console.Write(reportedPackage.LatestVersion.ToString().PadRight(columnWidths[2]),
+                            console.Write(latestVersion.PadRight(columnWidths[2]),
                                 reportedPackage.LatestVersion > reportedPackage.ReferencedVersion ? ConsoleColor.Blue : console.ForegroundColor);
                             console.WriteLine();
                         }
