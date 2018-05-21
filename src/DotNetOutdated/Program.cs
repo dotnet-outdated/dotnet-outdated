@@ -1,10 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.IO.Abstractions;
 using System.Linq;
 using System.Net.Http.Headers;
 using System.Reflection;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Buildalyzer;
@@ -28,6 +30,7 @@ namespace DotNetOutdated
         private readonly IFileSystem _fileSystem;
         private readonly IReporter _reporter;
         private readonly INuGetPackageInfoService _nugetService;
+        private readonly IDependencyGraphService _dependencyGraphService;
 
         [Argument(0, Description = "The path to a .sln or .csproj file, or to a directory containing a .NET Core solution/project. " +
                                    "If none is specified, the current directory will be used.")]
@@ -44,6 +47,8 @@ namespace DotNetOutdated
                     .AddSingleton<IConsole, PhysicalConsole>()
                     .AddSingleton<IReporter>(provider => new ConsoleReporter(provider.GetService<IConsole>()))
                     .AddSingleton<IFileSystem, FileSystem>()
+                    .AddSingleton<IDotNetRunner, DotNetRunner>()
+                    .AddSingleton<IDependencyGraphService, DependencyGraphService>()
                     .AddSingleton<INuGetPackageInfoService, NuGetPackageInfoService>()
                     .BuildServiceProvider())
             {
@@ -64,15 +69,16 @@ namespace DotNetOutdated
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
             .InformationalVersion;
 
-        public Program(IFileSystem fileSystem, IReporter reporter, INuGetPackageInfoService nugetService)
+        public Program(IFileSystem fileSystem, IReporter reporter, INuGetPackageInfoService nugetService, IDependencyGraphService dependencyGraphService)
         {
             _fileSystem = fileSystem;
             _reporter = reporter;
             _nugetService = nugetService;
+            _dependencyGraphService = dependencyGraphService;
         }
         
         public async Task<int> OnExecute(CommandLineApplication app, IConsole console)
-        {
+        {            
             try
             {
                 // If no path is set, use the current directory
@@ -148,7 +154,7 @@ namespace DotNetOutdated
                 return 1;
             }
         }
-
+        
         private static void WriteHeader(IConsole console, int[] columnWidths)
         {
             console.Write(Constants.Reporting.Headers.PackageName.PadRight(columnWidths[0]));
