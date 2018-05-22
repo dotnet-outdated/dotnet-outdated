@@ -96,6 +96,8 @@ namespace DotNetOutdated
                 string project = _projectDiscoveryService.DiscoverProject(Path);
                 console.WriteLine(project);
                 
+                // Analyze the projects
+                
                 return 0; // for now...
                 
                 /*

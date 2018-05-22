@@ -3,11 +3,12 @@ using System.IO;
 using System.Text;
 using System.Threading.Tasks;
 using McMaster.Extensions.CommandLineUtils;
+using NuGet.ProjectModel;
 
 namespace DotNetOutdated.Services
 {
-    public interface IDependencyGraphService
+    internal interface IDependencyGraphService
     {
-        void GenerateDependencyGraph(string projectPath);
+        DependencyGraphSpec GenerateDependencyGraph(string projectPath);
     }
 }
