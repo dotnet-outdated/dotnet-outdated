@@ -18,4 +18,17 @@
     <PackageReference Include="NuGet.Versioning" Version="4.8.0-preview1.5156" />
     <PackageReference Include="System.IO.Abstractions" Version="2.1.0.178" />
   </ItemGroup>
+  <ItemGroup>
+    <Compile Update="Resources\ValidationErrorMessages.Designer.cs">
+      <DesignTime>True</DesignTime>
+      <AutoGen>True</AutoGen>
+      <DependentUpon>ValidationErrorMessages.resx</DependentUpon>
+    </Compile>
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Update="Resources\ValidationErrorMessages.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>ValidationErrorMessages.Designer.cs</LastGenOutput>
+    </EmbeddedResource>
+  </ItemGroup>
 </Project>

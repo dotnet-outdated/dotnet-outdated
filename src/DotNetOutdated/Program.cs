@@ -6,6 +6,7 @@ using System.IO.Abstractions;
 using System.Linq;
 using System.Net.Http.Headers;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -19,6 +20,8 @@ using NuGet.Protocol;
 using NuGet.Protocol.Core.Types;
 using NuGet.Versioning;
 
+[assembly:InternalsVisibleTo("DotNetOutdated.Tests")]
+
 namespace DotNetOutdated
 {
     [Command(
@@ -31,6 +34,7 @@ namespace DotNetOutdated
         private readonly IReporter _reporter;
         private readonly INuGetPackageInfoService _nugetService;
         private readonly IDependencyGraphService _dependencyGraphService;
+        private readonly IProjectDiscoveryService _projectDiscoveryService;
 
         [Argument(0, Description = "The path to a .sln or .csproj file, or to a directory containing a .NET Core solution/project. " +
                                    "If none is specified, the current directory will be used.")]
@@ -47,6 +51,7 @@ namespace DotNetOutdated
                     .AddSingleton<IConsole, PhysicalConsole>()
                     .AddSingleton<IReporter>(provider => new ConsoleReporter(provider.GetService<IConsole>()))
                     .AddSingleton<IFileSystem, FileSystem>()
+                    .AddSingleton<IProjectDiscoveryService, ProjectDiscoveryService>()
                     .AddSingleton<IDotNetRunner, DotNetRunner>()
                     .AddSingleton<IDependencyGraphService, DependencyGraphService>()
                     .AddSingleton<INuGetPackageInfoService, NuGetPackageInfoService>()
@@ -69,12 +74,14 @@ namespace DotNetOutdated
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
             .InformationalVersion;
 
-        public Program(IFileSystem fileSystem, IReporter reporter, INuGetPackageInfoService nugetService, IDependencyGraphService dependencyGraphService)
+        public Program(IFileSystem fileSystem, IReporter reporter, INuGetPackageInfoService nugetService, IDependencyGraphService dependencyGraphService, 
+            IProjectDiscoveryService projectDiscoveryService)
         {
             _fileSystem = fileSystem;
             _reporter = reporter;
             _nugetService = nugetService;
             _dependencyGraphService = dependencyGraphService;
+            _projectDiscoveryService = projectDiscoveryService;
         }
         
         public async Task<int> OnExecute(CommandLineApplication app, IConsole console)
@@ -86,8 +93,12 @@ namespace DotNetOutdated
                     Path = _fileSystem.Directory.GetCurrentDirectory();
             
                 // Get all the projects
-                var projects = DiscoverProjects(Path);
-            
+                string project = _projectDiscoveryService.DiscoverProject(Path);
+                console.WriteLine(project);
+                
+                return 0; // for now...
+                
+                /*
                 foreach (var project in projects)
                 {
                     console.WriteHeader(project.FullPath);
@@ -145,6 +156,7 @@ namespace DotNetOutdated
                 }
             
                 return 0;
+                */
 
             }
             catch (CommandValidationException e)
@@ -168,55 +180,6 @@ namespace DotNetOutdated
             console.Write(new String('-', columnWidths[1]));
             console.Write("  ");
             console.WriteLine(new String('-', columnWidths[2]));
-        }
-
-        private IEnumerable<Project> DiscoverProjects(string path)
-        {
-            if (!(_fileSystem.File.Exists(path) || _fileSystem.Directory.Exists(path)))
-                throw new CommandValidationException($"The directory or file '{path}' does not exist");
-
-            var fileAttributes = _fileSystem.File.GetAttributes(path);
-            
-            // 
-            if (fileAttributes.HasFlag(FileAttributes.Directory))
-            {
-                // Search for solution(s)
-                var solutionFiles = _fileSystem.Directory.GetFiles(path, "*.sln");
-                if (solutionFiles.Length > 0)
-                {
-                    return solutionFiles.Select(DiscoverProjectsFromSolution)
-                        .SelectMany(p => p)
-                        .GroupBy(p => p.FullPath) // Do GroupBy and Select to ensure we only select distinct projects
-                        .Select(g => g.First())
-                        .ToList();
-                }
-
-                // At this point, we did not find any solutions, so try and find individual projects
-                var projectFiles = _fileSystem.Directory.GetFiles(path, "*.csproj");
-                if (projectFiles.Length > 0)
-                {
-                    AnalyzerManager manager = new AnalyzerManager();
-                    return projectFiles.Select(manager.GetProject)
-                        .Select(pa => pa.Project)
-                        .ToList();
-                }
-                
-                // At this point the path contains no solutions or projects, so throw an exception
-                throw new CommandValidationException($"The directory '{path}' does not contain any solutions or projects.");
-            }
-            else
-            {
-                if (string.Compare(_fileSystem.Path.GetExtension(path), ".sln", StringComparison.OrdinalIgnoreCase) == 0)
-                    return DiscoverProjectsFromSolution(path);
-                
-                if (string.Compare(_fileSystem.Path.GetExtension(path), ".csproj", StringComparison.OrdinalIgnoreCase) == 0)
-                {
-                    AnalyzerManager manager = new AnalyzerManager();
-                    return new[] { manager.GetProject(path).Project };
-                }
-            }
-
-            return null;
         }
 
         private IEnumerable<Project> DiscoverProjectsFromSolution(string solutionPath)
