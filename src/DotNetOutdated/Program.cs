@@ -1,23 +1,12 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.IO;
 using System.IO.Abstractions;
-using System.Linq;
-using System.Net.Http.Headers;
 using System.Reflection;
 using System.Runtime.CompilerServices;
-using System.Text;
-using System.Threading;
 using System.Threading.Tasks;
-using Buildalyzer;
 using DotNetOutdated.Exceptions;
 using DotNetOutdated.Services;
 using McMaster.Extensions.CommandLineUtils;
-using Microsoft.Build.Evaluation;
 using Microsoft.Extensions.DependencyInjection;
-using NuGet.Protocol;
-using NuGet.Protocol.Core.Types;
 using NuGet.Versioning;
 
 [assembly:InternalsVisibleTo("DotNetOutdated.Tests")]
@@ -33,7 +22,7 @@ namespace DotNetOutdated
         private readonly IFileSystem _fileSystem;
         private readonly IReporter _reporter;
         private readonly INuGetPackageInfoService _nugetService;
-        private readonly IDependencyGraphService _dependencyGraphService;
+        private readonly IProjectAnalysisService _projectAnalysisService;
         private readonly IProjectDiscoveryService _projectDiscoveryService;
 
         [Argument(0, Description = "The path to a .sln or .csproj file, or to a directory containing a .NET Core solution/project. " +
@@ -52,6 +41,7 @@ namespace DotNetOutdated
                     .AddSingleton<IReporter>(provider => new ConsoleReporter(provider.GetService<IConsole>()))
                     .AddSingleton<IFileSystem, FileSystem>()
                     .AddSingleton<IProjectDiscoveryService, ProjectDiscoveryService>()
+                    .AddSingleton<IProjectAnalysisService, ProjectAnalysisService>()
                     .AddSingleton<IDotNetRunner, DotNetRunner>()
                     .AddSingleton<IDependencyGraphService, DependencyGraphService>()
                     .AddSingleton<INuGetPackageInfoService, NuGetPackageInfoService>()
@@ -74,13 +64,13 @@ namespace DotNetOutdated
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
             .InformationalVersion;
 
-        public Program(IFileSystem fileSystem, IReporter reporter, INuGetPackageInfoService nugetService, IDependencyGraphService dependencyGraphService, 
+        public Program(IFileSystem fileSystem, IReporter reporter, INuGetPackageInfoService nugetService, IProjectAnalysisService projectAnalysisService,
             IProjectDiscoveryService projectDiscoveryService)
         {
             _fileSystem = fileSystem;
             _reporter = reporter;
             _nugetService = nugetService;
-            _dependencyGraphService = dependencyGraphService;
+            _projectAnalysisService = projectAnalysisService;
             _projectDiscoveryService = projectDiscoveryService;
         }
         
@@ -93,18 +83,41 @@ namespace DotNetOutdated
                     Path = _fileSystem.Directory.GetCurrentDirectory();
             
                 // Get all the projects
-                string project = _projectDiscoveryService.DiscoverProject(Path);
-                console.WriteLine(project);
+                string projectPath = _projectDiscoveryService.DiscoverProject(Path);
                 
                 // Analyze the projects
+                var projects = _projectAnalysisService.AnalyzeProject(projectPath);
                 
-                return 0; // for now...
-                
-                /*
                 foreach (var project in projects)
                 {
-                    console.WriteHeader(project.FullPath);
+                    console.WriteProjectName(project.Name);
                     
+                    foreach (var dependency in project.Dependencies)
+                    {
+                        
+                    }
+                    
+                    foreach (var targetFramework in project.TargetFrameworks)
+                    {
+                        console.WriteLine(targetFramework.Name);
+
+                        foreach (var dependency in targetFramework.Dependencies)
+                        {
+                            // Get the current version
+                            NuGetVersion referencedVersion = dependency.VersionRange.MinVersion;
+                            
+                            // Get the latest version
+                            bool includePrerelease = referencedVersion.IsPrerelease;
+                            if (Prerelease == PrereleaseReporting.Always)
+                                includePrerelease = true;
+                            else if (Prerelease == PrereleaseReporting.Never)
+                                includePrerelease = false;
+                            NuGetVersion latestVersion = await _nugetService.GetLatestVersion(dependency.Name, includePrerelease);
+                            
+                            console.WriteLine($"{dependency.Name} ({referencedVersion}) ({latestVersion})");
+                        }
+                    }
+                    /*
                     List<ReportedPackage> reportedPackages = new List<ReportedPackage>();
 
                     // Get package references
@@ -153,13 +166,11 @@ namespace DotNetOutdated
                             console.WriteLine();
                         }
                     }
-
+                    */
                     console.WriteLine();
                 }
             
                 return 0;
-                */
-
             }
             catch (CommandValidationException e)
             {
@@ -182,13 +193,6 @@ namespace DotNetOutdated
             console.Write(new String('-', columnWidths[1]));
             console.Write("  ");
             console.WriteLine(new String('-', columnWidths[2]));
-        }
-
-        private IEnumerable<Project> DiscoverProjectsFromSolution(string solutionPath)
-        {
-            AnalyzerManager manager = new AnalyzerManager(solutionPath);
-
-            return manager.Projects.Values.Select(pa => pa.Project).ToList();
         }
     }
 }

@@ -14,7 +14,7 @@ namespace DotNetOutdated
             console.ForegroundColor = currentColor;
         }
         
-        public static void WriteHeader(this IConsole console, string value)
+        public static void WriteProjectName(this IConsole console, string value)
         {
             console.Write($"» {value}", ConsoleColor.DarkYellow);
             console.WriteLine();
