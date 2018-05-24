@@ -14,10 +14,9 @@ namespace DotNetOutdated
             console.ForegroundColor = currentColor;
         }
         
-        public static void WriteHeader(this IConsole console, string value)
+        public static void WriteIndent(this IConsole console, int level)
         {
-            console.Write($"» {value}", ConsoleColor.DarkYellow);
-            console.WriteLine();
+            console.Write(new String(' ', level * 2));
         }
     }
 }

@@ -1,0 +1,234 @@
+{
+  "format": 1,
+  "restore": {
+    "C:\\Development\\jerriep\\dotnet-outdated\\src\\DotNetOutdated\\DotNetOutdated.csproj": {},
+    "C:\\Development\\jerriep\\dotnet-outdated\\test\\DotNetOutdated.Tests\\DotNetOutdated.Tests.csproj": {},
+    "dotnet-xunit-netcoreapp2.1-[2.3.1, )": {}
+  },
+  "projects": {
+    "C:\\Development\\jerriep\\dotnet-outdated\\src\\DotNetOutdated\\DotNetOutdated.csproj": {
+      "version": "0.3.0-pre.0",
+      "restore": {
+        "projectUniqueName": "C:\\Development\\jerriep\\dotnet-outdated\\src\\DotNetOutdated\\DotNetOutdated.csproj",
+        "projectName": "dotnet-outdated",
+        "projectPath": "C:\\Development\\jerriep\\dotnet-outdated\\src\\DotNetOutdated\\DotNetOutdated.csproj",
+        "packagesPath": "C:\\Users\\jerri\\.nuget\\packages\\",
+        "outputPath": "C:\\Development\\jerriep\\dotnet-outdated\\.build\\obj\\DotNetOutdated\\",
+        "projectStyle": "PackageReference",
+        "fallbackFolders": [
+          "C:\\Program Files\\dotnet\\sdk\\NuGetFallbackFolder"
+        ],
+        "configFilePaths": [
+          "C:\\Users\\jerri\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
+        ],
+        "originalTargetFrameworks": [
+          "netcoreapp2.1"
+        ],
+        "sources": {
+          "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
+          "https://api.nuget.org/v3/index.json": {},
+          "https://ci.appveyor.com/nuget/auth0-net-hqvgea8974rd": {},
+          "https://www.myget.org/F/auth0-oidcclient/api/v3/index.json": {}
+        },
+        "frameworks": {
+          "netcoreapp2.1": {
+            "projectReferences": {}
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        }
+      },
+      "frameworks": {
+        "netcoreapp2.1": {
+          "dependencies": {
+            "Buildalyzer": {
+              "suppressParent": "All",
+              "target": "Package",
+              "version": "[0.4.0, )"
+            },
+            "McMaster.Extensions.CommandLineUtils": {
+              "suppressParent": "All",
+              "target": "Package",
+              "version": "[2.2.3, )"
+            },
+            "Microsoft.Extensions.DependencyInjection": {
+              "suppressParent": "All",
+              "target": "Package",
+              "version": "[2.1.0-rc1-final, )"
+            },
+            "Microsoft.NETCore.App": {
+              "suppressParent": "All",
+              "target": "Package",
+              "version": "[2.1.0-rc1, )",
+              "autoReferenced": true
+            },
+            "Newtonsoft.Json": {
+              "suppressParent": "All",
+              "target": "Package",
+              "version": "[11.0.2, )"
+            },
+            "NuGet.ProjectModel": {
+              "suppressParent": "All",
+              "target": "Package",
+              "version": "[4.8.0-preview1.5156, )"
+            },
+            "NuGet.Protocol": {
+              "suppressParent": "All",
+              "target": "Package",
+              "version": "[4.8.0-preview1.5156, )"
+            },
+            "NuGet.Versioning": {
+              "suppressParent": "All",
+              "target": "Package",
+              "version": "[4.8.0-preview1.5156, )"
+            },
+            "System.IO.Abstractions": {
+              "suppressParent": "All",
+              "target": "Package",
+              "version": "[2.1.0.178, )"
+            }
+          },
+          "imports": [
+            "net461"
+          ],
+          "assetTargetFallback": true,
+          "warn": true
+        }
+      }
+    },
+    "C:\\Development\\jerriep\\dotnet-outdated\\test\\DotNetOutdated.Tests\\DotNetOutdated.Tests.csproj": {
+      "version": "0.3.0-pre.0",
+      "restore": {
+        "projectUniqueName": "C:\\Development\\jerriep\\dotnet-outdated\\test\\DotNetOutdated.Tests\\DotNetOutdated.Tests.csproj",
+        "projectName": "DotNetOutdated.Tests",
+        "projectPath": "C:\\Development\\jerriep\\dotnet-outdated\\test\\DotNetOutdated.Tests\\DotNetOutdated.Tests.csproj",
+        "packagesPath": "C:\\Users\\jerri\\.nuget\\packages\\",
+        "outputPath": "C:\\Development\\jerriep\\dotnet-outdated\\.build\\obj\\DotNetOutdated.Tests\\",
+        "projectStyle": "PackageReference",
+        "fallbackFolders": [
+          "C:\\Program Files\\dotnet\\sdk\\NuGetFallbackFolder"
+        ],
+        "configFilePaths": [
+          "C:\\Users\\jerri\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
+        ],
+        "originalTargetFrameworks": [
+          "netcoreapp2.1"
+        ],
+        "sources": {
+          "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
+          "https://api.nuget.org/v3/index.json": {},
+          "https://ci.appveyor.com/nuget/auth0-net-hqvgea8974rd": {},
+          "https://www.myget.org/F/auth0-oidcclient/api/v3/index.json": {}
+        },
+        "frameworks": {
+          "netcoreapp2.1": {
+            "projectReferences": {
+              "C:\\Development\\jerriep\\dotnet-outdated\\src\\DotNetOutdated\\DotNetOutdated.csproj": {
+                "projectPath": "C:\\Development\\jerriep\\dotnet-outdated\\src\\DotNetOutdated\\DotNetOutdated.csproj"
+              }
+            }
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        }
+      },
+      "frameworks": {
+        "netcoreapp2.1": {
+          "dependencies": {
+            "Microsoft.NET.Test.Sdk": {
+              "target": "Package",
+              "version": "[15.7.0, )"
+            },
+            "Microsoft.NETCore.App": {
+              "suppressParent": "All",
+              "target": "Package",
+              "version": "[2.1.0-rc1, )",
+              "autoReferenced": true
+            },
+            "Moq": {
+              "target": "Package",
+              "version": "[4.8.2, )"
+            },
+            "Newtonsoft.Json": {
+              "target": "Package",
+              "version": "[11.0.2, )"
+            },
+            "NuGet.ProjectModel": {
+              "target": "Package",
+              "version": "[4.8.0-preview1.5156, )"
+            },
+            "System.IO.Abstractions": {
+              "target": "Package",
+              "version": "[2.1.0.178, )"
+            },
+            "System.IO.Abstractions.TestingHelpers": {
+              "target": "Package",
+              "version": "[2.1.0.178, )"
+            },
+            "xunit": {
+              "target": "Package",
+              "version": "[2.3.1, )"
+            },
+            "xunit.runner.visualstudio": {
+              "target": "Package",
+              "version": "[2.3.1, )"
+            }
+          },
+          "imports": [
+            "net461"
+          ],
+          "assetTargetFallback": true,
+          "warn": true
+        }
+      }
+    },
+    "dotnet-xunit-netcoreapp2.1-[2.3.1, )": {
+      "restore": {
+        "projectUniqueName": "dotnet-xunit-netcoreapp2.1-[2.3.1, )",
+        "projectName": "dotnet-xunit-netcoreapp2.1-[2.3.1, )",
+        "projectPath": "C:\\Development\\jerriep\\dotnet-outdated\\test\\DotNetOutdated.Tests\\DotNetOutdated.Tests.csproj",
+        "packagesPath": "C:\\Users\\jerri\\.nuget\\packages\\",
+        "projectStyle": "DotnetCliTool",
+        "fallbackFolders": [
+          "C:\\Program Files\\dotnet\\sdk\\NuGetFallbackFolder"
+        ],
+        "configFilePaths": [
+          "C:\\Users\\jerri\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
+        ],
+        "originalTargetFrameworks": [
+          "netcoreapp2.1"
+        ],
+        "sources": {
+          "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
+          "https://api.nuget.org/v3/index.json": {},
+          "https://ci.appveyor.com/nuget/auth0-net-hqvgea8974rd": {},
+          "https://www.myget.org/F/auth0-oidcclient/api/v3/index.json": {}
+        },
+        "frameworks": {
+          "netcoreapp2.1": {
+            "projectReferences": {}
+          }
+        }
+      },
+      "frameworks": {
+        "netcoreapp2.1": {
+          "dependencies": {
+            "dotnet-xunit": {
+              "target": "Package",
+              "version": "[2.3.1, )"
+            }
+          }
+        }
+      }
+    }
+  }
+}
