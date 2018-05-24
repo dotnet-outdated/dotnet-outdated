@@ -1,5 +1,7 @@
 ﻿using System.Collections.Generic;
+using System.Linq;
 using System.Net.Http.Headers;
+using NuGet.ProjectModel;
 
 namespace DotNetOutdated.Services
 {
@@ -19,7 +21,7 @@ namespace DotNetOutdated.Services
                 return null;
 
             var projects = new List<Project>();
-            foreach (var packageSpec in dependencyGraph.Projects)
+            foreach (var packageSpec in dependencyGraph.Projects.Where(p => p.RestoreMetadata.ProjectStyle == ProjectStyle.PackageReference))
             {
                 // Create a project
                 var project = new Project

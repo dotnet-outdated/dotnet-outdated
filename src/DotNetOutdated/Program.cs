@@ -90,83 +90,23 @@ namespace DotNetOutdated
                 
                 foreach (var project in projects)
                 {
-                    console.WriteProjectName(project.Name);
+                    WriteProjectName(console, project);
                     
                     foreach (var dependency in project.Dependencies)
                     {
-                        
+                        await ReportDependency(console, dependency, 1);
                     }
                     
                     foreach (var targetFramework in project.TargetFrameworks)
                     {
-                        console.WriteLine(targetFramework.Name);
+                        WriteTargetFramework(console, targetFramework);
 
                         foreach (var dependency in targetFramework.Dependencies)
                         {
-                            // Get the current version
-                            NuGetVersion referencedVersion = dependency.VersionRange.MinVersion;
-                            
-                            // Get the latest version
-                            bool includePrerelease = referencedVersion.IsPrerelease;
-                            if (Prerelease == PrereleaseReporting.Always)
-                                includePrerelease = true;
-                            else if (Prerelease == PrereleaseReporting.Never)
-                                includePrerelease = false;
-                            NuGetVersion latestVersion = await _nugetService.GetLatestVersion(dependency.Name, includePrerelease);
-                            
-                            console.WriteLine($"{dependency.Name} ({referencedVersion}) ({latestVersion})");
+                            await ReportDependency(console, dependency, 2);
                         }
                     }
-                    /*
-                    List<ReportedPackage> reportedPackages = new List<ReportedPackage>();
 
-                    // Get package references
-                    var packageRerefences = project.Items.Where(i => i.ItemType == "PackageReference" && i.IsImported == false).ToList();
-                    if (packageRerefences.Count == 0)
-                    {
-                        console.WriteLine("-- Project contains no package references --");
-                    }
-                    else
-                    {
-                        // Analyze packages
-                        console.Write("Analyzing packages...");
-                        foreach (var packageRerefence in packageRerefences)
-                        {
-                            // Get the current version
-                            NuGetVersion referencedVersion = NuGetVersion.Parse(packageRerefence.GetMetadataValue("version"));
-                            
-                            // Get the latest version
-                            bool includePrerelease = referencedVersion.IsPrerelease;
-                            if (Prerelease == PrereleaseReporting.Always)
-                                includePrerelease = true;
-                            else if (Prerelease == PrereleaseReporting.Never)
-                                includePrerelease = false;
-                            NuGetVersion latestVersion = await _nugetService.GetLatestVersion(packageRerefence.EvaluatedInclude, includePrerelease);
-
-                            reportedPackages.Add(new ReportedPackage(packageRerefence.EvaluatedInclude, referencedVersion, latestVersion));
-                        }
-
-                        // Report on packages
-                        console.Write("\r");
-                        int[] columnWidths = reportedPackages.DetermineColumnWidths();
-                        WriteHeader(console, columnWidths);
-
-                        foreach (var reportedPackage in reportedPackages)
-                        {
-                            string referencedVersion = reportedPackage.ReferencedVersion?.ToString() ?? Constants.Reporting.UnknownValue;
-                            string latestVersion = reportedPackage.LatestVersion?.ToString() ?? Constants.Reporting.UnknownValue;
-                            
-                            console.Write(reportedPackage.Name.PadRight(columnWidths[0]),
-                                reportedPackage.LatestVersion > reportedPackage.ReferencedVersion ? ConsoleColor.Red : ConsoleColor.Green);
-                            console.Write("  ");
-                            console.Write(referencedVersion.PadRight(columnWidths[1]));
-                            console.Write("  ");
-                            console.Write(latestVersion.PadRight(columnWidths[2]),
-                                reportedPackage.LatestVersion > reportedPackage.ReferencedVersion ? ConsoleColor.Blue : console.ForegroundColor);
-                            console.WriteLine();
-                        }
-                    }
-                    */
                     console.WriteLine();
                 }
             
@@ -180,19 +120,43 @@ namespace DotNetOutdated
             }
         }
         
-        private static void WriteHeader(IConsole console, int[] columnWidths)
+        private static void WriteProjectName(IConsole console, Project project)
         {
-            console.Write(Constants.Reporting.Headers.PackageName.PadRight(columnWidths[0]));
-            console.Write("  ");
-            console.Write(Constants.Reporting.Headers.ReferencedVersion.PadRight(columnWidths[1]));
-            console.Write("  ");
-            console.WriteLine(Constants.Reporting.Headers.LatestVersion.PadRight(columnWidths[2]));
+            console.Write($"» {project.Name}", ConsoleColor.Yellow);
+            console.WriteLine();
+        }
 
-            console.Write(new String('-', columnWidths[0]));
-            console.Write("  ");
-            console.Write(new String('-', columnWidths[1]));
-            console.Write("  ");
-            console.WriteLine(new String('-', columnWidths[2]));
+        private static void WriteTargetFramework(IConsole console, Project.TargetFramework targetFramework)
+        {
+            console.WriteIndent(1);
+            console.Write($"[{targetFramework.Name}]", ConsoleColor.Cyan);
+            console.WriteLine();
+        }
+
+        private async Task ReportDependency(IConsole console, Project.Dependency dependency, int level)
+        {
+            // Get the current version
+            NuGetVersion referencedVersion = dependency.VersionRange.MinVersion;
+
+            // Get the latest version
+            bool includePrerelease = referencedVersion.IsPrerelease;
+            if (Prerelease == PrereleaseReporting.Always)
+                includePrerelease = true;
+            else if (Prerelease == PrereleaseReporting.Never)
+                includePrerelease = false;
+            NuGetVersion latestVersion = await _nugetService.GetLatestVersion(dependency.Name, includePrerelease);
+
+            console.WriteIndent(level);
+            console.Write($"{dependency.Name} ");
+            console.Write(referencedVersion, latestVersion > referencedVersion ? ConsoleColor.Red : ConsoleColor.Green);
+
+            if (latestVersion > referencedVersion)
+            {
+                console.Write(" (");
+                console.Write(latestVersion, ConsoleColor.Blue);
+                console.Write(")");
+            }
+            console.WriteLine();
         }
     }
 }
