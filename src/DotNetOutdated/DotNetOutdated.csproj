@@ -9,7 +9,6 @@
     <AssemblyName>dotnet-outdated</AssemblyName>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Buildalyzer" Version="0.4.0" />
     <PackageReference Include="McMaster.Extensions.CommandLineUtils" Version="2.2.3" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="2.1.0-rc1-final" />
     <PackageReference Include="Newtonsoft.Json" Version="11.0.2" />
