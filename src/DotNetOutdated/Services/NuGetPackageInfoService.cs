@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using NuGet.Protocol;
@@ -9,39 +10,51 @@ using NuGet.Versioning;
 
 namespace DotNetOutdated.Services
 {
-    public class NuGetPackageInfoService : INuGetPackageInfoService, IDisposable
+    internal class NuGetPackageInfoService : INuGetPackageInfoService, IDisposable
     {
-        private SourceCacheContext _context;
-        private FindPackageByIdResource _findPackageById;
-        private NullLogger _logger;
+        private readonly SourceCacheContext _context;
+        private readonly NullLogger _logger;
+        private readonly Dictionary<string, FindPackageByIdResource> _resources = new Dictionary<string, FindPackageByIdResource>();
 
-        private async Task<FindPackageByIdResource> GetFindPackageByIdResource()
+        public NuGetPackageInfoService()
         {
-            if (_findPackageById == null)
+            _logger = new NullLogger();
+            _context = new SourceCacheContext()
             {
-                _logger = new NullLogger();
-                _context = new SourceCacheContext()
-                {
-                    NoCache = true
-                };
+                NoCache = true
+            };
+        }
+        
+        private async Task<FindPackageByIdResource> FindResourceForSource(Uri source)
+        {
+            string resourceUrl = source.AbsoluteUri;
+
+            var resource = _resources.GetValueOrDefault(resourceUrl);
+            if (resource == null)
+            {
+                var sourceRepository = Repository.Factory.GetCoreV3(resourceUrl);
+                resource = await sourceRepository.GetResourceAsync<FindPackageByIdResource>();
                 
-                var sourceUrl = "https://api.nuget.org/v3/index.json";
-                var sourceRepository = Repository.Factory.GetCoreV3(sourceUrl);
-                _findPackageById = await sourceRepository.GetResourceAsync<FindPackageByIdResource>();
+                _resources.Add(resourceUrl, resource);
             }
 
-            return _findPackageById;
+            return resource;
         }
         
         public async Task<NuGetVersion> GetLatestVersion(string package, List<Uri> sources, bool includePrerelease)
         {
-            var findPackageById = await GetFindPackageByIdResource();
+            var allVersions = new List<NuGetVersion>();
+            foreach (var source in sources)
+            {
+                var findPackageById = await FindResourceForSource(source);    
 
-            var availableVersions = (await findPackageById.GetAllVersionsAsync(package, _context, _logger, CancellationToken.None));
+                allVersions.AddRange(await findPackageById.GetAllVersionsAsync(package, _context, _logger, CancellationToken.None));
+            }
+
             if (!includePrerelease)
-                availableVersions = availableVersions.Where(v => v.IsPrerelease == false);
+                allVersions = allVersions.Where(v => v.IsPrerelease == false).ToList();
                 
-            return availableVersions.OrderByDescending(version => version)
+            return allVersions.OrderByDescending(version => version)
                 .FirstOrDefault();
         }
 

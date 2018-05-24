@@ -5,7 +5,7 @@ using NuGet.Versioning;
 
 namespace DotNetOutdated.Services
 {
-    public interface INuGetPackageInfoService
+    internal interface INuGetPackageInfoService
     {
         Task<NuGetVersion> GetLatestVersion(string package, List<Uri> sources, bool includePrerelease);
     }
