@@ -46,9 +46,9 @@ exec dotnet pack `
     --no-build `
     -o $artifacts @MSBuildArgs
 
-#exec dotnet test `
-#    "$PSScriptRoot/test/GitHubIssuesCli.Tests/" `
-#    --no-build `
-#     @MSBuildArgs
+exec dotnet test `
+   "$PSScriptRoot/test/DotNetOutdated.Tests/" `
+   --no-build `
+    @MSBuildArgs
 
 write-host -f magenta 'Done'
