@@ -13,7 +13,7 @@ namespace DotNetOutdated.Services
     {
         public RunStatus Run(string workingDirectory, string[] arguments)
         {
-            var psi = new ProcessStartInfo(DotNetExe.FullPath, string.Join(" ", arguments))
+            var psi = new ProcessStartInfo("dotnet", string.Join(" ", arguments))
             {
                 WorkingDirectory = workingDirectory,
                 UseShellExecute = false,
