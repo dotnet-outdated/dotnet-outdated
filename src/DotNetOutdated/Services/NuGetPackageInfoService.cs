@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -32,7 +33,7 @@ namespace DotNetOutdated.Services
             return _findPackageById;
         }
         
-        public async Task<NuGetVersion> GetLatestVersion(string package, bool includePrerelease)
+        public async Task<NuGetVersion> GetLatestVersion(string package, List<Uri> sources, bool includePrerelease)
         {
             var findPackageById = await GetFindPackageByIdResource();
 

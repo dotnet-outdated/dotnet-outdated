@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using NuGet.Versioning;
 
 namespace DotNetOutdated.Services
@@ -20,6 +21,8 @@ namespace DotNetOutdated.Services
         }
 
         public List<Dependency> Dependencies { get; set; } = new List<Dependency>();
+
+        public List<Uri> Sources { get; set; } = new List<Uri>();
         
         public List<TargetFramework> TargetFrameworks { get; set; } = new List<TargetFramework>();
 

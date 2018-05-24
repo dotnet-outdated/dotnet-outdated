@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO.Abstractions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
@@ -94,7 +95,7 @@ namespace DotNetOutdated
                     
                     foreach (var dependency in project.Dependencies)
                     {
-                        await ReportDependency(console, dependency, 1);
+                        await ReportDependency(console, dependency, project.Sources, 1);
                     }
                     
                     foreach (var targetFramework in project.TargetFrameworks)
@@ -103,7 +104,7 @@ namespace DotNetOutdated
 
                         foreach (var dependency in targetFramework.Dependencies)
                         {
-                            await ReportDependency(console, dependency, 2);
+                            await ReportDependency(console, dependency, project.Sources, 2);
                         }
                     }
 
@@ -133,7 +134,7 @@ namespace DotNetOutdated
             console.WriteLine();
         }
 
-        private async Task ReportDependency(IConsole console, Project.Dependency dependency, int level)
+        private async Task ReportDependency(IConsole console, Project.Dependency dependency, List<Uri> sources, int level)
         {
             // Get the current version
             NuGetVersion referencedVersion = dependency.VersionRange.MinVersion;
@@ -144,7 +145,7 @@ namespace DotNetOutdated
                 includePrerelease = true;
             else if (Prerelease == PrereleaseReporting.Never)
                 includePrerelease = false;
-            NuGetVersion latestVersion = await _nugetService.GetLatestVersion(dependency.Name, includePrerelease);
+            NuGetVersion latestVersion = await _nugetService.GetLatestVersion(dependency.Name, sources, includePrerelease);
 
             console.WriteIndent(level);
             console.Write($"{dependency.Name} ");

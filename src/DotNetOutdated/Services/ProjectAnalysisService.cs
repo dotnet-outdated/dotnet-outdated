@@ -26,7 +26,8 @@ namespace DotNetOutdated.Services
                 // Create a project
                 var project = new Project
                 {
-                    Name = packageSpec.Name
+                    Name = packageSpec.Name,
+                    Sources = packageSpec.RestoreMetadata.Sources.Select(s => s.SourceUri).ToList()
                 };
                 projects.Add(project);
 
