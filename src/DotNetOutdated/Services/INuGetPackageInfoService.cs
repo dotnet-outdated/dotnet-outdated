@@ -7,6 +7,6 @@ namespace DotNetOutdated.Services
 {
     internal interface INuGetPackageInfoService
     {
-        Task<NuGetVersion> GetLatestVersion(string package, List<Uri> sources, bool includePrerelease);
+        Task<IEnumerable<NuGetVersion>> GetAllVersions(string package, List<Uri> sources);
     }
 }

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO.Abstractions;
 using System.Reflection;
+using System.Resources;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using DotNetOutdated.Exceptions;
@@ -76,7 +77,7 @@ namespace DotNetOutdated
         }
         
         public async Task<int> OnExecute(CommandLineApplication app, IConsole console)
-        {            
+        {
             try
             {
                 // If no path is set, use the current directory
@@ -136,16 +137,24 @@ namespace DotNetOutdated
 
         private async Task ReportDependency(IConsole console, Project.Dependency dependency, List<Uri> sources, int level)
         {
-            // Get the current version
-            NuGetVersion referencedVersion = dependency.VersionRange.MinVersion;
+            // Get all the available versions
+            var allVersions = await _nugetService.GetAllVersions(dependency.Name, sources);
+            
+            // Resolve the referenced versions
+            NuGetVersion referencedVersion = dependency.VersionRange.FindBestMatch(allVersions);
 
-            // Get the latest version
+            // Determine whether we are interested in pre-releases
             bool includePrerelease = referencedVersion.IsPrerelease;
             if (Prerelease == PrereleaseReporting.Always)
                 includePrerelease = true;
             else if (Prerelease == PrereleaseReporting.Never)
                 includePrerelease = false;
-            NuGetVersion latestVersion = await _nugetService.GetLatestVersion(dependency.Name, sources, includePrerelease);
+            
+            // Create a new version range for comparison
+            var latestVersionRange = new VersionRange(dependency.VersionRange, new FloatRange(includePrerelease ? NuGetVersionFloatBehavior.AbsoluteLatest : NuGetVersionFloatBehavior.Major));
+            
+            // Use new version range to determine latest version
+            NuGetVersion latestVersion = latestVersionRange.FindBestMatch(allVersions);
 
             console.WriteIndent(level);
             console.Write($"{dependency.Name} ");

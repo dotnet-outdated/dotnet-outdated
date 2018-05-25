@@ -40,8 +40,8 @@ namespace DotNetOutdated.Services
 
             return resource;
         }
-        
-        public async Task<NuGetVersion> GetLatestVersion(string package, List<Uri> sources, bool includePrerelease)
+
+        public async Task<IEnumerable<NuGetVersion>> GetAllVersions(string package, List<Uri> sources)
         {
             var allVersions = new List<NuGetVersion>();
             foreach (var source in sources)
@@ -51,11 +51,7 @@ namespace DotNetOutdated.Services
                 allVersions.AddRange(await findPackageById.GetAllVersionsAsync(package, _context, _logger, CancellationToken.None));
             }
 
-            if (!includePrerelease)
-                allVersions = allVersions.Where(v => v.IsPrerelease == false).ToList();
-                
-            return allVersions.OrderByDescending(version => version)
-                .FirstOrDefault();
+            return allVersions;
         }
 
         public void Dispose()
