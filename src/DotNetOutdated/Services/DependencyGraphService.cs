@@ -1,6 +1,7 @@
 ﻿using System.IO.Abstractions;
 using System.Runtime.InteropServices.WindowsRuntime;
 using System.Security.Cryptography;
+using DotNetOutdated.Exceptions;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using NuGet.ProjectModel;
@@ -34,8 +35,11 @@ namespace DotNetOutdated.Services
                 string dependencyGraphText = _fileSystem.File.ReadAllText(dgOutput);
                 return new DependencyGraphSpec(JsonConvert.DeserializeObject<JObject>(dependencyGraphText));
             }
-
-            return null;
+            else
+            {
+                throw new CommandValidationException($"Unable to process the the project `{projectPath}. Are you sure this is a valid .NET Core or .NET Standard project type?" +
+                                                     $"\r\n\r\nHere is the full error message returned from the Microsoft Build Engine:\r\n\r\n" + runStatus.Output);
+            }
         }
     }
 }
