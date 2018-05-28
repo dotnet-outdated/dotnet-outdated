@@ -29,54 +29,39 @@ dotnet tool install --global dotnet-outdated
 Usage: dotnet outdated [arguments] [options]
 
 Arguments:
-  Path                            The path to a .sln or .csproj file, or to a directory containing a .NET Core solution/project. If none is specified, the current directory will be used.
+  Path                               The path to a .sln or .csproj file, or to a directory containing a .NET Core solution/project. If none is specified, the current directory will be used.
 
 Options:
-  --version                       Show version information
-  -?|-h|--help                    Show help information
-  -pr|--pre-release <PRERELEASE>  Specifies whether to look for pre-release versions of packages. Possible Values: Auto (default), Always or Never.
+  --version                          Show version information
+  -?|-h|--help                       Show help information
+  -pr|--pre-release <PRERELEASE>     Specifies whether to look for pre-release versions of packages. Possible values: Auto (default), Always or Never.
+  -vl|--version-lock <VERSION_LOCK>  Specifies whether the package should be locked to the current Major or Minor version. Possible values: None (default), Major or Minor.                                                                                               ```
 ```
 
 ![](screenshot.png)
 
-### Handling pre-release versions
+## Specifying the path
 
-**dotnet-outdated** allows you to specify whether to use pre-release versions of packages or not, but passing the `-pr|--pre-release` option.
+You can run **dotnet-outdated** without specifying the `Path` argument. In this case, it will look in the current directory for a solution (`.sln`) and if one is found it will analyze that solution. If no solution is found it will look for a project (`.csproj`) and if one is found it will analyze that project. If more than one solution or project is found in the current folder, **dotnet-outdated** will report an error.
+
+You can also pass a directory in the `Path` argument, in which case the same logic described above will be used, but in the directory specified.
+
+Lastly, you can specify the path to a solution (`.sln`) or project (`.csproj`) which **dotnet-outdated** must analyze.
+
+## Handling pre-release versions
+
+**dotnet-outdated** allows you to specify whether to use pre-release versions of packages or not by passing the `-pr|--pre-release` option.
 
 The default value of `Auto` will determine whether to use pre-release versions of a package based on whether the referenced version itself is a pre-release version. If the referenced version is a pre-release version, **dotnet-outdated** will include newer pre-release versions of the package. If the referenced version is not a pre-release version, **dotnet-outdated** will ignore pre-release versions.
 
 You can also tell **dotnet-outdated** to always include pre-release versions by passing the `Always` value for the option. Conversely, you can tell it to never include pre-release versions by passing the `Never` value for the option.
 
-## Examples
+## Locking to the current major or minor release
 
-### 1. Display outdated packages for all solutions or projects in the current directory
+**dotnet-outdated** allows you to lock the version to the current major or minor version by passing the `-vl|--version-lock` option.
 
-```text
-dotnet outdated
-```
+The default value of `None` will return the absolute latest package, regardless of whether it is a major or minor version upgrade.
 
-This will search the current directory for any solution files (`*.sln`) and display the outdated packages for the projects in those solutions. If no solution files are found, it will scan the directory for individual project files (`*.csproj`) and display the outdated packages for those projects.
+Passing a value of `Major` will only report on later packages in the current major version range. For example, if the current version for a package is `4.1.0`, **dotnet-outdated** will only report on later packages in the `4.x` version range.
 
-### 2. Display outdated packages for all solutions or projects in a specific directory
-
-```text
-dotnet outdated C:\Development\jerriep\github-issues-cli
-```
-
-This will search the directory `C:\Development\jerriep\github-issues-cli` for any solution files (`*.sln`) and display the outdated packages for the projects in those solutions. If no solution files are found, it will scan the directory for individual project files (`*.csproj`) and display the outdated packages for those projects.
-
-### 3. Display outdated packages for a specific solution
-
-```text
-dotnet outdated C:\Development\jerriep\github-issues-cli\GitHubIssues.sln
-```
-
-This will display the outdated packages for all the projects in the solution `C:\Development\jerriep\github-issues-cli\GitHubIssues.sln`.
-
-### 4. Display outdated packages for a specific project
-
-```text
-dotnet outdated C:\Development\jerriep\github-issues-cli\src\GitHubIssuesCli\GitHubIssuesCli.csproj
-```
-
-This will display the outdated packages for the project `C:\Development\jerriep\github-issues-cli\src\GitHubIssuesCli\GitHubIssuesCli.csproj`.
+Passing a value of `Minor` will only report on later packages in the current minor version range. For example, if the current version for a package is `4.1.0`, **dotnet-outdated** will only report on later packages in the `4.1.x` version range.
