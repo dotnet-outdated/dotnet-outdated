@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO.Abstractions.TestingHelpers;
+using DotNetOutdated.Exceptions;
 using DotNetOutdated.Services;
 using Moq;
 using Xunit;
@@ -40,7 +41,7 @@ namespace DotNetOutdated.Tests
         }
         
         [Fact]
-        public void UnsuccessfulDotNetRunnerExecution_ReturnsNull()
+        public void UnsuccessfulDotNetRunnerExecution_Throws()
         {
             var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>());
 
@@ -51,11 +52,8 @@ namespace DotNetOutdated.Tests
             
             var graphService = new DependencyGraphService(dotNetRunner.Object, mockFileSystem);
             
-            // Act
-            var dependencyGraph = graphService.GenerateDependencyGraph(Path);
-
             // Assert
-            Assert.Null(dependencyGraph);
+            Assert.Throws<CommandValidationException>(() => graphService.GenerateDependencyGraph(Path));
         }
 
     }
