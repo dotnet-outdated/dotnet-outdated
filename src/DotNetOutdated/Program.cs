@@ -13,6 +13,7 @@ using Microsoft.Extensions.DependencyInjection;
 using NuGet.Versioning;
 
 [assembly:InternalsVisibleTo("DotNetOutdated.Tests")]
+[assembly: InternalsVisibleTo("DynamicProxyGenAssembly2")]
 
 namespace DotNetOutdated
 {
@@ -24,7 +25,7 @@ namespace DotNetOutdated
     {
         private readonly IFileSystem _fileSystem;
         private readonly IReporter _reporter;
-        private readonly INuGetPackageInfoService _nugetService;
+        private readonly INuGetPackageResolutionService _nugetService;
         private readonly IProjectAnalysisService _projectAnalysisService;
         private readonly IProjectDiscoveryService _projectDiscoveryService;
 
@@ -33,9 +34,14 @@ namespace DotNetOutdated
         public string Path { get; set; }
 
         [Option(CommandOptionType.SingleValue, Description = "Specifies whether to look for pre-release versions of packages. " +
-                                                             "Possible Values: Auto (default), Always or Never.",
+                                                             "Possible values: Auto (default), Always or Never.",
             ShortName = "pr", LongName = "pre-release")]
         public PrereleaseReporting Prerelease { get; set; } = PrereleaseReporting.Auto;
+
+        [Option(CommandOptionType.SingleValue, Description = "Specifies whether the package should be locked to the current Major or Minor version. " +
+                                                             "Possible values: None (default), Major or Minor.",
+            ShortName = "vl", LongName = "version-lock")]
+        public VersionLock VersionLock { get; set; } = VersionLock.None;
         
         public static int Main(string[] args)
         {
@@ -48,6 +54,7 @@ namespace DotNetOutdated
                     .AddSingleton<IDotNetRunner, DotNetRunner>()
                     .AddSingleton<IDependencyGraphService, DependencyGraphService>()
                     .AddSingleton<INuGetPackageInfoService, NuGetPackageInfoService>()
+                    .AddSingleton<INuGetPackageResolutionService, NuGetPackageResolutionService>()
                     .BuildServiceProvider())
             {
                 var app = new CommandLineApplication<Program>
@@ -67,7 +74,7 @@ namespace DotNetOutdated
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
             .InformationalVersion;
 
-        public Program(IFileSystem fileSystem, IReporter reporter, INuGetPackageInfoService nugetService, IProjectAnalysisService projectAnalysisService,
+        public Program(IFileSystem fileSystem, IReporter reporter, INuGetPackageResolutionService nugetService, IProjectAnalysisService projectAnalysisService,
             IProjectDiscoveryService projectDiscoveryService)
         {
             _fileSystem = fileSystem;
@@ -146,27 +153,15 @@ namespace DotNetOutdated
 
         private async Task ReportDependency(IConsole console, Project.Dependency dependency, List<Uri> sources, int indentLevel)
         {
-            // Get all the available versions
-            var allVersions = await _nugetService.GetAllVersions(dependency.Name, sources);
-            
-            // Resolve the referenced versions
-            NuGetVersion referencedVersion = dependency.VersionRange.FindBestMatch(allVersions);
-
-            // Determine whether we are interested in pre-releases
-            bool includePrerelease = referencedVersion.IsPrerelease;
-            if (Prerelease == PrereleaseReporting.Always)
-                includePrerelease = true;
-            else if (Prerelease == PrereleaseReporting.Never)
-                includePrerelease = false;
-            
-            // Create a new version range for comparison
-            var latestVersionRange = new VersionRange(dependency.VersionRange, new FloatRange(includePrerelease ? NuGetVersionFloatBehavior.AbsoluteLatest : NuGetVersionFloatBehavior.Major));
-            
-            // Use new version range to determine latest version
-            NuGetVersion latestVersion = latestVersionRange.FindBestMatch(allVersions);
-
             console.WriteIndent(indentLevel);
             console.Write($"{dependency.Name} ");
+            
+            console.Write("...");
+            
+            var (referencedVersion, latestVersion) = await _nugetService.ResolvePackageVersions(dependency.Name, sources, dependency.VersionRange, VersionLock, Prerelease);
+
+            console.Write("\b\b\b");
+            
             console.Write(referencedVersion, latestVersion > referencedVersion ? ConsoleColor.Red : ConsoleColor.Green);
 
             if (latestVersion > referencedVersion)

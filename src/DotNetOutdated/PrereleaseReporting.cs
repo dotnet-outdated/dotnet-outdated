@@ -1,6 +1,6 @@
 ﻿namespace DotNetOutdated
 {
-    internal enum PrereleaseReporting
+    public enum PrereleaseReporting
     {
         Auto,
         Always,
