@@ -2,6 +2,7 @@
 using System.Linq;
 using System.Net.Http.Headers;
 using NuGet.ProjectModel;
+using NuGet.Versioning;
 
 namespace DotNetOutdated.Services
 {
@@ -41,7 +42,7 @@ namespace DotNetOutdated.Services
                     });
                 }
                 
-                // Get the 
+                // Get the target frameworks with their dependencies 
                 foreach (var targetFrameworkInformation in packageSpec.TargetFrameworks)
                 {
                     var targetFramework = new Project.TargetFramework

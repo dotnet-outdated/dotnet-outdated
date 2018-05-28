@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO.Abstractions;
+using System.Linq;
 using System.Reflection;
 using System.Resources;
 using System.Runtime.CompilerServices;
@@ -92,20 +93,28 @@ namespace DotNetOutdated
                 
                 foreach (var project in projects)
                 {
+                    int indentLevel = 1;
+                    
                     WriteProjectName(console, project);
                     
+                    // Report on project level dependencies
                     foreach (var dependency in project.Dependencies)
                     {
-                        await ReportDependency(console, dependency, project.Sources, 1);
+                        await ReportDependency(console, dependency, project.Sources, indentLevel);
                     }
+
+                    // Increase indent if we have dependencies at project level
+                    if (project.Dependencies.Any())
+                        indentLevel++;
                     
+                    // Process each target framework with its related dependencies
                     foreach (var targetFramework in project.TargetFrameworks)
                     {
-                        WriteTargetFramework(console, targetFramework);
+                        WriteTargetFramework(console, targetFramework, indentLevel);
 
                         foreach (var dependency in targetFramework.Dependencies)
                         {
-                            await ReportDependency(console, dependency, project.Sources, 2);
+                            await ReportDependency(console, dependency, project.Sources, indentLevel);
                         }
                     }
 
@@ -128,14 +137,14 @@ namespace DotNetOutdated
             console.WriteLine();
         }
 
-        private static void WriteTargetFramework(IConsole console, Project.TargetFramework targetFramework)
+        private static void WriteTargetFramework(IConsole console, Project.TargetFramework targetFramework, int indentLevel)
         {
-            console.WriteIndent(1);
+            console.WriteIndent(indentLevel);
             console.Write($"[{targetFramework.Name}]", ConsoleColor.Cyan);
             console.WriteLine();
         }
 
-        private async Task ReportDependency(IConsole console, Project.Dependency dependency, List<Uri> sources, int level)
+        private async Task ReportDependency(IConsole console, Project.Dependency dependency, List<Uri> sources, int indentLevel)
         {
             // Get all the available versions
             var allVersions = await _nugetService.GetAllVersions(dependency.Name, sources);
@@ -156,7 +165,7 @@ namespace DotNetOutdated
             // Use new version range to determine latest version
             NuGetVersion latestVersion = latestVersionRange.FindBestMatch(allVersions);
 
-            console.WriteIndent(level);
+            console.WriteIndent(indentLevel);
             console.Write($"{dependency.Name} ");
             console.Write(referencedVersion, latestVersion > referencedVersion ? ConsoleColor.Red : ConsoleColor.Green);
 
