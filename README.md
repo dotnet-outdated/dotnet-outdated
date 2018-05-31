@@ -15,9 +15,7 @@ A .NET Core global tool to display outdated NuGet packages in a project
 
 ## Installation
 
-The latest release of dotnet-outdated requires the [.NET Core SDK 2.1.300-rc1](https://www.microsoft.com/net/download/dotnet-core/sdk-2.1.300-rc1) or newer.
-
-Once installed, run this command:
+Download and install the [.NET Core 2.1 SDK](https://www.microsoft.com/net/download) or newer. Once installed, run the following command:
 
 ```bash
 dotnet tool install --global dotnet-outdated
@@ -38,7 +36,7 @@ Options:
   -vl|--version-lock <VERSION_LOCK>  Specifies whether the package should be locked to the current Major or Minor version. Possible values: None (default), Major or Minor.                                                                                               ```
 ```
 
-![](screenshot.png)
+![Screenshot of dotnet-outdated](screenshot.png)
 
 ## Specifying the path
 
@@ -54,7 +52,7 @@ Lastly, you can specify the path to a solution (`.sln`) or project (`.csproj`) w
 
 The default value of `Auto` will determine whether to use pre-release versions of a package based on whether the referenced version itself is a pre-release version. If the referenced version is a pre-release version, **dotnet-outdated** will include newer pre-release versions of the package. If the referenced version is not a pre-release version, **dotnet-outdated** will ignore pre-release versions.
 
-You can also tell **dotnet-outdated** to always include pre-release versions by passing the `Always` value for the option. Conversely, you can tell it to never include pre-release versions by passing the `Never` value for the option.
+You can also tell **dotnet-outdated** to always include pre-release versions by passing the `Always` value for this option. Conversely, you can tell it to never include pre-release versions by passing the `Never` value.
 
 ## Locking to the current major or minor release
 

@@ -1,7 +1,7 @@
-version: 0.1.0.{build}
+version: 1.0.0.{build}
 install:
-  - ps: iwr https://raw.githubusercontent.com/dotnet/cli/release/2.1.3xx/scripts/obtain/dotnet-install.ps1 -outfile dotnet-install.ps1
-  - ps: .\dotnet-install.ps1 -Version 2.1.300-rc1-008673 -InstallDir $env:ProgramFiles/dotnet
+  - ps: iwr https://get.dot.net/v1/dotnet-install.ps1 -outfile dotnet-install.ps1
+  - ps: .\dotnet-install.ps1 -Version 2.1.300 -InstallDir $env:ProgramFiles/dotnet
 branches:
   only:
     - master
