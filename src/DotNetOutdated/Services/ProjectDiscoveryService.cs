@@ -1,6 +1,7 @@
 ﻿using System;
 using System.IO;
 using System.IO.Abstractions;
+using System.Linq;
 using System.Resources;
 using DotNetOutdated.Exceptions;
 
@@ -34,7 +35,7 @@ namespace DotNetOutdated.Services
                     throw new CommandValidationException(string.Format(Resources.ValidationErrorMessages.DirectoryContainsMultipleSolutions, path));
                 
                 // We did not find any solutions, so try and find individual projects
-                var projectFiles = _fileSystem.Directory.GetFiles(path, "*.csproj");
+                var projectFiles = _fileSystem.Directory.GetFiles(path, "*.csproj").Concat(_fileSystem.Directory.GetFiles(path, "*.fsproj")).ToArray();
                 if (projectFiles.Length == 1)
                     return _fileSystem.Path.GetFullPath(projectFiles[0]);
                 
@@ -47,7 +48,8 @@ namespace DotNetOutdated.Services
 
             // If a .sln or .csproj file was passed, just return that
             if ((string.Compare(_fileSystem.Path.GetExtension(path), ".sln", StringComparison.OrdinalIgnoreCase) == 0) ||
-                (string.Compare(_fileSystem.Path.GetExtension(path), ".csproj", StringComparison.OrdinalIgnoreCase) == 0))
+                (string.Compare(_fileSystem.Path.GetExtension(path), ".csproj", StringComparison.OrdinalIgnoreCase) == 0) ||
+                (string.Compare(_fileSystem.Path.GetExtension(path), ".fsproj", StringComparison.OrdinalIgnoreCase) == 0))
                 return _fileSystem.Path.GetFullPath(path);
 
             // At this point, we know the file passed in is not a valid project or solution
