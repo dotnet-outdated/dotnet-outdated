@@ -1,4 +1,5 @@
 ﻿using System.IO.Abstractions;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices.WindowsRuntime;
 using System.Security.Cryptography;
 using DotNetOutdated.Exceptions;
@@ -25,8 +26,8 @@ namespace DotNetOutdated.Services
         public DependencyGraphSpec GenerateDependencyGraph(string projectPath)
         {
             string dgOutput = _fileSystem.Path.Combine(_fileSystem.Path.GetTempPath(), _fileSystem.Path.GetTempFileName());
-            
-            string[] arguments = new[] {"msbuild", projectPath, "/t:GenerateRestoreGraphFile", $"/p:RestoreGraphOutputPath={dgOutput}"};
+                
+            string[] arguments = new[] {"msbuild", $"\"{projectPath}\"", "/t:GenerateRestoreGraphFile", $"/p:RestoreGraphOutputPath={dgOutput}"};
 
             var runStatus = _dotNetRunner.Run(_fileSystem.Path.GetDirectoryName(projectPath), arguments);
 
