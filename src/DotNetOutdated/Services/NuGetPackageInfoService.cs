@@ -7,6 +7,8 @@ using System.Threading.Tasks;
 using NuGet.Protocol;
 using NuGet.Protocol.Core.Types;
 using NuGet.Versioning;
+using NuGet.Packaging.Core;
+using NuGet.Frameworks;
 
 namespace DotNetOutdated.Services
 {
@@ -24,7 +26,7 @@ namespace DotNetOutdated.Services
                 NoCache = true
             };
         }
-        
+
         private async Task<FindPackageByIdResource> FindResourceForSource(Uri source)
         {
             string resourceUrl = source.AbsoluteUri;
@@ -34,7 +36,7 @@ namespace DotNetOutdated.Services
             {
                 var sourceRepository = Repository.Factory.GetCoreV3(resourceUrl);
                 resource = await sourceRepository.GetResourceAsync<FindPackageByIdResource>();
-                
+
                 _resources.Add(resourceUrl, resource);
             }
 
@@ -46,7 +48,7 @@ namespace DotNetOutdated.Services
             var allVersions = new List<NuGetVersion>();
             foreach (var source in sources)
             {
-                var findPackageById = await FindResourceForSource(source);    
+                var findPackageById = await FindResourceForSource(source);
 
                 allVersions.AddRange(await findPackageById.GetAllVersionsAsync(package, _context, _logger, CancellationToken.None));
             }
@@ -54,10 +56,39 @@ namespace DotNetOutdated.Services
             return allVersions;
         }
 
+        public async Task<IEnumerable<PackageDependency>> GetDependencies(string package, List<Uri> sources, NuGetVersion referencedVersion, NuGetFramework targetFramework)
+        {
+            var allDependencies = new List<PackageDependency>();
+            foreach (var source in sources)
+            {
+                var findPackageById = await FindResourceForSource(source);
+                var dependencyInfo = await findPackageById.GetDependencyInfoAsync(package, referencedVersion, _context, _logger, CancellationToken.None);
+
+                var reducer = new FrameworkReducer();
+                var comparer = new NuGetFrameworkFullComparer();
+
+                if (dependencyInfo != null)
+                {
+                    var nearestFramework = reducer.GetNearest(targetFramework, dependencyInfo.DependencyGroups.Select(x => x.TargetFramework));
+
+                    foreach (var dependencyGroup in dependencyInfo.DependencyGroups.Where(d => comparer.Equals(nearestFramework, d.TargetFramework)))
+                    {                       
+                        foreach (var groupPackage in dependencyGroup.Packages)
+                        {
+                            allDependencies.Add(groupPackage);
+                        }
+                    }
+
+                }
+            }
+
+            return allDependencies;
+        }
+
         public void Dispose()
         {
             _context?.Dispose();
         }
     }
-    
+
 }

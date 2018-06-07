@@ -12,13 +12,13 @@ using McMaster.Extensions.CommandLineUtils;
 using Microsoft.Extensions.DependencyInjection;
 using NuGet.Versioning;
 
-[assembly:InternalsVisibleTo("DotNetOutdated.Tests")]
+[assembly: InternalsVisibleTo("DotNetOutdated.Tests")]
 [assembly: InternalsVisibleTo("DynamicProxyGenAssembly2")]
 
 namespace DotNetOutdated
 {
     [Command(
-        Name = "dotnet outdated", 
+        Name = "dotnet outdated",
         FullName = "A .NET Core global tool to list outdated Nuget packages.")]
     [VersionOptionFromMember(MemberName = nameof(GetVersion))]
     class Program : CommandBase
@@ -42,7 +42,11 @@ namespace DotNetOutdated
                                                              "Possible values: None (default), Major or Minor.",
             ShortName = "vl", LongName = "version-lock")]
         public VersionLock VersionLock { get; set; } = VersionLock.None;
-        
+
+        [Option(CommandOptionType.NoValue, Description = "Specifies whether it should detect transitive dependencies.",
+            ShortName = "t", LongName = "transitive")]
+        public bool? Transitive { get; set; }
+
         public static int Main(string[] args)
         {
             using (var services = new ServiceCollection()
@@ -68,7 +72,7 @@ namespace DotNetOutdated
                 return app.Execute(args);
             }
         }
-        
+
         public static string GetVersion() => typeof(Program)
             .Assembly
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
@@ -83,7 +87,7 @@ namespace DotNetOutdated
             _projectAnalysisService = projectAnalysisService;
             _projectDiscoveryService = projectDiscoveryService;
         }
-        
+
         public async Task<int> OnExecute(CommandLineApplication app, IConsole console)
         {
             try
@@ -91,29 +95,23 @@ namespace DotNetOutdated
                 // If no path is set, use the current directory
                 if (string.IsNullOrEmpty(Path))
                     Path = _fileSystem.Directory.GetCurrentDirectory();
-            
+
                 // Get all the projects
                 string projectPath = _projectDiscoveryService.DiscoverProject(Path);
-                
+
                 // Analyze the projects
                 var projects = _projectAnalysisService.AnalyzeProject(projectPath);
-                
+
                 foreach (var project in projects)
                 {
                     int indentLevel = 1;
-                    
+
                     WriteProjectName(console, project);
-                    
-                    // Report on project level dependencies
-                    foreach (var dependency in project.Dependencies)
-                    {
-                        await ReportDependency(console, dependency, project.Sources, indentLevel);
-                    }
 
                     // Increase indent if we have dependencies at project level
                     if (project.Dependencies.Any())
                         indentLevel++;
-                    
+
                     // Process each target framework with its related dependencies
                     foreach (var targetFramework in project.TargetFrameworks)
                     {
@@ -121,23 +119,23 @@ namespace DotNetOutdated
 
                         foreach (var dependency in targetFramework.Dependencies)
                         {
-                            await ReportDependency(console, dependency, project.Sources, indentLevel);
+                            await ReportDependency(console, dependency.Name, dependency.VersionRange, project.Sources, indentLevel, targetFramework);
                         }
                     }
 
                     console.WriteLine();
                 }
-            
+
                 return 0;
             }
             catch (CommandValidationException e)
             {
                 _reporter.Error(e.Message);
-                
+
                 return 1;
             }
         }
-        
+
         private static void WriteProjectName(IConsole console, Project project)
         {
             console.Write($"» {project.Name}", ConsoleColor.Yellow);
@@ -151,17 +149,22 @@ namespace DotNetOutdated
             console.WriteLine();
         }
 
-        private async Task ReportDependency(IConsole console, Project.Dependency dependency, List<Uri> sources, int indentLevel)
+        private async Task ReportDependency(IConsole console, string package, VersionRange versionRange, List<Uri> sources,  int indentLevel, Project.TargetFramework targetFramework)
         {
             console.WriteIndent(indentLevel);
-            console.Write($"{dependency.Name} ");
-            
+            console.Write($" {package} ");
+
             console.Write("...");
-            
-            var (referencedVersion, latestVersion) = await _nugetService.ResolvePackageVersions(dependency.Name, sources, dependency.VersionRange, VersionLock, Prerelease);
+
+            if (indentLevel > 1)
+            {
+                versionRange = targetFramework.Dependencies.FirstOrDefault(d => d.Name == package)?.VersionRange ?? versionRange;
+            }
+
+            var (referencedVersion, latestVersion) = await _nugetService.ResolvePackageVersions(package, sources, versionRange, VersionLock, Prerelease);
 
             console.Write("\b\b\b");
-            
+
             console.Write(referencedVersion, latestVersion > referencedVersion ? ConsoleColor.Red : ConsoleColor.Green);
 
             if (latestVersion > referencedVersion)
@@ -171,6 +174,22 @@ namespace DotNetOutdated
                 console.Write(")");
             }
             console.WriteLine();
+
+            if (Transitive.HasValue)
+            {
+                var subDependencyList = await _nugetService.GetDependencies(referencedVersion, package, sources, targetFramework.Name);
+                foreach (var subDependency in subDependencyList)
+                {
+                    var nextLevel = indentLevel + 1;
+
+                    // current fixed limit of 1 depth
+                    if (nextLevel < 3)
+                    {
+                        await ReportDependency(console, subDependency.Id, subDependency.VersionRange, 
+                            sources, nextLevel, targetFramework);
+                    }
+                }
+            }
         }
     }
 }
