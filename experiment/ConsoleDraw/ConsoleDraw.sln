@@ -1,0 +1,16 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ConsoleDraw", "ConsoleDraw.csproj", "{C5F14980-0F0D-4BB5-B92A-FC3734DC0B38}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{C5F14980-0F0D-4BB5-B92A-FC3734DC0B38}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C5F14980-0F0D-4BB5-B92A-FC3734DC0B38}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C5F14980-0F0D-4BB5-B92A-FC3734DC0B38}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C5F14980-0F0D-4BB5-B92A-FC3734DC0B38}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
