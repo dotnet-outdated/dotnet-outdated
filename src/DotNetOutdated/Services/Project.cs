@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using NuGet.Versioning;
+using NuGet.Frameworks;
 
 namespace DotNetOutdated.Services
 {
@@ -17,7 +18,7 @@ namespace DotNetOutdated.Services
         {
             public List<Dependency> Dependencies { get; set; } = new List<Dependency>();
 
-            public string Name { get; set; }
+            public NuGetFramework Name { get; set; }
         }
 
         public List<Dependency> Dependencies { get; set; } = new List<Dependency>();

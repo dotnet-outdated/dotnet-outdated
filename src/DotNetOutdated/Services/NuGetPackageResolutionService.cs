@@ -2,6 +2,8 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using NuGet.Versioning;
+using NuGet.Packaging.Core;
+using NuGet.Frameworks;
 
 namespace DotNetOutdated.Services
 {
@@ -13,9 +15,15 @@ namespace DotNetOutdated.Services
         {
             _nugetService = nugetService;
         }
-        
+
+        public async Task<IEnumerable<PackageDependency>> GetDependencies(NuGetVersion referencedVersion,
+            string package, List<Uri> sources, NuGetFramework targetFramework)
+        {
+            return await _nugetService.GetDependencies(package, sources, referencedVersion, targetFramework);
+        }
+
         public async Task<(NuGetVersion referencedVersion, NuGetVersion latestVersion)> ResolvePackageVersions(
-            string package, List<Uri> sources, VersionRange currentVersionRange, VersionLock versionLock, PrereleaseReporting prerelease)
+        string package, List<Uri> sources, VersionRange currentVersionRange, VersionLock versionLock, PrereleaseReporting prerelease)
         {
             // Get all the available versions
             var allVersions = await _nugetService.GetAllVersions(package, sources);
@@ -36,10 +44,10 @@ namespace DotNetOutdated.Services
                 floatingBehaviour = NuGetVersionFloatBehavior.Minor;
             if (versionLock == VersionLock.Minor)
                 floatingBehaviour = NuGetVersionFloatBehavior.Patch;
-            
+
             // Create a new version range for comparison
             var latestVersionRange = new VersionRange(currentVersionRange, new FloatRange(floatingBehaviour, referencedVersion));
-            
+
             // Use new version range to determine latest version
             NuGetVersion latestVersion = latestVersionRange.FindBestMatch(allVersions);
 

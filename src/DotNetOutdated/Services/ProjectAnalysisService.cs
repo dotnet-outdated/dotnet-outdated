@@ -47,7 +47,7 @@ namespace DotNetOutdated.Services
                 {
                     var targetFramework = new Project.TargetFramework
                     {
-                        Name = targetFrameworkInformation.FrameworkName.ToString(),
+                        Name = targetFrameworkInformation.FrameworkName,
                     };
                     project.TargetFrameworks.Add(targetFramework);
                     
