@@ -46,7 +46,7 @@ namespace DotNetOutdated
 
         [Option(CommandOptionType.NoValue, Description = "Specifies whether it should detect transitive dependencies.",
             ShortName = "t", LongName = "transitive")]
-        public bool? Transitive { get; set; }
+        public bool Transitive { get; set; } = false;
 
         public static int Main(string[] args)
         {
@@ -102,7 +102,7 @@ namespace DotNetOutdated
                 string projectPath = _projectDiscoveryService.DiscoverProject(Path);
 
                 // Analyze the projects
-                var projects = _projectAnalysisService.AnalyzeProject(projectPath);
+                var projects = _projectAnalysisService.AnalyzeProject(projectPath, Transitive);
 
                 foreach (var project in projects)
                 {
@@ -115,9 +115,17 @@ namespace DotNetOutdated
                     {
                         WriteTargetFramework(console, targetFramework, indentLevel);
 
-                        foreach (var dependency in targetFramework.Dependencies)
+                        if (targetFramework.Dependencies.Count > 0)
                         {
-                            await ReportDependency(console, dependency, dependency.VersionRange, project.Sources, indentLevel, targetFramework);
+                            foreach (var dependency in targetFramework.Dependencies)
+                            {
+                                await ReportDependency(console, dependency, dependency.VersionRange, project.Sources, indentLevel, targetFramework);
+                            }
+                        }
+                        else
+                        {
+                            console.WriteIndent(indentLevel);
+                            console.WriteLine("-- No dependencies --");
                         }
                     }
 

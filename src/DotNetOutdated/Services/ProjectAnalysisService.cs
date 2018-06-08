@@ -23,7 +23,7 @@ namespace DotNetOutdated.Services
             _fileSystem = fileSystem;
         }
         
-        public List<Project> AnalyzeProject(string projectPath)
+        public List<Project> AnalyzeProject(string projectPath, bool includeTransitiveDependencies)
         {
             var dependencyGraph = _dependencyGraphService.GenerateDependencyGraph(projectPath);
             if (dependencyGraph == null)
@@ -56,22 +56,23 @@ namespace DotNetOutdated.Services
                     };
                     project.TargetFrameworks.Add(targetFramework);
 
-                    var lockFileTarget = lockFile.Targets.FirstOrDefault(target => target.TargetFramework.Equals(targetFrameworkInformation.FrameworkName));
+                    var target = lockFile.Targets.FirstOrDefault(t => t.TargetFramework.Equals(targetFrameworkInformation.FrameworkName));
 
-                    foreach (var libraryDependency in targetFrameworkInformation.Dependencies)
+                    foreach (var projectDependency in targetFrameworkInformation.Dependencies)
                     {
-                        var lockFileTargetLibrary = lockFileTarget.Libraries.FirstOrDefault(library => library.Name == libraryDependency.Name);
+                        var projectLibrary = target.Libraries.FirstOrDefault(library => library.Name == projectDependency.Name);
                         
                         var dependency = new Project.Dependency
                         {
-                            Name = libraryDependency.Name,
-                            VersionRange = libraryDependency.LibraryRange.VersionRange,
-                            ResolvedVersion = lockFileTargetLibrary.Version
+                            Name = projectDependency.Name,
+                            VersionRange = projectDependency.LibraryRange.VersionRange,
+                            ResolvedVersion = projectLibrary.Version
                         };
                         targetFramework.Dependencies.Add(dependency);
                         
-                        // Process the dependency for this project depency
-                        AddDependencies(dependency, lockFileTargetLibrary, lockFileTarget, 1);
+                        // Process transitive dependencies for the library
+                        if (includeTransitiveDependencies)
+                            AddDependencies(dependency, projectLibrary, target, 1);
                     }
                 }
             }
@@ -79,11 +80,11 @@ namespace DotNetOutdated.Services
             return projects;
         }
 
-        private void AddDependencies(Project.Dependency dependency, LockFileTargetLibrary lockFileTargetLibrary, LockFileTarget lockFileTarget, int level)
+        private void AddDependencies(Project.Dependency parentDependency, LockFileTargetLibrary parentLibrary, LockFileTarget target, int level)
         {
-            foreach (var packageDependency in lockFileTargetLibrary.Dependencies)
+            foreach (var packageDependency in parentLibrary.Dependencies)
             {
-                var childLibrary = lockFileTarget.Libraries.FirstOrDefault(library => library.Name == packageDependency.Id);
+                var childLibrary = target.Libraries.FirstOrDefault(library => library.Name == packageDependency.Id);
                 
                 var childDependency = new Project.Dependency
                 {
@@ -91,11 +92,11 @@ namespace DotNetOutdated.Services
                     VersionRange = packageDependency.VersionRange,
                     ResolvedVersion = childLibrary.Version
                 };
-                dependency.Dependencies.Add(childDependency);
+                parentDependency.Dependencies.Add(childDependency);
 
                 // Process the dependency for this project depency
                 if (level < MaximumDependencyLevel)
-                    AddDependencies(childDependency, childLibrary, lockFileTarget, level + 1);
+                    AddDependencies(childDependency, childLibrary, target, level + 1);
             }
         }
     }
