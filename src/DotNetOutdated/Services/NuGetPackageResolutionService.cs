@@ -2,8 +2,6 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using NuGet.Versioning;
-using NuGet.Packaging.Core;
-using NuGet.Frameworks;
 
 namespace DotNetOutdated.Services
 {
@@ -16,20 +14,11 @@ namespace DotNetOutdated.Services
             _nugetService = nugetService;
         }
 
-        public async Task<IEnumerable<PackageDependency>> GetDependencies(NuGetVersion referencedVersion,
-            string package, List<Uri> sources, NuGetFramework targetFramework)
-        {
-            return await _nugetService.GetDependencies(package, sources, referencedVersion, targetFramework);
-        }
-
-        public async Task<(NuGetVersion referencedVersion, NuGetVersion latestVersion)> ResolvePackageVersions(
-        string package, List<Uri> sources, VersionRange currentVersionRange, VersionLock versionLock, PrereleaseReporting prerelease)
+        public async Task<NuGetVersion> ResolvePackageVersions(string packageName, NuGetVersion referencedVersion, List<Uri> sources, VersionRange currentVersionRange,
+            VersionLock versionLock, PrereleaseReporting prerelease)
         {
             // Get all the available versions
-            var allVersions = await _nugetService.GetAllVersions(package, sources);
-
-            // Resolve the referenced versions
-            NuGetVersion referencedVersion = currentVersionRange.FindBestMatch(allVersions);
+            var allVersions = await _nugetService.GetAllVersions(packageName, sources);
 
             // Determine whether we are interested in pre-releases
             bool includePrerelease = referencedVersion.IsPrerelease;
@@ -51,7 +40,7 @@ namespace DotNetOutdated.Services
             // Use new version range to determine latest version
             NuGetVersion latestVersion = latestVersionRange.FindBestMatch(allVersions);
 
-            return (referencedVersion, latestVersion);
+            return latestVersion;
         }
     }
 }
