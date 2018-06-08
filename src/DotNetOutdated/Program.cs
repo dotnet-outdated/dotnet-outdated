@@ -10,6 +10,7 @@ using DotNetOutdated.Exceptions;
 using DotNetOutdated.Services;
 using McMaster.Extensions.CommandLineUtils;
 using Microsoft.Extensions.DependencyInjection;
+using NuGet.ProjectModel;
 using NuGet.Versioning;
 
 [assembly: InternalsVisibleTo("DotNetOutdated.Tests")]
@@ -57,6 +58,7 @@ namespace DotNetOutdated
                     .AddSingleton<IProjectAnalysisService, ProjectAnalysisService>()
                     .AddSingleton<IDotNetRunner, DotNetRunner>()
                     .AddSingleton<IDependencyGraphService, DependencyGraphService>()
+                    .AddSingleton<IDotNetRestoreService, DotNetRestoreService>()
                     .AddSingleton<INuGetPackageInfoService, NuGetPackageInfoService>()
                     .AddSingleton<INuGetPackageResolutionService, NuGetPackageResolutionService>()
                     .BuildServiceProvider())
@@ -108,10 +110,6 @@ namespace DotNetOutdated
 
                     WriteProjectName(console, project);
 
-                    // Increase indent if we have dependencies at project level
-                    if (project.Dependencies.Any())
-                        indentLevel++;
-
                     // Process each target framework with its related dependencies
                     foreach (var targetFramework in project.TargetFrameworks)
                     {
@@ -119,7 +117,7 @@ namespace DotNetOutdated
 
                         foreach (var dependency in targetFramework.Dependencies)
                         {
-                            await ReportDependency(console, dependency.Name, dependency.VersionRange, project.Sources, indentLevel, targetFramework);
+                            await ReportDependency(console, dependency, dependency.VersionRange, project.Sources, indentLevel, targetFramework);
                         }
                     }
 
@@ -149,20 +147,16 @@ namespace DotNetOutdated
             console.WriteLine();
         }
 
-        private async Task ReportDependency(IConsole console, string package, VersionRange versionRange, List<Uri> sources,  int indentLevel, Project.TargetFramework targetFramework)
+        private async Task ReportDependency(IConsole console, Project.Dependency dependency, VersionRange versionRange, List<Uri> sources,  int indentLevel, Project.TargetFramework targetFramework)
         {
             console.WriteIndent(indentLevel);
-            console.Write($" {package} ");
+            console.Write($"{dependency.Name} ");
 
             console.Write("...");
 
-            if (indentLevel > 1)
-            {
-                versionRange = targetFramework.Dependencies.FirstOrDefault(d => d.Name == package)?.VersionRange ?? versionRange;
-            }
-
-            var (referencedVersion, latestVersion) = await _nugetService.ResolvePackageVersions(package, sources, versionRange, VersionLock, Prerelease);
-
+            var (referencedVersion, latestVersion) = await _nugetService.ResolvePackageVersions(dependency.Name, sources, versionRange, VersionLock, Prerelease);
+            referencedVersion = dependency.ResolvedVersion;
+                
             console.Write("\b\b\b");
 
             console.Write(referencedVersion, latestVersion > referencedVersion ? ConsoleColor.Red : ConsoleColor.Green);
@@ -174,21 +168,10 @@ namespace DotNetOutdated
                 console.Write(")");
             }
             console.WriteLine();
-
-            if (Transitive.HasValue)
+            
+            foreach (var childDependency in dependency.Dependencies)
             {
-                var subDependencyList = await _nugetService.GetDependencies(referencedVersion, package, sources, targetFramework.Name);
-                foreach (var subDependency in subDependencyList)
-                {
-                    var nextLevel = indentLevel + 1;
-
-                    // current fixed limit of 1 depth
-                    if (nextLevel < 3)
-                    {
-                        await ReportDependency(console, subDependency.Id, subDependency.VersionRange, 
-                            sources, nextLevel, targetFramework);
-                    }
-                }
+                await ReportDependency(console, childDependency, childDependency.VersionRange, sources, indentLevel + 1, targetFramework);
             }
         }
     }
