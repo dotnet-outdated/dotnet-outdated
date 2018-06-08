@@ -12,6 +12,10 @@ namespace DotNetOutdated.Services
             public string Name { get; set; }
 
             public VersionRange VersionRange { get; set; }
+
+            public NuGetVersion ResolvedVersion { get; set; }
+            
+            public List<Dependency> Dependencies { get; set; } = new List<Dependency>();
         }
 
         public class TargetFramework
@@ -20,8 +24,6 @@ namespace DotNetOutdated.Services
 
             public NuGetFramework Name { get; set; }
         }
-
-        public List<Dependency> Dependencies { get; set; } = new List<Dependency>();
 
         public List<Uri> Sources { get; set; } = new List<Uri>();
         

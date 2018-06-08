@@ -36,22 +36,20 @@ namespace DotNetOutdated.Tests
         }
 
         [Theory]
-        [InlineData("1.2.0", VersionLock.None, PrereleaseReporting.Auto, "1.2.0", "2.1.0")]
-        [InlineData("1.2.0", VersionLock.None, PrereleaseReporting.Always, "1.2.0", "2.2.0-pre")]
-        [InlineData("1.3.0-pre", VersionLock.None, PrereleaseReporting.Auto, "1.3.0-pre", "2.2.0-pre")]
-        [InlineData("1.3.0-pre", VersionLock.None, PrereleaseReporting.Never, "1.3.0-pre", "2.1.0")]
-        [InlineData("1.2.0", VersionLock.Major, PrereleaseReporting.Auto, "1.2.0", "1.3.0")]
-        [InlineData("1.2.0", VersionLock.Minor, PrereleaseReporting.Auto, "1.2.0", "1.2.2")]
-        public async Task ResolvesVersion_Correctly(string current, VersionLock versionLock, PrereleaseReporting prerelease, string referenced, string latest)
+        [InlineData("1.2.0", VersionLock.None, PrereleaseReporting.Auto, "2.1.0")]
+        [InlineData("1.2.0", VersionLock.None, PrereleaseReporting.Always, "2.2.0-pre")]
+        [InlineData("1.3.0-pre", VersionLock.None, PrereleaseReporting.Auto, "2.2.0-pre")]
+        [InlineData("1.3.0-pre", VersionLock.None, PrereleaseReporting.Never, "2.1.0")]
+        [InlineData("1.2.0", VersionLock.Major, PrereleaseReporting.Auto, "1.3.0")]
+        [InlineData("1.2.0", VersionLock.Minor, PrereleaseReporting.Auto, "1.2.2")]
+        public async Task ResolvesVersion_Correctly(string current, VersionLock versionLock, PrereleaseReporting prerelease, string latest)
         {
             // Arrange
             
             // Act
-            var (referencedVersion, latestVersion) = await _nuGetPackageResolutionService.ResolvePackageVersions(packageName, new List<Uri>(),
-                VersionRange.Parse(current), versionLock, prerelease);
+            var latestVersion = await _nuGetPackageResolutionService.ResolvePackageVersions(packageName, NuGetVersion.Parse(current), new List<Uri>(), VersionRange.Parse(current), versionLock, prerelease);
             
             // Assert
-            Assert.Equal(NuGetVersion.Parse(referenced), referencedVersion);
             Assert.Equal(NuGetVersion.Parse(latest), latestVersion);
         }
     }
