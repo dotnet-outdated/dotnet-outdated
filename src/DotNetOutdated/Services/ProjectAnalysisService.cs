@@ -37,7 +37,7 @@ namespace DotNetOutdated.Services
                 
                 // Load the lock file
                 string lockFilePath = _fileSystem.Path.Combine(packageSpec.RestoreMetadata.OutputPath, "project.assets.json");
-                var lockFile = LockFileUtilities.GetLockFile(lockFilePath, null);
+                var lockFile = LockFileUtilities.GetLockFile(lockFilePath, NuGet.Common.NullLogger.Instance);
                 
                 // Create a project
                 var project = new Project

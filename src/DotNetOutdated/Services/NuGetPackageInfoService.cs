@@ -12,12 +12,10 @@ namespace DotNetOutdated.Services
     internal class NuGetPackageInfoService : INuGetPackageInfoService, IDisposable
     {
         private readonly SourceCacheContext _context;
-        private readonly NullLogger _logger;
         private readonly Dictionary<string, FindPackageByIdResource> _resources = new Dictionary<string, FindPackageByIdResource>();
 
         public NuGetPackageInfoService()
         {
-            _logger = new NullLogger();
             _context = new SourceCacheContext()
             {
                 NoCache = true
@@ -47,7 +45,7 @@ namespace DotNetOutdated.Services
             {
                 var findPackageById = await FindResourceForSource(source);
 
-                allVersions.AddRange(await findPackageById.GetAllVersionsAsync(package, _context, _logger, CancellationToken.None));
+                allVersions.AddRange(await findPackageById.GetAllVersionsAsync(package, _context, NuGet.Common.NullLogger.Instance, CancellationToken.None));
             }
 
             return allVersions;
