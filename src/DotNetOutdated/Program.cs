@@ -163,7 +163,7 @@ namespace DotNetOutdated
             console.Write("...");
 
             var referencedVersion = dependency.ResolvedVersion;
-            var latestVersion = await _nugetService.ResolvePackageVersions(dependency.Name, referencedVersion, sources, versionRange, VersionLock, Prerelease);
+            var latestVersion = await _nugetService.ResolvePackageVersions(dependency.Name, referencedVersion, sources, versionRange, VersionLock, Prerelease, targetFramework.Name);
                 
             console.Write("\b\b\b");
 

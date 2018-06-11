@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using NuGet.Frameworks;
 using NuGet.Versioning;
 
 namespace DotNetOutdated.Services
@@ -8,6 +9,7 @@ namespace DotNetOutdated.Services
     internal interface INuGetPackageResolutionService
     {
         Task<NuGetVersion> ResolvePackageVersions(string packageName,
-            NuGetVersion referencedVersion, List<Uri> sources, VersionRange currentVersionRange, VersionLock versionLock, PrereleaseReporting prerelease);
+            NuGetVersion referencedVersion, List<Uri> sources, VersionRange currentVersionRange, VersionLock versionLock, PrereleaseReporting prerelease,
+            NuGetFramework targetFrameworkName);
     }
 }

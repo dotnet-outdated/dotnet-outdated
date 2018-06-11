@@ -29,11 +29,11 @@ namespace DotNetOutdated.Tests
             };
             
             var nuGetPackageInfoService = new Mock<INuGetPackageInfoService>();
-            nuGetPackageInfoService.Setup(service => service.GetAllVersions(packageName, It.IsAny<List<Uri>>()))
+            nuGetPackageInfoService.Setup(service => service.GetAllVersions(packageName, It.IsAny<List<Uri>>(), It.IsAny<bool>()))
                 .ReturnsAsync(availableVersions);
             
             _nuGetPackageResolutionService = new NuGetPackageResolutionService(nuGetPackageInfoService.Object);
-        }
+            }
 
         [Theory]
         [InlineData("1.2.0", VersionLock.None, PrereleaseReporting.Auto, "2.1.0")]
@@ -47,7 +47,7 @@ namespace DotNetOutdated.Tests
             // Arrange
             
             // Act
-            var latestVersion = await _nuGetPackageResolutionService.ResolvePackageVersions(packageName, NuGetVersion.Parse(current), new List<Uri>(), VersionRange.Parse(current), versionLock, prerelease);
+            var latestVersion = await _nuGetPackageResolutionService.ResolvePackageVersions(packageName, NuGetVersion.Parse(current), new List<Uri>(), VersionRange.Parse(current), versionLock, prerelease, null);
             
             // Assert
             Assert.Equal(NuGetVersion.Parse(latest), latestVersion);

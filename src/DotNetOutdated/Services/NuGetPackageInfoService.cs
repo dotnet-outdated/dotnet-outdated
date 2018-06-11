@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -12,8 +14,8 @@ namespace DotNetOutdated.Services
     internal class NuGetPackageInfoService : INuGetPackageInfoService, IDisposable
     {
         private readonly SourceCacheContext _context;
-        private readonly Dictionary<string, FindPackageByIdResource> _resources = new Dictionary<string, FindPackageByIdResource>();
-
+        private readonly Dictionary<string, PackageMetadataResource> _metadataResources = new Dictionary<string, PackageMetadataResource>();
+        
         public NuGetPackageInfoService()
         {
             _context = new SourceCacheContext()
@@ -22,30 +24,31 @@ namespace DotNetOutdated.Services
             };
         }
 
-        private async Task<FindPackageByIdResource> FindResourceForSource(Uri source)
+        private async Task<PackageMetadataResource> FindMetadataResourceForSource(Uri source)
         {
             string resourceUrl = source.AbsoluteUri;
 
-            var resource = _resources.GetValueOrDefault(resourceUrl);
+            var resource = _metadataResources.GetValueOrDefault(resourceUrl);
             if (resource == null)
             {
                 var sourceRepository = Repository.Factory.GetCoreV3(resourceUrl);
-                resource = await sourceRepository.GetResourceAsync<FindPackageByIdResource>();
+                resource = await sourceRepository.GetResourceAsync<PackageMetadataResource>();
 
-                _resources.Add(resourceUrl, resource);
+                _metadataResources.Add(resourceUrl, resource);
             }
 
             return resource;
         }
 
-        public async Task<IEnumerable<NuGetVersion>> GetAllVersions(string package, List<Uri> sources)
+        public async Task<IEnumerable<NuGetVersion>> GetAllVersions(string package, List<Uri> sources, bool includePrerelease)
         {
             var allVersions = new List<NuGetVersion>();
             foreach (var source in sources)
             {
-                var findPackageById = await FindResourceForSource(source);
+                var metadata = await FindMetadataResourceForSource(source);
 
-                allVersions.AddRange(await findPackageById.GetAllVersionsAsync(package, _context, NuGet.Common.NullLogger.Instance, CancellationToken.None));
+                var searchMetadata = await metadata.GetMetadataAsync(package, includePrerelease, false, _context, NuGet.Common.NullLogger.Instance, CancellationToken.None);
+                allVersions.AddRange(searchMetadata.OfType<PackageSearchMetadata>().Select(m => m.Version));
             }
 
             return allVersions;

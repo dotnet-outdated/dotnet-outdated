@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using NuGet.Frameworks;
 using NuGet.Versioning;
 
 namespace DotNetOutdated.Services
@@ -15,11 +16,8 @@ namespace DotNetOutdated.Services
         }
 
         public async Task<NuGetVersion> ResolvePackageVersions(string packageName, NuGetVersion referencedVersion, List<Uri> sources, VersionRange currentVersionRange,
-            VersionLock versionLock, PrereleaseReporting prerelease)
+            VersionLock versionLock, PrereleaseReporting prerelease, NuGetFramework targetFrameworkName)
         {
-            // Get all the available versions
-            var allVersions = await _nugetService.GetAllVersions(packageName, sources);
-
             // Determine whether we are interested in pre-releases
             bool includePrerelease = referencedVersion.IsPrerelease;
             if (prerelease == PrereleaseReporting.Always)
@@ -27,6 +25,9 @@ namespace DotNetOutdated.Services
             else if (prerelease == PrereleaseReporting.Never)
                 includePrerelease = false;
 
+            // Get all the available versions
+            var allVersions = await _nugetService.GetAllVersions(packageName, sources, includePrerelease);
+            
             // Determine the floating behaviour
             var floatingBehaviour = includePrerelease ? NuGetVersionFloatBehavior.AbsoluteLatest : NuGetVersionFloatBehavior.Major;
             if (versionLock == VersionLock.Major)
