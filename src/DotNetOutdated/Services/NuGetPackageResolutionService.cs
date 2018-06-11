@@ -24,9 +24,9 @@ namespace DotNetOutdated.Services
                 includePrerelease = true;
             else if (prerelease == PrereleaseReporting.Never)
                 includePrerelease = false;
-
+            
             // Get all the available versions
-            var allVersions = await _nugetService.GetAllVersions(packageName, sources, includePrerelease);
+            var allVersions = await _nugetService.GetAllVersions(packageName, sources, includePrerelease, targetFrameworkName);
             
             // Determine the floating behaviour
             var floatingBehaviour = includePrerelease ? NuGetVersionFloatBehavior.AbsoluteLatest : NuGetVersionFloatBehavior.Major;

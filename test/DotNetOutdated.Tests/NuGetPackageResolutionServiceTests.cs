@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using DotNetOutdated.Services;
 using Moq;
+using NuGet.Frameworks;
 using NuGet.Versioning;
 using Xunit;
 
@@ -29,7 +30,7 @@ namespace DotNetOutdated.Tests
             };
             
             var nuGetPackageInfoService = new Mock<INuGetPackageInfoService>();
-            nuGetPackageInfoService.Setup(service => service.GetAllVersions(packageName, It.IsAny<List<Uri>>(), It.IsAny<bool>()))
+            nuGetPackageInfoService.Setup(service => service.GetAllVersions(packageName, It.IsAny<List<Uri>>(), It.IsAny<bool>(), It.IsAny<NuGetFramework>()))
                 .ReturnsAsync(availableVersions);
             
             _nuGetPackageResolutionService = new NuGetPackageResolutionService(nuGetPackageInfoService.Object);

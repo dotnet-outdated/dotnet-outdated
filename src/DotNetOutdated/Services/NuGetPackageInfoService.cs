@@ -5,6 +5,7 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
+using NuGet.Frameworks;
 using NuGet.Protocol;
 using NuGet.Protocol.Core.Types;
 using NuGet.Versioning;
@@ -40,15 +41,20 @@ namespace DotNetOutdated.Services
             return resource;
         }
 
-        public async Task<IEnumerable<NuGetVersion>> GetAllVersions(string package, List<Uri> sources, bool includePrerelease)
+        public async Task<IEnumerable<NuGetVersion>> GetAllVersions(string package, List<Uri> sources, bool includePrerelease, NuGetFramework targetFramework)
         {
             var allVersions = new List<NuGetVersion>();
             foreach (var source in sources)
             {
                 var metadata = await FindMetadataResourceForSource(source);
 
-                var searchMetadata = await metadata.GetMetadataAsync(package, includePrerelease, false, _context, NuGet.Common.NullLogger.Instance, CancellationToken.None);
-                allVersions.AddRange(searchMetadata.OfType<PackageSearchMetadata>().Select(m => m.Version));
+                var reducer = new FrameworkReducer();
+
+                var compatibleMetadataList = (await metadata.GetMetadataAsync(package, includePrerelease, false, _context, NuGet.Common.NullLogger.Instance, CancellationToken.None))
+                    .OfType<PackageSearchMetadata>()
+                    .Where(meta => reducer.GetNearest(targetFramework, meta.DependencySets.Select(ds => ds.TargetFramework)) != null);
+
+                allVersions.AddRange(compatibleMetadataList.Select(m => m.Version));
             }
 
             return allVersions;
