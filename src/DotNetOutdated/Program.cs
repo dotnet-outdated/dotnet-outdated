@@ -99,11 +99,15 @@ namespace DotNetOutdated
                     Path = _fileSystem.Directory.GetCurrentDirectory();
 
                 // Get all the projects
+                console.Write("Discovering projects...");
                 string projectPath = _projectDiscoveryService.DiscoverProject(Path);
+                ClearCurrentConsoleLine();
 
                 // Analyze the projects
+                console.Write("Analyzing project and restoring packages...");
                 var projects = _projectAnalysisService.AnalyzeProject(projectPath, Transitive);
-
+                ClearCurrentConsoleLine();
+                
                 foreach (var project in projects)
                 {
                     int indentLevel = 1;
@@ -158,14 +162,14 @@ namespace DotNetOutdated
         private async Task ReportDependency(IConsole console, Project.Dependency dependency, VersionRange versionRange, List<Uri> sources,  int indentLevel, Project.TargetFramework targetFramework)
         {
             console.WriteIndent(indentLevel);
-            console.Write($"{dependency.Name} ");
+            console.Write($"{dependency.Name}");
 
             console.Write("...");
 
             var referencedVersion = dependency.ResolvedVersion;
             var latestVersion = await _nugetService.ResolvePackageVersions(dependency.Name, referencedVersion, sources, versionRange, VersionLock, Prerelease, targetFramework.Name);
                 
-            console.Write("\b\b\b");
+            console.Write("\b\b\b ");
 
             console.Write(referencedVersion, latestVersion > referencedVersion ? ConsoleColor.Red : ConsoleColor.Green);
 
@@ -182,5 +186,14 @@ namespace DotNetOutdated
                 await ReportDependency(console, childDependency, childDependency.VersionRange, sources, indentLevel + 1, targetFramework);
             }
         }
+        
+        public static void ClearCurrentConsoleLine()
+        {
+            int currentLineCursor = Console.CursorTop;
+            Console.SetCursorPosition(0, Console.CursorTop);
+            Console.Write(new string(' ', Console.BufferWidth)); 
+            Console.SetCursorPosition(0, currentLineCursor);
+        }
+
     }
 }
