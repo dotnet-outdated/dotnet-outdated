@@ -1,5 +1,4 @@
 ﻿using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO.Abstractions.TestingHelpers;
 using DotNetOutdated.Exceptions;
 using DotNetOutdated.Services;
@@ -26,9 +25,8 @@ namespace DotNetOutdated.Tests
                     // Grab the temp filename that was passed... 
                     string tempFileName = arguments[3].Replace("/p:RestoreGraphOutputPath=", string.Empty);
 
-                    var names = this.GetType().Assembly.GetManifestResourceNames();
                     // ... and stuff it with our dummy dependency graph
-                    mockFileSystem.AddFileFromEmbeddedResource(tempFileName, this.GetType().Assembly, "DotNetOutdated.Tests.TestData.test.dg");
+                    mockFileSystem.AddFileFromEmbeddedResource(tempFileName, GetType().Assembly, "DotNetOutdated.Tests.TestData.test.dg");
                 });
             
             var graphService = new DependencyGraphService(dotNetRunner.Object, mockFileSystem);

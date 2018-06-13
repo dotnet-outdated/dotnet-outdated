@@ -1,7 +1,4 @@
 ﻿using System.IO.Abstractions;
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices.WindowsRuntime;
-using System.Security.Cryptography;
 using DotNetOutdated.Exceptions;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;

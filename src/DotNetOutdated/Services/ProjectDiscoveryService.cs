@@ -2,7 +2,6 @@
 using System.IO;
 using System.IO.Abstractions;
 using System.Linq;
-using System.Resources;
 using DotNetOutdated.Exceptions;
 
 namespace DotNetOutdated.Services

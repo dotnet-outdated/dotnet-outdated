@@ -124,9 +124,7 @@ namespace DotNetOutdated.Tests
         public void NonExistentPath_Throws()
         {
             // Arrange
-            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
-            {
-            }, Path);
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>(), Path);
             var projectDiscoveryService = new ProjectDiscoveryService(fileSystem);
             
             // Act

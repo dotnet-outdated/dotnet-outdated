@@ -1,6 +1,4 @@
-﻿using System;
-
-namespace DotNetOutdated.Services
+﻿namespace DotNetOutdated.Services
 {
     public interface IDotNetRunner
     {

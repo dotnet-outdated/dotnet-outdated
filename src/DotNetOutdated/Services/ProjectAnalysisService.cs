@@ -1,10 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.IO.Abstractions;
 using System.Linq;
-using System.Net.Http.Headers;
-using System.Runtime.CompilerServices;
 using NuGet.ProjectModel;
-using NuGet.Versioning;
 
 namespace DotNetOutdated.Services
 {
@@ -56,21 +53,24 @@ namespace DotNetOutdated.Services
 
                     var target = lockFile.Targets.FirstOrDefault(t => t.TargetFramework.Equals(targetFrameworkInformation.FrameworkName));
 
-                    foreach (var projectDependency in targetFrameworkInformation.Dependencies)
+                    if (target != null)
                     {
-                        var projectLibrary = target.Libraries.FirstOrDefault(library => library.Name == projectDependency.Name);
-                        
-                        var dependency = new Project.Dependency
+                        foreach (var projectDependency in targetFrameworkInformation.Dependencies)
                         {
-                            Name = projectDependency.Name,
-                            VersionRange = projectDependency.LibraryRange.VersionRange,
-                            ResolvedVersion = projectLibrary.Version
-                        };
-                        targetFramework.Dependencies.Add(dependency);
-                        
-                        // Process transitive dependencies for the library
-                        if (includeTransitiveDependencies)
-                            AddDependencies(dependency, projectLibrary, target, 1, transitiveDepth);
+                            var projectLibrary = target.Libraries.FirstOrDefault(library => library.Name == projectDependency.Name);
+
+                            var dependency = new Project.Dependency
+                            {
+                                Name = projectDependency.Name,
+                                VersionRange = projectDependency.LibraryRange.VersionRange,
+                                ResolvedVersion = projectLibrary?.Version
+                            };
+                            targetFramework.Dependencies.Add(dependency);
+
+                            // Process transitive dependencies for the library
+                            if (includeTransitiveDependencies)
+                                AddDependencies(dependency, projectLibrary, target, 1, transitiveDepth);
+                        }
                     }
                 }
             }
@@ -88,7 +88,7 @@ namespace DotNetOutdated.Services
                 {
                     Name = packageDependency.Id,
                     VersionRange = packageDependency.VersionRange,
-                    ResolvedVersion = childLibrary.Version
+                    ResolvedVersion = childLibrary?.Version
                 };
                 parentDependency.Dependencies.Add(childDependency);
 
