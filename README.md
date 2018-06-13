@@ -27,13 +27,15 @@ dotnet tool install --global dotnet-outdated
 Usage: dotnet outdated [arguments] [options]
 
 Arguments:
-  Path                               The path to a .sln or .csproj file, or to a directory containing a .NET Core solution/project. If none is specified, the current directory will be used.
+  Path                                       The path to a .sln or .csproj file, or to a directory containing a .NET Core solution/project. If none is specified, the current directory will be used.
 
 Options:
-  --version                          Show version information
-  -?|-h|--help                       Show help information
-  -pr|--pre-release <PRERELEASE>     Specifies whether to look for pre-release versions of packages. Possible values: Auto (default), Always or Never.
-  -vl|--version-lock <VERSION_LOCK>  Specifies whether the package should be locked to the current Major or Minor version. Possible values: None (default), Major or Minor.                                                                                               ```
+  --version                                  Show version information
+  -?|-h|--help                               Show help information
+  -pr|--pre-release <PRERELEASE>             Specifies whether to look for pre-release versions of packages. Possible values: Auto (default), Always or Never.
+  -vl|--version-lock <VERSION_LOCK>          Specifies whether the package should be locked to the current Major or Minor version. Possible values: None (default), Major or Minor.
+  -t|--transitive                            Specifies whether it should detect transitive dependencies.
+  -td|--transitive-depth <TRANSITIVE_DEPTH>  Defines how my levels deep transitive dependencies should be analyzed. Integer value (default = 1)
 ```
 
 ![Screenshot of dotnet-outdated](screenshot.png)
@@ -63,3 +65,15 @@ The default value of `None` will return the absolute latest package, regardless 
 Passing a value of `Major` will only report on later packages in the current major version range. For example, if the current version for a package is `4.1.0`, **dotnet-outdated** will only report on later packages in the `4.x` version range.
 
 Passing a value of `Minor` will only report on later packages in the current minor version range. For example, if the current version for a package is `4.1.0`, **dotnet-outdated** will only report on later packages in the `4.1.x` version range.
+
+## Reporting on transitive dependencies
+
+**dotnet-outdated** supports reporting on transitive dependencies as well. These are NuGet packages on which the NuGet packages directly referenced by your application depends. To enable reporting on transitive dependencies, you can pass the `-t|--transitive` option.
+
+For example, in the screenshot below you can see that **McMaster.Extensions.CommandLineUtils** has a transitive dependency on **System.ComponentModel.Annotations v4.4.1**, but a newer version (**v4.5.0**) of that package is available. You can therefore add a reference to **v4.5.0** directly to your project to ensure your application is referencing the latest version.
+
+![Screenshot of analysing transitive-dependencies](transitive-screenshot.png)
+
+You can also specify how many levels deep it should analyze transitive dependencies with the `-td|--transitive-depth` option. You can pass an integer value for this option (the default value is `1`).
+
+**Be careful with these options!**. If you try and analyze dependencies too many levels deep, the analysis can take a very long time.
