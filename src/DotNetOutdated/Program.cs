@@ -48,6 +48,11 @@ namespace DotNetOutdated
             ShortName = "t", LongName = "transitive")]
         public bool Transitive { get; set; } = false;
 
+        [Option(CommandOptionType.SingleValue, Description = "Defines how my levels deep transitive dependencies should be analyzed." +
+                                                             "Integer value (default = 1)",
+            ShortName="td", LongName = "transitive-depth")]
+        public int TransitiveDepth { get; set; } = 1;
+
         public static int Main(string[] args)
         {
             using (var services = new ServiceCollection()
@@ -105,7 +110,7 @@ namespace DotNetOutdated
 
                 // Analyze the projects
                 console.Write("Analyzing project and restoring packages...");
-                var projects = _projectAnalysisService.AnalyzeProject(projectPath, Transitive);
+                var projects = _projectAnalysisService.AnalyzeProject(projectPath, Transitive, TransitiveDepth);
                 ClearCurrentConsoleLine();
                 
                 foreach (var project in projects)

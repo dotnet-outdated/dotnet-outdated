@@ -4,6 +4,6 @@ namespace DotNetOutdated.Services
 {
     internal interface IProjectAnalysisService
     {
-        List<Project> AnalyzeProject(string projectPath, bool includeTransitiveDependencies);
+        List<Project> AnalyzeProject(string projectPath, bool includeTransitiveDependencies, int transitiveDepth);
     }
 }

@@ -10,8 +10,6 @@ namespace DotNetOutdated.Services
 {
     internal class ProjectAnalysisService : IProjectAnalysisService
     {
-        private const int MaximumDependencyLevel = 1;
-        
         private readonly IDependencyGraphService _dependencyGraphService;
         private readonly IDotNetRestoreService _dotNetRestoreService;
         private readonly IFileSystem _fileSystem;
@@ -23,7 +21,7 @@ namespace DotNetOutdated.Services
             _fileSystem = fileSystem;
         }
         
-        public List<Project> AnalyzeProject(string projectPath, bool includeTransitiveDependencies)
+        public List<Project> AnalyzeProject(string projectPath, bool includeTransitiveDependencies, int transitiveDepth)
         {
             var dependencyGraph = _dependencyGraphService.GenerateDependencyGraph(projectPath);
             if (dependencyGraph == null)
@@ -72,7 +70,7 @@ namespace DotNetOutdated.Services
                         
                         // Process transitive dependencies for the library
                         if (includeTransitiveDependencies)
-                            AddDependencies(dependency, projectLibrary, target, 1);
+                            AddDependencies(dependency, projectLibrary, target, 1, transitiveDepth);
                     }
                 }
             }
@@ -80,7 +78,7 @@ namespace DotNetOutdated.Services
             return projects;
         }
 
-        private void AddDependencies(Project.Dependency parentDependency, LockFileTargetLibrary parentLibrary, LockFileTarget target, int level)
+        private void AddDependencies(Project.Dependency parentDependency, LockFileTargetLibrary parentLibrary, LockFileTarget target, int level, int transitiveDepth)
         {
             foreach (var packageDependency in parentLibrary.Dependencies)
             {
@@ -95,8 +93,8 @@ namespace DotNetOutdated.Services
                 parentDependency.Dependencies.Add(childDependency);
 
                 // Process the dependency for this project depency
-                if (level < MaximumDependencyLevel)
-                    AddDependencies(childDependency, childLibrary, target, level + 1);
+                if (level < transitiveDepth)
+                    AddDependencies(childDependency, childLibrary, target, level + 1, transitiveDepth);
             }
         }
     }
