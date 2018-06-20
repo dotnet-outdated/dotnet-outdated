@@ -114,7 +114,7 @@ namespace DotNetOutdated
                 console.Write("Analyzing project and restoring packages...");
                 var projects = _projectAnalysisService.AnalyzeProject(projectPath, Transitive, TransitiveDepth);
                 ClearCurrentConsoleLine();
-                
+
                 foreach (var project in projects)
                 {
                     int indentLevel = 1;

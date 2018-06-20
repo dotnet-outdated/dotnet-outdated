@@ -12,6 +12,7 @@
     <PackageReference Include="McMaster.Extensions.CommandLineUtils" Version="2.2.4" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="2.1.0" />
     <PackageReference Include="Newtonsoft.Json" Version="11.0.2" />
+    <PackageReference Include="NuGet.Configuration" Version="4.8.0-preview1.5156" />
     <PackageReference Include="NuGet.ProjectModel" Version="4.8.0-preview1.5156" />
     <PackageReference Include="NuGet.Protocol" Version="4.8.0-preview1.5156" />
     <PackageReference Include="NuGet.Versioning" Version="4.8.0-preview1.5156" />

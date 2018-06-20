@@ -5,6 +5,7 @@ using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using NuGet.Common;
+using NuGet.Configuration;
 using NuGet.Frameworks;
 using NuGet.Protocol;
 using NuGet.Protocol.Core.Types;
@@ -16,9 +17,13 @@ namespace DotNetOutdated.Services
     {
         private readonly SourceCacheContext _context;
         private readonly Dictionary<string, PackageMetadataResource> _metadataResources = new Dictionary<string, PackageMetadataResource>();
-        
+        private readonly IEnumerable<PackageSource> _enabledSources;
+
         public NuGetPackageInfoService()
         {
+            var settings = Settings.LoadDefaultSettings(null);
+            _enabledSources = SettingsUtility.GetEnabledSources(settings);
+
             _context = new SourceCacheContext()
             {
                 NoCache = true
@@ -32,7 +37,14 @@ namespace DotNetOutdated.Services
             var resource = _metadataResources.GetValueOrDefault(resourceUrl);
             if (resource == null)
             {
-                var sourceRepository = Repository.Factory.GetCoreV3(resourceUrl);
+                // We try and create the source repository from the enable sources we loaded from config.
+                // This allows us to inherit the username/password for the source from the config and thus
+                // enables secure feeds to work properly
+                var enabledSource = _enabledSources?.FirstOrDefault(s => s.SourceUri == source);
+                var sourceRepository = enabledSource != null ? 
+                    new SourceRepository(enabledSource, Repository.Provider.GetCoreV3()) : 
+                    Repository.Factory.GetCoreV3(resourceUrl);
+
                 resource = await sourceRepository.GetResourceAsync<PackageMetadataResource>();
 
                 _metadataResources.Add(resourceUrl, resource);
