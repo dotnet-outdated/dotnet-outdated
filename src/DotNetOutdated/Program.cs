@@ -179,27 +179,44 @@ namespace DotNetOutdated
             if (dependency.AutoReferenced)
                 console.Write(" [A]");
 
-            console.Write("...");
-
             var referencedVersion = dependency.ResolvedVersion;
-            var latestVersion = await _nugetService.ResolvePackageVersions(dependency.Name, referencedVersion, sources, versionRange, VersionLock, Prerelease, targetFramework.Name);
-                
-            console.Write("\b\b\b ");
-
-            console.Write(referencedVersion, latestVersion > referencedVersion ? ConsoleColor.Red : ConsoleColor.Green);
-
-            if (latestVersion > referencedVersion)
+            if (referencedVersion == null)
             {
-                console.Write(" (");
-                console.Write(latestVersion, ConsoleColor.Blue);
-                console.Write(")");
+                console.Write(" ");
+                console.Write(" Cannot resolve referenced version ", ConsoleColor.White, ConsoleColor.Red);
+                console.WriteLine();
             }
-            console.WriteLine();
-            
+            else
+            {
+                console.Write("...");
+
+                var latestVersion = await _nugetService.ResolvePackageVersions(dependency.Name, referencedVersion, sources, versionRange, VersionLock, Prerelease, targetFramework.Name);
+                
+                console.Write("\b\b\b ");
+
+                if (latestVersion != null)
+                {
+                    console.Write(referencedVersion, latestVersion > referencedVersion ? ConsoleColor.Red : ConsoleColor.Green);
+                }
+                else
+                {
+                    console.Write($"{referencedVersion} ", ConsoleColor.Yellow); 
+                    console.Write("Cannot resolve latest version", ConsoleColor.White, ConsoleColor.Yellow);
+                }
+
+                if (latestVersion > referencedVersion)
+                {
+                    console.Write(" (");
+                    console.Write(latestVersion, ConsoleColor.Blue);
+                    console.Write(")");
+                }
+                console.WriteLine();
+            }
+                        
             foreach (var childDependency in dependency.Dependencies)
             {
                 await ReportDependency(console, childDependency, childDependency.VersionRange, sources, indentLevel + 1, targetFramework);
-            }
+            }            
         }
         
         public static void ClearCurrentConsoleLine()

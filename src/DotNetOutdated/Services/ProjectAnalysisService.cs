@@ -81,21 +81,24 @@ namespace DotNetOutdated.Services
 
         private void AddDependencies(Project.Dependency parentDependency, LockFileTargetLibrary parentLibrary, LockFileTarget target, int level, int transitiveDepth)
         {
-            foreach (var packageDependency in parentLibrary.Dependencies)
+            if (parentLibrary?.Dependencies != null)
             {
-                var childLibrary = target.Libraries.FirstOrDefault(library => library.Name == packageDependency.Id);
-                
-                var childDependency = new Project.Dependency
+                foreach (var packageDependency in parentLibrary.Dependencies)
                 {
-                    Name = packageDependency.Id,
-                    VersionRange = packageDependency.VersionRange,
-                    ResolvedVersion = childLibrary?.Version
-                };
-                parentDependency.Dependencies.Add(childDependency);
+                    var childLibrary = target.Libraries.FirstOrDefault(library => library.Name == packageDependency.Id);
 
-                // Process the dependency for this project depency
-                if (level < transitiveDepth)
-                    AddDependencies(childDependency, childLibrary, target, level + 1, transitiveDepth);
+                    var childDependency = new Project.Dependency
+                    {
+                        Name = packageDependency.Id,
+                        VersionRange = packageDependency.VersionRange,
+                        ResolvedVersion = childLibrary?.Version
+                    };
+                    parentDependency.Dependencies.Add(childDependency);
+
+                    // Process the dependency for this project depency
+                    if (level < transitiveDepth)
+                        AddDependencies(childDependency, childLibrary, target, level + 1, transitiveDepth);
+                }
             }
         }
     }

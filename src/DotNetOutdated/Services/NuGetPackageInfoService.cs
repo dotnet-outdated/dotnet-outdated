@@ -1,8 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
+using NuGet.Common;
 using NuGet.Frameworks;
 using NuGet.Protocol;
 using NuGet.Protocol.Core.Types;
@@ -44,15 +46,22 @@ namespace DotNetOutdated.Services
             var allVersions = new List<NuGetVersion>();
             foreach (var source in sources)
             {
-                var metadata = await FindMetadataResourceForSource(source);
+                try
+                {
+                    var metadata = await FindMetadataResourceForSource(source);
 
-                var reducer = new FrameworkReducer();
+                    var reducer = new FrameworkReducer();
 
-                var compatibleMetadataList = (await metadata.GetMetadataAsync(package, includePrerelease, false, _context, NuGet.Common.NullLogger.Instance, CancellationToken.None))
-                    .OfType<PackageSearchMetadata>()
-                    .Where(meta => reducer.GetNearest(targetFramework, meta.DependencySets.Select(ds => ds.TargetFramework)) != null);
+                    var compatibleMetadataList = (await metadata.GetMetadataAsync(package, includePrerelease, false, _context, NullLogger.Instance, CancellationToken.None))
+                        .OfType<PackageSearchMetadata>()
+                        .Where(meta => reducer.GetNearest(targetFramework, meta.DependencySets.Select(ds => ds.TargetFramework)) != null);
 
-                allVersions.AddRange(compatibleMetadataList.Select(m => m.Version));
+                    allVersions.AddRange(compatibleMetadataList.Select(m => m.Version));
+                }
+                catch(HttpRequestException)
+                {
+                    // Suppress HTTP errors when connecting to NuGet sources 
+                }
             }
 
             return allVersions;
