@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO.Abstractions;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
@@ -26,6 +27,10 @@ namespace DotNetOutdated
         private readonly INuGetPackageResolutionService _nugetService;
         private readonly IProjectAnalysisService _projectAnalysisService;
         private readonly IProjectDiscoveryService _projectDiscoveryService;
+
+        [Option(CommandOptionType.NoValue, Description = "Specifies whether to include auto-referenced packages.",
+            LongName = "include-auto-references")]
+        public bool IncludeAutoReferences { get; set; } = false;
 
         [Argument(0, Description = "The path to a .sln or .csproj file, or to a directory containing a .NET Core solution/project. " +
                                    "If none is specified, the current directory will be used.")]
@@ -123,7 +128,12 @@ namespace DotNetOutdated
 
                         if (targetFramework.Dependencies.Count > 0)
                         {
-                            foreach (var dependency in targetFramework.Dependencies)
+                            var dependencies = targetFramework.Dependencies;
+
+                            if (!IncludeAutoReferences)
+                                dependencies = dependencies.Where(d => d.AutoReferenced == false).ToList();
+                            
+                            foreach (var dependency in dependencies)
                             {
                                 await ReportDependency(console, dependency, dependency.VersionRange, project.Sources, indentLevel, targetFramework);
                             }
@@ -165,6 +175,9 @@ namespace DotNetOutdated
         {
             console.WriteIndent(indentLevel);
             console.Write($"{dependency.Name}");
+
+            if (dependency.AutoReferenced)
+                console.Write(" [A]");
 
             console.Write("...");
 

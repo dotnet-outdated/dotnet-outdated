@@ -63,7 +63,8 @@ namespace DotNetOutdated.Services
                             {
                                 Name = projectDependency.Name,
                                 VersionRange = projectDependency.LibraryRange.VersionRange,
-                                ResolvedVersion = projectLibrary?.Version
+                                ResolvedVersion = projectLibrary?.Version,
+                                AutoReferenced = projectDependency.AutoReferenced
                             };
                             targetFramework.Dependencies.Add(dependency);
 
