@@ -10,6 +10,6 @@ namespace DotNetOutdated.Services
     {
         Task<NuGetVersion> ResolvePackageVersions(string packageName,
             NuGetVersion referencedVersion, List<Uri> sources, VersionRange currentVersionRange, VersionLock versionLock, PrereleaseReporting prerelease,
-            NuGetFramework targetFrameworkName);
+            NuGetFramework targetFrameworkName, string projectFilePath);
     }
 }

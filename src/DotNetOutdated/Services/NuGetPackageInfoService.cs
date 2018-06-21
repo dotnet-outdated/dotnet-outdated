@@ -15,60 +15,79 @@ namespace DotNetOutdated.Services
 {
     internal class NuGetPackageInfoService : INuGetPackageInfoService, IDisposable
     {
+        private IEnumerable<PackageSource> _enabledSources = null;
         private readonly SourceCacheContext _context;
         private readonly Dictionary<string, PackageMetadataResource> _metadataResources = new Dictionary<string, PackageMetadataResource>();
-        private readonly IEnumerable<PackageSource> _enabledSources;
 
         public NuGetPackageInfoService()
         {
-            var settings = Settings.LoadDefaultSettings(null);
-            _enabledSources = SettingsUtility.GetEnabledSources(settings);
-
             _context = new SourceCacheContext()
             {
                 NoCache = true
             };
         }
 
-        private async Task<PackageMetadataResource> FindMetadataResourceForSource(Uri source)
+        private IEnumerable<PackageSource> GetEnabledSources(string root)
         {
-            string resourceUrl = source.AbsoluteUri;
-
-            var resource = _metadataResources.GetValueOrDefault(resourceUrl);
-            if (resource == null)
+            if (_enabledSources == null)
             {
-                // We try and create the source repository from the enable sources we loaded from config.
-                // This allows us to inherit the username/password for the source from the config and thus
-                // enables secure feeds to work properly
-                var enabledSource = _enabledSources?.FirstOrDefault(s => s.SourceUri == source);
-                var sourceRepository = enabledSource != null ? 
-                    new SourceRepository(enabledSource, Repository.Provider.GetCoreV3()) : 
-                    Repository.Factory.GetCoreV3(resourceUrl);
-
-                resource = await sourceRepository.GetResourceAsync<PackageMetadataResource>();
-
-                _metadataResources.Add(resourceUrl, resource);
+                var settings = Settings.LoadDefaultSettings(root);
+                _enabledSources = SettingsUtility.GetEnabledSources(settings);
             }
 
-            return resource;
+            return _enabledSources;
+        }
+        
+        private async Task<PackageMetadataResource> FindMetadataResourceForSource(Uri source, string projectFilePath)
+        {
+            try
+            {
+                string resourceUrl = source.AbsoluteUri;
+
+                var resource = _metadataResources.GetValueOrDefault(resourceUrl);
+                if (resource == null)
+                {
+                    // We try and create the source repository from the enable sources we loaded from config.
+                    // This allows us to inherit the username/password for the source from the config and thus
+                    // enables secure feeds to work properly
+                    var enabledSources = GetEnabledSources(projectFilePath);
+                    var enabledSource = enabledSources?.FirstOrDefault(s => s.SourceUri == source);
+                    var sourceRepository = enabledSource != null ? 
+                        new SourceRepository(enabledSource, Repository.Provider.GetCoreV3()) : 
+                        Repository.Factory.GetCoreV3(resourceUrl);
+
+                    resource = await sourceRepository.GetResourceAsync<PackageMetadataResource>();
+
+                    _metadataResources.Add(resourceUrl, resource);
+                }
+
+                return resource;
+            }
+            catch (Exception e)
+            {
+                return null;
+            }
         }
 
-        public async Task<IEnumerable<NuGetVersion>> GetAllVersions(string package, List<Uri> sources, bool includePrerelease, NuGetFramework targetFramework)
+        public async Task<IEnumerable<NuGetVersion>> GetAllVersions(string package, List<Uri> sources, bool includePrerelease, NuGetFramework targetFramework,
+            string projectFilePath)
         {
             var allVersions = new List<NuGetVersion>();
             foreach (var source in sources)
             {
                 try
                 {
-                    var metadata = await FindMetadataResourceForSource(source);
+                    var metadata = await FindMetadataResourceForSource(source, projectFilePath);
+                    if (metadata != null)
+                    {
+                        var reducer = new FrameworkReducer();
 
-                    var reducer = new FrameworkReducer();
+                        var compatibleMetadataList = (await metadata.GetMetadataAsync(package, includePrerelease, false, _context, NullLogger.Instance, CancellationToken.None))
+                            .OfType<PackageSearchMetadata>()
+                            .Where(meta => reducer.GetNearest(targetFramework, meta.DependencySets.Select(ds => ds.TargetFramework)) != null);
 
-                    var compatibleMetadataList = (await metadata.GetMetadataAsync(package, includePrerelease, false, _context, NullLogger.Instance, CancellationToken.None))
-                        .OfType<PackageSearchMetadata>()
-                        .Where(meta => reducer.GetNearest(targetFramework, meta.DependencySets.Select(ds => ds.TargetFramework)) != null);
-
-                    allVersions.AddRange(compatibleMetadataList.Select(m => m.Version));
+                        allVersions.AddRange(compatibleMetadataList.Select(m => m.Version));
+                    }
                 }
                 catch(HttpRequestException)
                 {

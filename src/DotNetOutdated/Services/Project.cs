@@ -33,6 +33,8 @@ namespace DotNetOutdated.Services
         public List<TargetFramework> TargetFrameworks { get; set; } = new List<TargetFramework>();
 
         public string Name { get; set; }
+
+        public string FilePath { get; set; }
     }
 
 }

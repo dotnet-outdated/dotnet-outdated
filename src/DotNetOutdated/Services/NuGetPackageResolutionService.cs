@@ -16,7 +16,7 @@ namespace DotNetOutdated.Services
         }
 
         public async Task<NuGetVersion> ResolvePackageVersions(string packageName, NuGetVersion referencedVersion, List<Uri> sources, VersionRange currentVersionRange,
-            VersionLock versionLock, PrereleaseReporting prerelease, NuGetFramework targetFrameworkName)
+            VersionLock versionLock, PrereleaseReporting prerelease, NuGetFramework targetFrameworkName, string projectFilePath)
         {
             // Determine whether we are interested in pre-releases
             bool includePrerelease = referencedVersion.IsPrerelease;
@@ -26,7 +26,7 @@ namespace DotNetOutdated.Services
                 includePrerelease = false;
             
             // Get all the available versions
-            var allVersions = await _nugetService.GetAllVersions(packageName, sources, includePrerelease, targetFrameworkName);
+            var allVersions = await _nugetService.GetAllVersions(packageName, sources, includePrerelease, targetFrameworkName, projectFilePath);
             
             // Determine the floating behaviour
             var floatingBehaviour = includePrerelease ? NuGetVersionFloatBehavior.AbsoluteLatest : NuGetVersionFloatBehavior.Major;

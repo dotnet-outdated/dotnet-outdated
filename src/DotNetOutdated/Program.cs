@@ -135,7 +135,7 @@ namespace DotNetOutdated
                             
                             foreach (var dependency in dependencies)
                             {
-                                await ReportDependency(console, dependency, dependency.VersionRange, project.Sources, indentLevel, targetFramework);
+                                await ReportDependency(console, dependency, dependency.VersionRange, project.Sources, indentLevel, targetFramework, project.FilePath);
                             }
                         }
                         else
@@ -171,7 +171,8 @@ namespace DotNetOutdated
             console.WriteLine();
         }
 
-        private async Task ReportDependency(IConsole console, Project.Dependency dependency, VersionRange versionRange, List<Uri> sources,  int indentLevel, Project.TargetFramework targetFramework)
+        private async Task ReportDependency(IConsole console, Project.Dependency dependency, VersionRange versionRange, List<Uri> sources, int indentLevel,
+            Project.TargetFramework targetFramework, string projectFilePath)
         {
             console.WriteIndent(indentLevel);
             console.Write($"{dependency.Name}");
@@ -190,7 +191,7 @@ namespace DotNetOutdated
             {
                 console.Write("...");
 
-                var latestVersion = await _nugetService.ResolvePackageVersions(dependency.Name, referencedVersion, sources, versionRange, VersionLock, Prerelease, targetFramework.Name);
+                var latestVersion = await _nugetService.ResolvePackageVersions(dependency.Name, referencedVersion, sources, versionRange, VersionLock, Prerelease, targetFramework.Name, projectFilePath);
                 
                 console.Write("\b\b\b ");
 
@@ -215,7 +216,7 @@ namespace DotNetOutdated
                         
             foreach (var childDependency in dependency.Dependencies)
             {
-                await ReportDependency(console, childDependency, childDependency.VersionRange, sources, indentLevel + 1, targetFramework);
+                await ReportDependency(console, childDependency, childDependency.VersionRange, sources, indentLevel + 1, targetFramework, projectFilePath);
             }            
         }
         

@@ -38,7 +38,8 @@ namespace DotNetOutdated.Services
                 var project = new Project
                 {
                     Name = packageSpec.Name,
-                    Sources = packageSpec.RestoreMetadata.Sources.Select(s => s.SourceUri).ToList()
+                    Sources = packageSpec.RestoreMetadata.Sources.Select(s => s.SourceUri).ToList(),
+                    FilePath = packageSpec.FilePath
                 };
                 projects.Add(project);
 
