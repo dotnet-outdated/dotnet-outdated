@@ -13,6 +13,15 @@
 
 A .NET Core global tool to display outdated NuGet packages in a project
 
+- [Installation](#installation)
+- [Usage](#usage)
+- [Specifying the path](#specifying-the-path)
+- [Working with secure feeds](#working-with-secure-feeds)
+- [Handling pre-release versions](#handling-pre-release-versions)
+- [Locking to the current major or minor release](#locking-to-the-current-major-or-minor-release)
+- [Reporting on transitive dependencies](#reporting-on-transitive-dependencies)
+- [Auto-references](#auto-references)
+
 ## Installation
 
 Download and install the [.NET Core 2.1 SDK](https://www.microsoft.com/net/download) or newer. Once installed, run the following command:
@@ -24,7 +33,7 @@ dotnet tool install --global dotnet-outdated
 ## Usage
 
 ```text
-Usage: dotnet outdated [arguments] [options]
+Usage: dotnet outdated [arguments] [options
 
 Arguments:
   Path                                       The path to a .sln or .csproj file, or to a directory containing a .NET Core solution/project. If none is specified, the current directory will be used.
@@ -32,6 +41,7 @@ Arguments:
 Options:
   --version                                  Show version information
   -?|-h|--help                               Show help information
+  -i|--include-auto-references               Specifies whether to include auto-referenced packages.
   -pr|--pre-release <PRERELEASE>             Specifies whether to look for pre-release versions of packages. Possible values: Auto (default), Always or Never.
   -vl|--version-lock <VERSION_LOCK>          Specifies whether the package should be locked to the current Major or Minor version. Possible values: None (default), Major or Minor.
   -t|--transitive                            Specifies whether it should detect transitive dependencies.
@@ -47,6 +57,18 @@ You can run **dotnet-outdated** without specifying the `Path` argument. In this 
 You can also pass a directory in the `Path` argument, in which case the same logic described above will be used, but in the directory specified.
 
 Lastly, you can specify the path to a solution (`.sln`) or project (`.csproj`) which **dotnet-outdated** must analyze.
+
+## Working with secure feeds
+
+**dotnet-outdated** supports secure NuGet feeds, such as [MyGet](https://www.myget.org). It is suggested that you add these to your sources using the [source command of the NuGet CLI](https://docs.microsoft.com/en-us/nuget/tools/cli-ref-sources). For secure feeds, you can either add a pre-authenticated URL or you can specify the username and password for the feed using the `-UserName` and `-Password` options of the `nuget sources` command.
+
+**dotnet-outdated** supports computer-level, user-level and project-level configuration files.
+
+### Issues on macOS
+
+In my testing, I ran into issues on macOS where the location of the user-level configuration file was not detected correctly. If you run into problems where **dotnet-outdated** does not appear to pick up your feeds correctly, please add the source to a project-level configuration file.
+
+Also, on macOS and Linux, the password needs to be stored in clear text. You can do this by passing the `-StorePasswordInClearText` option to the `nuget sources` command.
 
 ## Handling pre-release versions
 
@@ -77,3 +99,9 @@ For example, in the screenshot below you can see that **McMaster.Extensions.Comm
 You can also specify how many levels deep it should analyze transitive dependencies with the `-td|--transitive-depth` option. You can pass an integer value for this option (the default value is `1`).
 
 **Be careful with these options!**. If you try and analyze dependencies too many levels deep, the analysis can take a very long time.
+
+## Auto-references
+
+Before version 1.2 of **dotnet-outdated**, it used to include automatically references packages in the output. The automatically referenced packages are typically your framework packages, such as `Microsoft.NETCore.App` or `NETStandard.Library`. It does not make sense reporting on these as outdated since you should target a new framework to have these updated.
+
+From version 1.2, if you want these packages reported, you can pass the `-i|--include-auto-references` option. These packages will also be denoted with the text **[A]** appearing in the output after the package name.

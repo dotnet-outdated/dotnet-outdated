@@ -1,5 +1,11 @@
 # Changelog
 
+## [v1.2.0]
+
+- Works with secure feeds. Read more in the _Working with secure feeds_ section of the readme.
+- Excludes auto-references (i.e. the framework packages) by default. Read more in the _Auto-references_ section of the readme.
+- Fixed various unhandled exceptions.
+
 ## [v1.1.0]
 
 - Changed the way in which project dependencies are detected. We now run the `dotnet restore` command and make use of the `project.assets.json` file to determine the dependencies. This ensures parity with what the .NET CLI is doing.
@@ -30,8 +36,9 @@
 
 Initial release
 
- - A .NET Core global tool to display outdated NuGet packages in a project
+- A .NET Core global tool to display outdated NuGet packages in a project
 
+[v1.2.0]: https://github.com/jerriep/dotnet-outdated/tree/v1.2.0
 [v1.1.0]: https://github.com/jerriep/dotnet-outdated/tree/v1.1.0
 [v1.0.0]: https://github.com/jerriep/dotnet-outdated/tree/v1.0.0
 [v0.3.0]: https://github.com/jerriep/dotnet-outdated/tree/v0.3.0
