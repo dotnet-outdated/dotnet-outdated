@@ -184,7 +184,7 @@ namespace DotNetOutdated
             if (referencedVersion == null)
             {
                 console.Write(" ");
-                console.Write(" Cannot resolve referenced version ", ConsoleColor.White, ConsoleColor.Red);
+                console.Write("Cannot resolve referenced version", ConsoleColor.White, ConsoleColor.DarkRed);
                 console.WriteLine();
             }
             else
@@ -202,7 +202,7 @@ namespace DotNetOutdated
                 else
                 {
                     console.Write($"{referencedVersion} ", ConsoleColor.Yellow); 
-                    console.Write("Cannot resolve latest version", ConsoleColor.White, ConsoleColor.Yellow);
+                    console.Write("Cannot resolve latest version", ConsoleColor.White, ConsoleColor.DarkYellow);
                 }
 
                 if (latestVersion > referencedVersion)
