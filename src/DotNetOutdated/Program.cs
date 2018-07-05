@@ -50,7 +50,7 @@ namespace DotNetOutdated
             ShortName = "t", LongName = "transitive")]
         public bool Transitive { get; set; } = false;
 
-        [Option(CommandOptionType.SingleValue, Description = "Defines how my levels deep transitive dependencies should be analyzed. " +
+        [Option(CommandOptionType.SingleValue, Description = "Defines how many levels deep transitive dependencies should be analyzed. " +
                                                              "Integer value (default = 1)",
             ShortName="td", LongName = "transitive-depth")]
         public int TransitiveDepth { get; set; } = 1;
