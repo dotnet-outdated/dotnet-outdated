@@ -202,7 +202,7 @@ namespace DotNetOutdated
                 else
                 {
                     console.Write($"{referencedVersion} ", ConsoleColor.Yellow); 
-                    console.Write("Cannot resolve latest version", ConsoleColor.White, ConsoleColor.DarkYellow);
+                    console.Write("Cannot resolve latest version", ConsoleColor.White, ConsoleColor.DarkCyan);
                 }
 
                 if (latestVersion > referencedVersion)
