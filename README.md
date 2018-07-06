@@ -45,7 +45,7 @@ Options:
   -pr|--pre-release <PRERELEASE>             Specifies whether to look for pre-release versions of packages. Possible values: Auto (default), Always or Never.
   -vl|--version-lock <VERSION_LOCK>          Specifies whether the package should be locked to the current Major or Minor version. Possible values: None (default), Major or Minor.
   -t|--transitive                            Specifies whether it should detect transitive dependencies.
-  -td|--transitive-depth <TRANSITIVE_DEPTH>  Defines how my levels deep transitive dependencies should be analyzed. Integer value (default = 1)
+  -td|--transitive-depth <TRANSITIVE_DEPTH>  Defines how many levels deep transitive dependencies should be analyzed. Integer value (default = 1)
 ```
 
 ![Screenshot of dotnet-outdated](screenshot.png)
