@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.IO.Abstractions;
 using System.Linq;
 using NuGet.ProjectModel;
@@ -58,7 +59,7 @@ namespace DotNetOutdated.Services
                     {
                         foreach (var projectDependency in targetFrameworkInformation.Dependencies)
                         {
-                            var projectLibrary = target.Libraries.FirstOrDefault(library => library.Name == projectDependency.Name);
+                           var projectLibrary = target.Libraries.FirstOrDefault(library => string.Equals(library.Name, projectDependency.Name, StringComparison.OrdinalIgnoreCase));
 
                             var dependency = new Project.Dependency
                             {
