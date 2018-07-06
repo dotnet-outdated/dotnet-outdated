@@ -126,13 +126,13 @@ namespace DotNetOutdated
                     {
                         WriteTargetFramework(console, targetFramework, indentLevel);
 
-                        if (targetFramework.Dependencies.Count > 0)
-                        {
-                            var dependencies = targetFramework.Dependencies;
+                        var dependencies = targetFramework.Dependencies;
 
-                            if (!IncludeAutoReferences)
-                                dependencies = dependencies.Where(d => d.AutoReferenced == false).ToList();
-                            
+                        if (!IncludeAutoReferences)
+                            dependencies = dependencies.Where(d => d.AutoReferenced == false).ToList();
+                        
+                        if (dependencies.Count > 0)
+                        {
                             foreach (var dependency in dependencies)
                             {
                                 await ReportDependency(console, dependency, dependency.VersionRange, project.Sources, indentLevel, targetFramework, project.FilePath);
