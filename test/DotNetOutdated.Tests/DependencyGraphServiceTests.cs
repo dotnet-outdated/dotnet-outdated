@@ -23,7 +23,7 @@ namespace DotNetOutdated.Tests
                 .Callback((string directory, string[] arguments) =>
                 {
                     // Grab the temp filename that was passed... 
-                    string tempFileName = arguments[3].Replace("/p:RestoreGraphOutputPath=", string.Empty);
+                    string tempFileName = arguments[3].Replace("/p:RestoreGraphOutputPath=", string.Empty).Trim('"');
 
                     // ... and stuff it with our dummy dependency graph
                     mockFileSystem.AddFileFromEmbeddedResource(tempFileName, GetType().Assembly, "DotNetOutdated.Tests.TestData.test.dg");
