@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
@@ -82,9 +83,13 @@ namespace DotNetOutdated.Services
                     {
                         var reducer = new FrameworkReducer();
 
+                        // We need to ensure that we only get package versions which are compatible with the requested target framework. For certain package types (such as 
+                        // Roslyn Analyzers) there is no target framework listed for the actual package itself, as it does not contain libraries. So we need to also allow package
+                        // versions where there are no dependency sets listed
                         var compatibleMetadataList = (await metadata.GetMetadataAsync(package, includePrerelease, false, _context, NullLogger.Instance, CancellationToken.None))
                             .OfType<PackageSearchMetadata>()
-                            .Where(meta => reducer.GetNearest(targetFramework, meta.DependencySets.Select(ds => ds.TargetFramework)) != null);
+                            .Where(meta => meta.DependencySets == null || !meta.DependencySets.Any() ||
+                                           reducer.GetNearest(targetFramework, meta.DependencySets.Select(ds => ds.TargetFramework)) != null);
 
                         allVersions.AddRange(compatibleMetadataList.Select(m => m.Version));
                     }
