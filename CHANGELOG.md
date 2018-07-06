@@ -1,5 +1,15 @@
 # Changelog
 
+## [v1.3.0]
+
+This is mostly a bug fix release.
+
+- Fixed some typos - Thank you [Scott Hanselman](https://github.com/shanselman)
+- Fixed issue where colors were not displayed correctly on all terminals ([#32](https://github.com/jerriep/dotnet-outdated/issues/32)) - Thank you [Scott Hanselman](https://github.com/shanselman)
+- Fixed issue where project was reported an not being a .NET Core project when user's temp path contained a space character. ([#23](https://github.com/jerriep/dotnet-outdated/issues/23))
+- Fixed issue where current version package was not picked up due to case-sensitive string comparison ([#36](https://github.com/jerriep/dotnet-outdated/issues/36))
+- Fixed issue where latest version of non-library packages was not picked up ([#27](https://github.com/jerriep/dotnet-outdated/issues/27)) and ([#31](https://github.com/jerriep/dotnet-outdated/issues/31))
+
 ## [v1.2.0]
 
 - Works with secure feeds. Read more in the _Working with secure feeds_ section of the readme.
@@ -9,7 +19,7 @@
 ## [v1.1.0]
 
 - Changed the way in which project dependencies are detected. We now run the `dotnet restore` command and make use of the `project.assets.json` file to determine the dependencies. This ensures parity with what the .NET CLI is doing.
-- Support for F# projects ([#7](https://github.com/jerriep/dotnet-outdated/issues/17)) - Thank you [John Ruble](https://github.com/jrr)
+- Support for F# projects ([#17](https://github.com/jerriep/dotnet-outdated/issues/17)) - Thank you [John Ruble](https://github.com/jrr)
 - Support reporing on transitive dependencies ([#13](https://github.com/jerriep/dotnet-outdated/issues/13)) - Thank you [James McCutcheon](https://github.com/jamesmcc)
 - Fixed issue which displayed packages that were unavailable for the TargetFramework ([#20](https://github.com/jerriep/dotnet-outdated/issues/20))
 - Fixed issue with paths that contain spaces ([#23](https://github.com/jerriep/dotnet-outdated/issues/23))
@@ -38,6 +48,7 @@ Initial release
 
 - A .NET Core global tool to display outdated NuGet packages in a project
 
+[v1.3.0]: https://github.com/jerriep/dotnet-outdated/tree/v1.3.0
 [v1.2.0]: https://github.com/jerriep/dotnet-outdated/tree/v1.2.0
 [v1.1.0]: https://github.com/jerriep/dotnet-outdated/tree/v1.1.0
 [v1.0.0]: https://github.com/jerriep/dotnet-outdated/tree/v1.0.0
