@@ -87,11 +87,20 @@ namespace DotNetOutdated.Services
                         // Roslyn Analyzers) there is no target framework listed for the actual package itself, as it does not contain libraries. So we need to also allow package
                         // versions where there are no dependency sets listed
                         var compatibleMetadataList = (await metadata.GetMetadataAsync(package, includePrerelease, false, _context, NullLogger.Instance, CancellationToken.None))
-                            .OfType<PackageSearchMetadata>()
                             .Where(meta => meta.DependencySets == null || !meta.DependencySets.Any() ||
                                            reducer.GetNearest(targetFramework, meta.DependencySets.Select(ds => ds.TargetFramework)) != null);
 
-                        allVersions.AddRange(compatibleMetadataList.Select(m => m.Version));
+                        foreach (var m in compatibleMetadataList)
+                        {
+                            if (m is PackageSearchMetadata packageSearchMetadata)
+                            {
+                                allVersions.Add(packageSearchMetadata.Version);
+                            }
+                            else if (m is PackageSearchMetadataV2Feed packageSearchMetadataV2Feed)
+                            {
+                                allVersions.Add(packageSearchMetadataV2Feed.Version);
+                            }
+                        };
                     }
                 }
                 catch(HttpRequestException)
