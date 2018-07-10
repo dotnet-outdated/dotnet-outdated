@@ -106,14 +106,22 @@ namespace DotNetOutdated
                     Path = _fileSystem.Directory.GetCurrentDirectory();
 
                 // Get all the projects
-                console.Write("Discovering projects...");
+                if (!console.IsOutputRedirected)
+                    console.Write("Discovering projects...");
+                
                 string projectPath = _projectDiscoveryService.DiscoverProject(Path);
-                ClearCurrentConsoleLine();
+                
+                if (!console.IsOutputRedirected)
+                    ClearCurrentConsoleLine();
 
                 // Analyze the projects
-                console.Write("Analyzing project and restoring packages...");
+                if (!console.IsOutputRedirected)
+                    console.Write("Analyzing project and restoring packages...");
+                
                 var projects = _projectAnalysisService.AnalyzeProject(projectPath, Transitive, TransitiveDepth);
-                ClearCurrentConsoleLine();
+
+                if (!console.IsOutputRedirected)
+                    ClearCurrentConsoleLine();
 
                 foreach (var project in projects)
                 {
@@ -189,11 +197,15 @@ namespace DotNetOutdated
             }
             else
             {
-                console.Write("...");
+                if (!console.IsOutputRedirected)
+                    console.Write("...");
 
                 var latestVersion = await _nugetService.ResolvePackageVersions(dependency.Name, referencedVersion, sources, versionRange, VersionLock, Prerelease, targetFramework.Name, projectFilePath);
                 
-                console.Write("\b\b\b ");
+                if (!console.IsOutputRedirected)
+                    console.Write("\b\b\b");
+                
+                console.Write(" ");
 
                 if (latestVersion != null)
                 {
@@ -224,7 +236,7 @@ namespace DotNetOutdated
         {
             int currentLineCursor = Console.CursorTop;
             Console.SetCursorPosition(0, Console.CursorTop);
-            Console.Write(new string(' ', Console.BufferWidth)); 
+            Console.Write(new string(' ', Console.BufferWidth));
             Console.SetCursorPosition(0, currentLineCursor);
         }
 
