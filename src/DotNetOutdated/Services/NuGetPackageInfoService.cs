@@ -38,7 +38,7 @@ namespace DotNetOutdated.Services
 
             return _enabledSources;
         }
-        
+
         private async Task<PackageMetadataResource> FindMetadataResourceForSource(Uri source, string projectFilePath)
         {
             try
@@ -53,8 +53,8 @@ namespace DotNetOutdated.Services
                     // enables secure feeds to work properly
                     var enabledSources = GetEnabledSources(projectFilePath);
                     var enabledSource = enabledSources?.FirstOrDefault(s => s.SourceUri == source);
-                    var sourceRepository = enabledSource != null ? 
-                        new SourceRepository(enabledSource, Repository.Provider.GetCoreV3()) : 
+                    var sourceRepository = enabledSource != null ?
+                        new SourceRepository(enabledSource, Repository.Provider.GetCoreV3()) :
                         Repository.Factory.GetCoreV3(resourceUrl);
 
                     resource = await sourceRepository.GetResourceAsync<PackageMetadataResource>();
@@ -70,7 +70,7 @@ namespace DotNetOutdated.Services
             }
         }
 
-        public async Task<IEnumerable<NuGetVersion>> GetAllVersions(string package, List<Uri> sources, bool includePrerelease, NuGetFramework targetFramework,
+        public async Task<IReadOnlyList<NuGetVersion>> GetAllVersions(string package, List<Uri> sources, bool includePrerelease, NuGetFramework targetFramework,
             string projectFilePath)
         {
             var allVersions = new List<NuGetVersion>();
@@ -83,7 +83,7 @@ namespace DotNetOutdated.Services
                     {
                         var reducer = new FrameworkReducer();
 
-                        // We need to ensure that we only get package versions which are compatible with the requested target framework. For certain package types (such as 
+                        // We need to ensure that we only get package versions which are compatible with the requested target framework. For certain package types (such as
                         // Roslyn Analyzers) there is no target framework listed for the actual package itself, as it does not contain libraries. So we need to also allow package
                         // versions where there are no dependency sets listed
                         var compatibleMetadataList = (await metadata.GetMetadataAsync(package, includePrerelease, false, _context, NullLogger.Instance, CancellationToken.None))
@@ -96,7 +96,7 @@ namespace DotNetOutdated.Services
                 }
                 catch(HttpRequestException)
                 {
-                    // Suppress HTTP errors when connecting to NuGet sources 
+                    // Suppress HTTP errors when connecting to NuGet sources
                 }
             }
 

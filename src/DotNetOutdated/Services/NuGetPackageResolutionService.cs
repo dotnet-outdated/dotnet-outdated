@@ -10,7 +10,7 @@ namespace DotNetOutdated.Services
     internal class NuGetPackageResolutionService : INuGetPackageResolutionService
     {
         private readonly INuGetPackageInfoService _nugetService;
-        private readonly Dictionary<string, IList<NuGetVersion>> _cache = new Dictionary<string, IList<NuGetVersion>>();
+        private readonly Dictionary<string, IReadOnlyList<NuGetVersion>> _cache = new Dictionary<string, IReadOnlyList<NuGetVersion>>();
 
         public NuGetPackageResolutionService(INuGetPackageInfoService nugetService)
         {
@@ -31,7 +31,7 @@ namespace DotNetOutdated.Services
             if (!_cache.TryGetValue(cacheKey, out var allVersions))
             {
                 // Get all the available versions
-                allVersions = (await _nugetService.GetAllVersions(packageName, sources, includePrerelease, targetFrameworkName, projectFilePath)).ToList();
+                allVersions = await _nugetService.GetAllVersions(packageName, sources, includePrerelease, targetFrameworkName, projectFilePath);
                 _cache.Add(cacheKey, allVersions);
             }
 
