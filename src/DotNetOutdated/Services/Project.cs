@@ -9,16 +9,17 @@ namespace DotNetOutdated.Services
     {
         public class Dependency
         {
-            public bool AutoReferenced { get; set; }
+            public bool IsAutoReferenced { get; set; }
+
+            public bool IsTransitive { get; set; }
 
             public string Name { get; set; }
 
             public VersionRange VersionRange { get; set; }
 
             public NuGetVersion ResolvedVersion { get; set; }
-            
-            public List<Dependency> Dependencies { get; set; } = new List<Dependency>();
 
+            public NuGetVersion LatestVersion { get; set; }
         }
 
         public class TargetFramework

@@ -9,6 +9,7 @@ using DotNetOutdated.Exceptions;
 using DotNetOutdated.Services;
 using McMaster.Extensions.CommandLineUtils;
 using Microsoft.Extensions.DependencyInjection;
+using NuGet.Frameworks;
 using NuGet.Versioning;
 
 [assembly: InternalsVisibleTo("DotNetOutdated.Tests")]
@@ -125,37 +126,94 @@ namespace DotNetOutdated
 
                 foreach (var project in projects)
                 {
-                    int indentLevel = 1;
-
-                    WriteProjectName(console, project);
-
                     // Process each target framework with its related dependencies
                     foreach (var targetFramework in project.TargetFrameworks)
                     {
-                        WriteTargetFramework(console, targetFramework, indentLevel);
+                        var dependencies = targetFramework.Dependencies
+                            .Where(d => IncludeAutoReferences || d.IsAutoReferenced == false)
+                            .OrderBy(dependency => dependency.IsTransitive)
+                            .ThenBy(dependency => dependency.Name)
+                            .ToList();
 
-                        var dependencies = targetFramework.Dependencies;
-
-                        if (!IncludeAutoReferences)
-                            dependencies = dependencies.Where(d => d.AutoReferenced == false).ToList();
-                        
-                        if (dependencies.Count > 0)
+                        foreach (var dependency in dependencies)
                         {
-                            foreach (var dependency in dependencies)
-                            {
-                                await ReportDependency(console, dependency, dependency.VersionRange, project.Sources, indentLevel, targetFramework, project.FilePath);
-                            }
+                            var referencedVersion = dependency.ResolvedVersion;
+
+                            dependency.LatestVersion = await _nugetService.ResolvePackageVersions(dependency.Name, referencedVersion, project.Sources, dependency.VersionRange, VersionLock, Prerelease, targetFramework.Name, project.FilePath);
+                        }
+                    }
+                }
+
+                // Get a flattened view of all the outdated packages
+                var outdated = from p in projects
+                    from f in p.TargetFrameworks
+                    from d in f.Dependencies
+                    where d.LatestVersion > d.ResolvedVersion
+                    select new
+                    {
+                        Project = p.Name,
+                        TargetFramework = f.Name,
+                        Dependency = d.Name,
+                        ResolvedVersion = d.ResolvedVersion,
+                        LatestVersion = d.LatestVersion,
+                        IsAutoReferenced = d.IsAutoReferenced,
+                        IsTransitive = d.IsTransitive
+                    };
+                
+                // Now group them by package
+                var consolidatedPackages = outdated.GroupBy(p => new
+                    {
+                        p.Dependency,
+                        p.ResolvedVersion,
+                        p.LatestVersion,
+                        p.IsTransitive,
+                        p.IsAutoReferenced
+                    })
+                    .Select(gp => new ConsolidatedPackage
+                    {
+                        Name = gp.Key.Dependency,
+                        ResolvedVersion = gp.Key.ResolvedVersion,
+                        LatestVersion = gp.Key.LatestVersion,
+                        IsTransitive = gp.Key.IsTransitive,
+                        IsAutoReferenced = gp.Key.IsAutoReferenced,
+                        Projects = gp.Select(v => new ConsolidatedPackage.PackageProjectReference
+                        {
+                            Project = v.Project, 
+                            Framework = v.TargetFramework
+                        }).ToList()
+                    })
+                    .ToList();
+
+                // Report on packages
+                int[] columnWidths = consolidatedPackages.DetermineColumnWidths();
+                foreach (var package in consolidatedPackages)
+                {
+                    for (var index = 0; index < package.Projects.Count; index++)
+                    {
+                        var project = package.Projects[index];
+                        if (index == 0)
+                        {
+                            console.Write(package.Title.PadRight(columnWidths[0]));
+                            console.Write(" | ");
+                            console.Write(package.ResolvedVersion.ToString().PadRight(columnWidths[1]));
+                            console.Write(" | ");
+                            console.Write(package.LatestVersion.ToString().PadRight(columnWidths[2]));
+                            console.Write(" | ");
                         }
                         else
                         {
-                            console.WriteIndent(indentLevel);
-                            console.WriteLine("-- No dependencies --");
+                            console.Write(new String(' ', columnWidths[0]));
+                            console.Write(" | ");
+                            console.Write(new String(' ', columnWidths[1]));
+                            console.Write(" | ");
+                            console.Write(new String(' ', columnWidths[2]));
+                            console.Write(" | ");
                         }
+                            
+                        console.Write(project.Name.PadRight(columnWidths[3]));
+                        console.WriteLine();
                     }
-
-                    console.WriteLine();
                 }
-
                 return 0;
             }
             catch (CommandValidationException e)
@@ -179,13 +237,13 @@ namespace DotNetOutdated
             console.WriteLine();
         }
 
-        private async Task ReportDependency(IConsole console, Project.Dependency dependency, VersionRange versionRange, List<Uri> sources, int indentLevel,
+        private async Task EvaluateDependency(IConsole console, Project.Dependency dependency, VersionRange versionRange, List<Uri> sources, int indentLevel,
             Project.TargetFramework targetFramework, string projectFilePath)
         {
             console.WriteIndent(indentLevel);
             console.Write($"{dependency.Name}");
 
-            if (dependency.AutoReferenced)
+            if (dependency.IsAutoReferenced)
                 console.Write(" [A]");
 
             var referencedVersion = dependency.ResolvedVersion;
@@ -225,11 +283,6 @@ namespace DotNetOutdated
                 }
                 console.WriteLine();
             }
-                        
-            foreach (var childDependency in dependency.Dependencies)
-            {
-                await ReportDependency(console, childDependency, childDependency.VersionRange, sources, indentLevel + 1, targetFramework, projectFilePath);
-            }            
         }
         
         public static void ClearCurrentConsoleLine()
@@ -239,6 +292,58 @@ namespace DotNetOutdated
             Console.Write(new string(' ', Console.BufferWidth));
             Console.SetCursorPosition(0, currentLineCursor);
         }
+    }
 
+    public class ConsolidatedPackage
+    {
+        public class PackageProjectReference
+        {
+            public NuGetFramework Framework { get; set; }
+
+            public string Project { get; set; }
+
+            public string Name => $"{Project} [{Framework}]";
+        }
+
+        public bool IsAutoReferenced { get; set; }
+
+        public bool IsTransitive { get; set; }
+
+        public NuGetVersion LatestVersion { get; set; }
+
+        public string Name { get; set; }
+
+        public List<PackageProjectReference> Projects { get; set; }
+
+        public NuGetVersion ResolvedVersion { get; set; }
+
+        public string Title
+        {
+            get
+            {
+                string title = Name;
+
+                if (IsAutoReferenced)
+                    title += " [A]";
+                else if (IsTransitive)
+                    title += " [T]";
+
+                return title;
+            }
+        }
+    }
+    
+    public static class ReportingExtensions
+    {
+        public static int[] DetermineColumnWidths(this List<ConsolidatedPackage> packages)
+        {
+            List<int> columnWidths = new List<int>();
+            columnWidths.Add(packages.Select(p => p.Title).Aggregate("", (max, cur) => max.Length > cur.Length ? max : cur).Length);
+            columnWidths.Add(packages.Select(p => p.ResolvedVersion.ToString()).Aggregate("", (max, cur) => max.Length > cur.Length ? max : cur).Length);
+            columnWidths.Add(packages.Select(p => p.LatestVersion.ToString()).Aggregate("", (max, cur) => max.Length > cur.Length ? max : cur).Length);
+            columnWidths.Add(packages.SelectMany(p => p.Projects).Select(p => p.Name).Aggregate("", (max, cur) => max.Length > cur.Length ? max : cur).Length);
+
+            return columnWidths.ToArray();
+        }
     }
 }
