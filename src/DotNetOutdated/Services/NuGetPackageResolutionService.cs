@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using NuGet.Frameworks;
 using NuGet.Versioning;
@@ -9,6 +10,7 @@ namespace DotNetOutdated.Services
     internal class NuGetPackageResolutionService : INuGetPackageResolutionService
     {
         private readonly INuGetPackageInfoService _nugetService;
+        private readonly Dictionary<string, IReadOnlyList<NuGetVersion>> _cache = new Dictionary<string, IReadOnlyList<NuGetVersion>>();
 
         public NuGetPackageResolutionService(INuGetPackageInfoService nugetService)
         {
@@ -24,10 +26,15 @@ namespace DotNetOutdated.Services
                 includePrerelease = true;
             else if (prerelease == PrereleaseReporting.Never)
                 includePrerelease = false;
-            
-            // Get all the available versions
-            var allVersions = await _nugetService.GetAllVersions(packageName, sources, includePrerelease, targetFrameworkName, projectFilePath);
-            
+
+            string cacheKey = (packageName + "-" + includePrerelease + "-" + targetFrameworkName).ToLowerInvariant();
+            if (!_cache.TryGetValue(cacheKey, out var allVersions))
+            {
+                // Get all the available versions
+                allVersions = await _nugetService.GetAllVersions(packageName, sources, includePrerelease, targetFrameworkName, projectFilePath);
+                _cache.Add(cacheKey, allVersions);
+            }
+
             // Determine the floating behaviour
             var floatingBehaviour = includePrerelease ? NuGetVersionFloatBehavior.AbsoluteLatest : NuGetVersionFloatBehavior.Major;
             if (versionLock == VersionLock.Major)
