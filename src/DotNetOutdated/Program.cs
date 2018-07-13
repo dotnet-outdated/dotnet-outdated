@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.IO.Abstractions;
 using System.Linq;
 using System.Reflection;
@@ -9,8 +8,6 @@ using DotNetOutdated.Exceptions;
 using DotNetOutdated.Services;
 using McMaster.Extensions.CommandLineUtils;
 using Microsoft.Extensions.DependencyInjection;
-using NuGet.Frameworks;
-using NuGet.Versioning;
 
 [assembly: InternalsVisibleTo("DotNetOutdated.Tests")]
 [assembly: InternalsVisibleTo("DynamicProxyGenAssembly2")]
@@ -224,126 +221,12 @@ namespace DotNetOutdated
             }
         }
 
-        private static void WriteProjectName(IConsole console, Project project)
-        {
-            console.Write($"» {project.Name}", ConsoleColor.Yellow);
-            console.WriteLine();
-        }
-
-        private static void WriteTargetFramework(IConsole console, Project.TargetFramework targetFramework, int indentLevel)
-        {
-            console.WriteIndent(indentLevel);
-            console.Write($"[{targetFramework.Name}]", ConsoleColor.Cyan);
-            console.WriteLine();
-        }
-
-        private async Task EvaluateDependency(IConsole console, Project.Dependency dependency, VersionRange versionRange, List<Uri> sources, int indentLevel,
-            Project.TargetFramework targetFramework, string projectFilePath)
-        {
-            console.WriteIndent(indentLevel);
-            console.Write($"{dependency.Name}");
-
-            if (dependency.IsAutoReferenced)
-                console.Write(" [A]");
-
-            var referencedVersion = dependency.ResolvedVersion;
-            if (referencedVersion == null)
-            {
-                console.Write(" ");
-                console.Write("Cannot resolve referenced version", ConsoleColor.White, ConsoleColor.DarkRed);
-                console.WriteLine();
-            }
-            else
-            {
-                if (!console.IsOutputRedirected)
-                    console.Write("...");
-
-                var latestVersion = await _nugetService.ResolvePackageVersions(dependency.Name, referencedVersion, sources, versionRange, VersionLock, Prerelease, targetFramework.Name, projectFilePath);
-                
-                if (!console.IsOutputRedirected)
-                    console.Write("\b\b\b");
-                
-                console.Write(" ");
-
-                if (latestVersion != null)
-                {
-                    console.Write(referencedVersion, latestVersion > referencedVersion ? ConsoleColor.Red : ConsoleColor.Green);
-                }
-                else
-                {
-                    console.Write($"{referencedVersion} ", ConsoleColor.Yellow); 
-                    console.Write("Cannot resolve latest version", ConsoleColor.White, ConsoleColor.DarkCyan);
-                }
-
-                if (latestVersion > referencedVersion)
-                {
-                    console.Write(" (");
-                    console.Write(latestVersion, ConsoleColor.Blue);
-                    console.Write(")");
-                }
-                console.WriteLine();
-            }
-        }
-        
         public static void ClearCurrentConsoleLine()
         {
             int currentLineCursor = Console.CursorTop;
             Console.SetCursorPosition(0, Console.CursorTop);
             Console.Write(new string(' ', Console.BufferWidth));
             Console.SetCursorPosition(0, currentLineCursor);
-        }
-    }
-
-    public class ConsolidatedPackage
-    {
-        public class PackageProjectReference
-        {
-            public NuGetFramework Framework { get; set; }
-
-            public string Project { get; set; }
-
-            public string Name => $"{Project} [{Framework}]";
-        }
-
-        public bool IsAutoReferenced { get; set; }
-
-        public bool IsTransitive { get; set; }
-
-        public NuGetVersion LatestVersion { get; set; }
-
-        public string Name { get; set; }
-
-        public List<PackageProjectReference> Projects { get; set; }
-
-        public NuGetVersion ResolvedVersion { get; set; }
-
-        public string Title
-        {
-            get
-            {
-                string title = Name;
-
-                if (IsAutoReferenced)
-                    title += " [A]";
-                else if (IsTransitive)
-                    title += " [T]";
-
-                return title;
-            }
-        }
-    }
-    
-    public static class ReportingExtensions
-    {
-        public static int[] DetermineColumnWidths(this List<ConsolidatedPackage> packages)
-        {
-            List<int> columnWidths = new List<int>();
-            columnWidths.Add(packages.Select(p => p.Title).Aggregate("", (max, cur) => max.Length > cur.Length ? max : cur).Length);
-            columnWidths.Add(packages.Select(p => p.ResolvedVersion.ToString()).Aggregate("", (max, cur) => max.Length > cur.Length ? max : cur).Length);
-            columnWidths.Add(packages.Select(p => p.LatestVersion.ToString()).Aggregate("", (max, cur) => max.Length > cur.Length ? max : cur).Length);
-            columnWidths.Add(packages.SelectMany(p => p.Projects).Select(p => p.Name).Aggregate("", (max, cur) => max.Length > cur.Length ? max : cur).Length);
-
-            return columnWidths.ToArray();
         }
     }
 }
