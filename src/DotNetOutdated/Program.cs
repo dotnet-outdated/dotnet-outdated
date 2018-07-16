@@ -154,106 +154,160 @@ namespace DotNetOutdated
                     }
                 }
 
-                // Get a flattened view of all the outdated packages
-                var outdated = from p in projects
-                    from f in p.TargetFrameworks
-                    from d in f.Dependencies
-                    where d.LatestVersion > d.ResolvedVersion
-                    select new
-                    {
-                        Project = p.Name,
-                        TargetFramework = f.Name,
-                        Dependency = d.Name,
-                        ResolvedVersion = d.ResolvedVersion,
-                        LatestVersion = d.LatestVersion,
-                        IsAutoReferenced = d.IsAutoReferenced,
-                        IsTransitive = d.IsTransitive
-                    };
-                
-                // Now group them by package
-                var consolidatedPackages = outdated.GroupBy(p => new
-                    {
-                        p.Dependency,
-                        p.ResolvedVersion,
-                        p.LatestVersion,
-                        p.IsTransitive,
-                        p.IsAutoReferenced
-                    })
-                    .Select(gp => new ConsolidatedPackage
-                    {
-                        Name = gp.Key.Dependency,
-                        ResolvedVersion = gp.Key.ResolvedVersion,
-                        LatestVersion = gp.Key.LatestVersion,
-                        IsTransitive = gp.Key.IsTransitive,
-                        IsAutoReferenced = gp.Key.IsAutoReferenced,
-                        Projects = gp.Select(v => new ConsolidatedPackage.PackageProjectReference
-                        {
-                            Project = v.Project, 
-                            Framework = v.TargetFramework
-                        }).ToList()
-                    })
-                    .ToList();
-
-                // Report on packages
-                int[] columnWidths = consolidatedPackages.DetermineColumnWidths();
-                
-                // Write header
-                console.Write(ReportingExtensions.PackageTitle.PadRight(columnWidths[0]));
-                console.Write(" | ");
-                console.Write(ReportingExtensions.CurrentVersionTitle.PadRight(columnWidths[1]));
-                console.Write(" | ");
-                console.Write(ReportingExtensions.LatestVersionTitle.PadRight(columnWidths[2]));
-                console.Write(" | ");
-                console.Write(ReportingExtensions.ProjectTitle.PadRight(columnWidths[3]));
-                console.WriteLine();
-                
-                // Write header separator
-                console.Write(new String('-', columnWidths[0]));
-                console.Write("-|-");
-                console.Write(new String('-', columnWidths[1]));
-                console.Write("-|-");
-                console.Write(new String('-', columnWidths[2]));
-                console.Write("-|-");
-                console.Write(new String('-', columnWidths[3]));
-                console.WriteLine();
-                
-                foreach (var package in consolidatedPackages)
+                foreach (var project in projects)
                 {
-                    for (var index = 0; index < package.Projects.Count; index++)
+                    WriteProjectName(console, project);
+
+                    // Process each target framework with its related dependencies
+                    foreach (var targetFramework in project.TargetFrameworks)
                     {
-                        var project = package.Projects[index];
-                        if (index == 0)
+                        WriteTargetFramework(console, targetFramework);
+
+                        var dependencies = targetFramework.Dependencies
+                            .Where(d => d.LatestVersion > d.ResolvedVersion)
+                            .ToList();
+
+                        if (dependencies.Count > 0)
                         {
-                            console.Write(package.Title.PadRight(columnWidths[0]));
-                            console.Write(" | ");
-                            console.Write(package.ResolvedVersion.ToString().PadRight(columnWidths[1]));
-                            console.Write(" | ");
-                            console.Write(package.LatestVersion.ToString().PadRight(columnWidths[2]));
-                            console.Write(" | ");
+                            int[] columnWidths = dependencies.DetermineColumnWidths();
+                            
+                            foreach (var dependency in dependencies)
+                            {
+                                string resolvedVersion = dependency.ResolvedVersion?.ToString() ?? "";
+                                string latestVersion = dependency.LatestVersion?.ToString() ?? "";
+                                
+                                console.WriteIndent();
+                                console.Write(dependency.Description?.PadRight(columnWidths[0] + 2));
+                                console.Write(resolvedVersion.PadRight(columnWidths[1]));
+                                console.Write(" -> ");
+                                console.Write(latestVersion.PadRight(columnWidths[2]));
+
+                                console.WriteLine();
+                            }
                         }
                         else
                         {
-                            console.Write(new String(' ', columnWidths[0]));
-                            console.Write(" | ");
-                            console.Write(new String(' ', columnWidths[1]));
-                            console.Write(" | ");
-                            console.Write(new String(' ', columnWidths[2]));
-                            console.Write(" | ");
+                            console.WriteIndent();
+                            console.WriteLine("-- No outdated dependencies --");
                         }
-
-                        console.Write(project.Name.PadRight(columnWidths[3]));
-                        console.WriteLine();
                     }
-                        
-                    console.Write(new String('-', columnWidths[0]));
-                    console.Write("-|-");
-                    console.Write(new String('-', columnWidths[1]));
-                    console.Write("-|-");
-                    console.Write(new String('-', columnWidths[2]));
-                    console.Write("-|-");
-                    console.Write(new String('-', columnWidths[3]));
+
                     console.WriteLine();
                 }
+                
+                // Get a flattened view of all the outdated packages
+//                var outdated = from p in projects
+//                    from f in p.TargetFrameworks
+//                    from d in f.Dependencies
+//                    where d.LatestVersion > d.ResolvedVersion
+//                    select new
+//                    {
+//                        Project = p.Name,
+//                        TargetFramework = f.Name,
+//                        Dependency = d.Name,
+//                        ResolvedVersion = d.ResolvedVersion,
+//                        LatestVersion = d.LatestVersion,
+//                        IsAutoReferenced = d.IsAutoReferenced,
+//                        IsTransitive = d.IsTransitive
+//                    };
+                
+                // Now group them by package
+//                var consolidatedPackages = outdated.GroupBy(p => new
+//                    {
+//                        p.Dependency,
+//                        p.ResolvedVersion,
+//                        p.LatestVersion,
+//                        p.IsTransitive,
+//                        p.IsAutoReferenced
+//                    })
+//                    .Select(gp => new ConsolidatedPackage
+//                    {
+//                        Name = gp.Key.Dependency,
+//                        ResolvedVersion = gp.Key.ResolvedVersion,
+//                        LatestVersion = gp.Key.LatestVersion,
+//                        IsTransitive = gp.Key.IsTransitive,
+//                        IsAutoReferenced = gp.Key.IsAutoReferenced,
+//                        Projects = gp.Select(v => new ConsolidatedPackage.PackageProjectReference
+//                        {
+//                            Project = v.Project, 
+//                            Framework = v.TargetFramework
+//                        }).ToList()
+//                    })
+//                    .ToList();
+                
+                // Report on packages-
+//                int[] columnWidths = consolidatedPackages.DetermineColumnWidths();
+                
+                // Write header
+//                console.Write(ReportingExtensions.PackageTitle.PadRight(columnWidths[0]));
+//                console.Write("  ");
+//                console.Write(ReportingExtensions.CurrentVersionTitle.PadRight(columnWidths[1]));
+//                console.Write("  ");
+//                console.Write(ReportingExtensions.LatestVersionTitle.PadRight(columnWidths[2]));
+//                console.Write("  ");
+//                console.Write(ReportingExtensions.ProjectTitle.PadRight(columnWidths[3]));
+//                console.WriteLine();
+                
+//                // Write header separator
+//                console.Write(new String('-', columnWidths[0]));
+//                console.Write("-|-");
+//                console.Write(new String('-', columnWidths[1]));
+//                console.Write("-|-");
+//                console.Write(new String('-', columnWidths[2]));
+//                console.Write("-|-");
+//                console.Write(new String('-', columnWidths[3]));
+//                console.WriteLine();
+                
+//                foreach (var package in consolidatedPackages)
+//                {
+//                    console.Write(package.Title.PadRight(columnWidths[0]));
+//                    console.Write("  ");
+//                    console.Write(package.ResolvedVersion.ToString().PadRight(columnWidths[1]));
+//                    console.Write("  ");
+//                    console.Write(package.LatestVersion.ToString().PadRight(columnWidths[2]));
+//                    console.Write("  ");
+
+//                    for (var index = 0; index < package.Projects.Count; index++)
+//                    {
+//                        var project = package.Projects[index];
+//                        if (index == 0)
+//                        {
+//                            console.Write(package.Title.PadRight(columnWidths[0]));
+//                            console.Write(" | ");
+//                            console.Write(package.ResolvedVersion.ToString().PadRight(columnWidths[1]));
+//                            console.Write(" | ");
+//                            console.Write(package.LatestVersion.ToString().PadRight(columnWidths[2]));
+//                            console.Write(" | ");
+//                        }
+//                        else
+//                        {
+//                            console.Write(new String(' ', columnWidths[0]));
+//                            console.Write(" | ");
+//                            console.Write(new String(' ', columnWidths[1]));
+//                            console.Write(" | ");
+//                            console.Write(new String(' ', columnWidths[2]));
+//                            console.Write(" | ");
+//                        }
+//
+//                        console.Write(project.Name.PadRight(columnWidths[3]));
+//                        console.WriteLine();
+//                    }
+                        
+//                    console.Write(new String('-', columnWidths[0]));
+//                    console.Write("-|-");
+//                    console.Write(new String('-', columnWidths[1]));
+//                    console.Write("-|-");
+//                    console.Write(new String('-', columnWidths[2]));
+//                    console.Write("-|-");
+//                    console.Write(new String('-', columnWidths[3]));
+//                    console.WriteLine();
+//                    
+//                    foreach (var project in package.Projects)
+//                    {
+//                        console.Write($"» {project.Name}", ConsoleColor.Yellow);
+//                        console.WriteLine();
+//                    }
+//                }
                 return 0;
             }
             catch (CommandValidationException e)
@@ -264,6 +318,19 @@ namespace DotNetOutdated
             }
         }
 
+        private static void WriteProjectName(IConsole console, Project project)
+        {
+            console.Write($"» {project.Name}", ConsoleColor.Yellow);
+            console.WriteLine();
+        }
+
+        private static void WriteTargetFramework(IConsole console, Project.TargetFramework targetFramework)
+        {
+            console.WriteIndent();
+            console.Write($"[{targetFramework.Name}]", ConsoleColor.Cyan);
+            console.WriteLine();
+        }
+        
         public static void ClearCurrentConsoleLine()
         {
             int currentLineCursor = Console.CursorTop;

@@ -9,6 +9,21 @@ namespace DotNetOutdated.Services
     {
         public class Dependency
         {
+            public string Description
+            {
+                get
+                {
+                    string description = Name;
+
+                    if (IsAutoReferenced)
+                        description += " [A]";
+                    else if (IsTransitive)
+                        description += " [T]";
+
+                    return description;
+                }
+            }
+            
             public bool IsAutoReferenced { get; set; }
 
             public bool IsTransitive { get; set; }
