@@ -8,6 +8,7 @@ using DotNetOutdated.Exceptions;
 using DotNetOutdated.Services;
 using McMaster.Extensions.CommandLineUtils;
 using Microsoft.Extensions.DependencyInjection;
+using NuGet.Versioning;
 
 [assembly: InternalsVisibleTo("DotNetOutdated.Tests")]
 [assembly: InternalsVisibleTo("DynamicProxyGenAssembly2")]
@@ -180,7 +181,7 @@ namespace DotNetOutdated
                                 console.Write(dependency.Description?.PadRight(columnWidths[0] + 2));
                                 console.Write(resolvedVersion.PadRight(columnWidths[1]));
                                 console.Write(" -> ");
-                                console.Write(latestVersion.PadRight(columnWidths[2]));
+                                console.Write(latestVersion.PadRight(columnWidths[2]), GetLatestVersionColor(dependency.LatestVersion, dependency.ResolvedVersion));
 
                                 console.WriteLine();
                             }
@@ -316,6 +317,21 @@ namespace DotNetOutdated
 
                 return 1;
             }
+        }
+
+        private ConsoleColor GetLatestVersionColor(NuGetVersion latestVersion, NuGetVersion resolvedVersion)
+        {
+            if (latestVersion == null || resolvedVersion == null)
+                return Console.ForegroundColor;
+
+            if (latestVersion.Major > resolvedVersion.Major || resolvedVersion.IsPrerelease)
+                return ConsoleColor.Red;
+            if (latestVersion.Minor > resolvedVersion.Minor)
+                return ConsoleColor.Yellow;
+            if (latestVersion.Patch > resolvedVersion.Patch || latestVersion.Revision > resolvedVersion.Revision)
+                return ConsoleColor.Green;
+
+            return Console.ForegroundColor;
         }
 
         private static void WriteProjectName(IConsole console, Project project)
