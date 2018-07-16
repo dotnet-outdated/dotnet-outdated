@@ -104,23 +104,28 @@ namespace DotNetOutdated
                     Path = _fileSystem.Directory.GetCurrentDirectory();
 
                 // Get all the projects
-                if (!console.IsOutputRedirected)
-                    console.Write("Discovering projects...");
+                console.Write("Discovering projects...");
                 
                 string projectPath = _projectDiscoveryService.DiscoverProject(Path);
-                
+
                 if (!console.IsOutputRedirected)
                     ClearCurrentConsoleLine();
+                else
+                    console.WriteLine();
 
                 // Analyze the projects
-                if (!console.IsOutputRedirected)
-                    console.Write("Analyzing project and restoring packages...");
+                console.Write("Analyzing project and restoring packages...");
                 
                 var projects = _projectAnalysisService.AnalyzeProject(projectPath, Transitive, TransitiveDepth);
 
                 if (!console.IsOutputRedirected)
                     ClearCurrentConsoleLine();
+                else
+                    console.WriteLine();
 
+                if (console.IsOutputRedirected)
+                    console.WriteLine("Analyzing packages...");
+                
                 foreach (var project in projects)
                 {
                     // Process each target framework with its related dependencies
@@ -132,11 +137,19 @@ namespace DotNetOutdated
                             .ThenBy(dependency => dependency.Name)
                             .ToList();
 
-                        foreach (var dependency in dependencies)
+                        for (var index = 0; index < dependencies.Count; index++)
                         {
+                            var dependency = dependencies[index];
+                            if (!console.IsOutputRedirected)
+                                console.Write($"Analyzing packages for {project.Name} [{targetFramework.Name}] ({index + 1}/{dependencies.Count})");
+                                    
                             var referencedVersion = dependency.ResolvedVersion;
 
-                            dependency.LatestVersion = await _nugetService.ResolvePackageVersions(dependency.Name, referencedVersion, project.Sources, dependency.VersionRange, VersionLock, Prerelease, targetFramework.Name, project.FilePath);
+                            dependency.LatestVersion = await _nugetService.ResolvePackageVersions(dependency.Name, referencedVersion, project.Sources, dependency.VersionRange,
+                                VersionLock, Prerelease, targetFramework.Name, project.FilePath);
+
+                            if (!console.IsOutputRedirected)
+                                ClearCurrentConsoleLine();
                         }
                     }
                 }
@@ -183,6 +196,27 @@ namespace DotNetOutdated
 
                 // Report on packages
                 int[] columnWidths = consolidatedPackages.DetermineColumnWidths();
+                
+                // Write header
+                console.Write(ReportingExtensions.PackageTitle.PadRight(columnWidths[0]));
+                console.Write(" | ");
+                console.Write(ReportingExtensions.CurrentVersionTitle.PadRight(columnWidths[1]));
+                console.Write(" | ");
+                console.Write(ReportingExtensions.LatestVersionTitle.PadRight(columnWidths[2]));
+                console.Write(" | ");
+                console.Write(ReportingExtensions.ProjectTitle.PadRight(columnWidths[3]));
+                console.WriteLine();
+                
+                // Write header separator
+                console.Write(new String('-', columnWidths[0]));
+                console.Write("-|-");
+                console.Write(new String('-', columnWidths[1]));
+                console.Write("-|-");
+                console.Write(new String('-', columnWidths[2]));
+                console.Write("-|-");
+                console.Write(new String('-', columnWidths[3]));
+                console.WriteLine();
+                
                 foreach (var package in consolidatedPackages)
                 {
                     for (var index = 0; index < package.Projects.Count; index++)
@@ -206,10 +240,19 @@ namespace DotNetOutdated
                             console.Write(new String(' ', columnWidths[2]));
                             console.Write(" | ");
                         }
-                            
+
                         console.Write(project.Name.PadRight(columnWidths[3]));
                         console.WriteLine();
                     }
+                        
+                    console.Write(new String('-', columnWidths[0]));
+                    console.Write("-|-");
+                    console.Write(new String('-', columnWidths[1]));
+                    console.Write("-|-");
+                    console.Write(new String('-', columnWidths[2]));
+                    console.Write("-|-");
+                    console.Write(new String('-', columnWidths[3]));
+                    console.WriteLine();
                 }
                 return 0;
             }
