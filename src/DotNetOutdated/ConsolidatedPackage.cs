@@ -8,11 +8,13 @@ namespace DotNetOutdated
     {
         public class PackageProjectReference
         {
+            public string Description => $"{Project} [{Framework}]";
+
             public NuGetFramework Framework { get; set; }
 
             public string Project { get; set; }
 
-            public string Description => $"{Project} [{Framework}]";
+            public string ProjectFilePath { get; set; }
         }
 
         public string Description

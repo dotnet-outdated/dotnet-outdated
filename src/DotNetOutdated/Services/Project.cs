@@ -29,7 +29,7 @@ namespace DotNetOutdated.Services
             public bool IsTransitive { get; set; }
 
             public string Name { get; set; }
-
+            
             public VersionRange VersionRange { get; set; }
 
             public NuGetVersion ResolvedVersion { get; set; }

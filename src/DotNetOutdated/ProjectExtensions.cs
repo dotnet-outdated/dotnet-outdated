@@ -16,6 +16,7 @@ namespace DotNetOutdated
                 select new
                 {
                     Project = p.Name,
+                    ProjectFilePath = p.FilePath,
                     TargetFramework = f.Name,
                     Dependency = d.Name,
                     ResolvedVersion = d.ResolvedVersion,
@@ -43,6 +44,7 @@ namespace DotNetOutdated
                     Projects = gp.Select(v => new ConsolidatedPackage.PackageProjectReference
                     {
                         Project = v.Project,
+                        ProjectFilePath = v.ProjectFilePath,
                         Framework = v.TargetFramework
                     }).ToList()
                 })

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO.Abstractions;
 using System.Linq;
+using System.Net.NetworkInformation;
 using System.Reflection;
 using System.Reflection.Metadata;
 using System.Runtime.CompilerServices;
@@ -32,6 +33,7 @@ namespace DotNetOutdated
         private readonly INuGetPackageResolutionService _nugetService;
         private readonly IProjectAnalysisService _projectAnalysisService;
         private readonly IProjectDiscoveryService _projectDiscoveryService;
+        private readonly IDotNetAddPackageService _dotNetAddPackageService;
 
         [Option(CommandOptionType.NoValue, Description = "Specifies whether to include auto-referenced packages.",
             LongName = "include-auto-references")]
@@ -76,6 +78,7 @@ namespace DotNetOutdated
                     .AddSingleton<IDotNetRunner, DotNetRunner>()
                     .AddSingleton<IDependencyGraphService, DependencyGraphService>()
                     .AddSingleton<IDotNetRestoreService, DotNetRestoreService>()
+                    .AddSingleton<IDotNetAddPackageService, DotNetAddPackageService>()
                     .AddSingleton<INuGetPackageInfoService, NuGetPackageInfoService>()
                     .AddSingleton<INuGetPackageResolutionService, NuGetPackageResolutionService>()
                     .BuildServiceProvider())
@@ -98,13 +101,14 @@ namespace DotNetOutdated
             .InformationalVersion;
 
         public Program(IFileSystem fileSystem, IReporter reporter, INuGetPackageResolutionService nugetService, IProjectAnalysisService projectAnalysisService,
-            IProjectDiscoveryService projectDiscoveryService)
+            IProjectDiscoveryService projectDiscoveryService, IDotNetAddPackageService dotNetAddPackageService)
         {
             _fileSystem = fileSystem;
             _reporter = reporter;
             _nugetService = nugetService;
             _projectAnalysisService = projectAnalysisService;
             _projectDiscoveryService = projectDiscoveryService;
+            _dotNetAddPackageService = dotNetAddPackageService;
         }
 
         public async Task<int> OnExecute(CommandLineApplication app, IConsole console)
@@ -189,8 +193,25 @@ namespace DotNetOutdated
                         console.Write("Upgrading ");
                         console.Write(package.Description, ConsoleColor.Blue);
                         console.Write("...");
-
                         console.WriteLine();
+                        
+                        foreach (var project in package.Projects)
+                        {
+                            var status = _dotNetAddPackageService.AddPackage(project.ProjectFilePath, package.Name, project.Framework.ToString(), package.LatestVersion);
+
+                            if (status.IsSuccess)
+                            {
+                                console.Write($"{project.Description} upgraded successfully", ConsoleColor.Green);
+                                console.WriteLine();
+                            }
+                            else
+                            {
+                                console.Write($"An error occurred while upgrading {project.Project}", ConsoleColor.Red);
+                                console.WriteLine();
+                                console.Write(status.Errors, ConsoleColor.Red);
+                                console.WriteLine();
+                            }
+                        }
                     }
 
                     console.WriteLine();
