@@ -242,28 +242,17 @@ namespace DotNetOutdated
                 console.Write("".PadRight(resolvedWidth));
                 return;
             }
-
-            var diff = resolvedVersion.DiffWhenUpgradingTo(latestVersion);
             var latestString = latestVersion.ToString().PadRight(latestWidth);
-            if (diff == UpgradeSeverity.Major || diff == UpgradeSeverity.Prerelease)
+            if (resolvedVersion == null)
             {
-                console.Write(latestString, diff.GetLatestVersionColor());
+                console.Write(latestString);
+                return;
             }
-            else if (diff == UpgradeSeverity.Minor)
-            {
-                console.Write($"{latestVersion.Major}.", UpgradeSeverity.None.GetLatestVersionColor());
-                console.Write(latestString.Substring(2), diff.GetLatestVersionColor());
-            }
-            else if (diff == UpgradeSeverity.Patch)
-            {
-                console.Write($"{latestVersion.Major}.{latestVersion.Minor}.", UpgradeSeverity.None.GetLatestVersionColor());
-                console.Write(latestString.Substring(4), diff.GetLatestVersionColor());
-            }
-            else
-            {
-                // Unknown difference type; falling back to default color
-                console.Write(latestVersion.ToString().PadRight(latestWidth), UpgradeSeverity.None.GetLatestVersionColor());
-            }
+
+            var resolvedString = resolvedVersion.ToString();
+            var splitPoint = resolvedString.Zip(latestString, (c1, c2) => c1 == c2).TakeWhile(b => b).Count();
+            console.Write(latestString.Substring(0, splitPoint));
+            console.Write(latestString.Substring(splitPoint), GetUpgradeSeverityColor(latestVersion, resolvedVersion));
         }
 
         private void ReportOutdatedDependencies(List<Project> projects, IConsole console)
@@ -342,7 +331,19 @@ namespace DotNetOutdated
         }
 
         private ConsoleColor GetUpgradeSeverityColor(NuGetVersion latestVersion, NuGetVersion resolvedVersion)
-            => latestVersion.DiffWhenUpgradingFrom(resolvedVersion).GetLatestVersionColor();
+        {
+            if (latestVersion == null || resolvedVersion == null)
+                return Console.ForegroundColor;
+
+            if (latestVersion.Major > resolvedVersion.Major || resolvedVersion.IsPrerelease)
+                return Constants.ReporingColors.MajorVersionUpgrade;
+            if (latestVersion.Minor > resolvedVersion.Minor)
+                return Constants.ReporingColors.MinorVersionUpgrade;
+            if (latestVersion.Patch > resolvedVersion.Patch || latestVersion.Revision > resolvedVersion.Revision)
+                return Constants.ReporingColors.PatchVersionUpgrade;
+
+            return Console.ForegroundColor;
+        }
 
         private static void WriteProjectName(string name, IConsole console)
         {
