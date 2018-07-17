@@ -1,15 +1,20 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO.Abstractions;
 using System.Linq;
+using System.Net.NetworkInformation;
 using System.Reflection;
 using System.Reflection.Metadata;
 using System.Runtime.CompilerServices;
+using System.Threading;
 using System.Threading.Tasks;
 using DotNetOutdated.Exceptions;
 using DotNetOutdated.Services;
 using McMaster.Extensions.CommandLineUtils;
 using Microsoft.Extensions.DependencyInjection;
+using NuGet.Packaging;
+using NuGet.Protocol.Core.Types;
 using NuGet.Versioning;
 
 [assembly: InternalsVisibleTo("DotNetOutdated.Tests")]
@@ -28,6 +33,7 @@ namespace DotNetOutdated
         private readonly INuGetPackageResolutionService _nugetService;
         private readonly IProjectAnalysisService _projectAnalysisService;
         private readonly IProjectDiscoveryService _projectDiscoveryService;
+        private readonly IDotNetAddPackageService _dotNetAddPackageService;
 
         [Option(CommandOptionType.NoValue, Description = "Specifies whether to include auto-referenced packages.",
             LongName = "include-auto-references")]
@@ -56,6 +62,11 @@ namespace DotNetOutdated
             ShortName="td", LongName = "transitive-depth")]
         public int TransitiveDepth { get; set; } = 1;
 
+        [Option(CommandOptionType.SingleValue, Description = "Specifies whether outdated packages should be upgraded. " +
+                                                             "Possible values: No (default), Yes or Prompt.",
+            ShortName = "u", LongName = "upgrade")]
+        public UpgradeType Upgrade { get; set; } = UpgradeType.No;
+        
         public static int Main(string[] args)
         {
             using (var services = new ServiceCollection()
@@ -67,6 +78,7 @@ namespace DotNetOutdated
                     .AddSingleton<IDotNetRunner, DotNetRunner>()
                     .AddSingleton<IDependencyGraphService, DependencyGraphService>()
                     .AddSingleton<IDotNetRestoreService, DotNetRestoreService>()
+                    .AddSingleton<IDotNetAddPackageService, DotNetAddPackageService>()
                     .AddSingleton<INuGetPackageInfoService, NuGetPackageInfoService>()
                     .AddSingleton<INuGetPackageResolutionService, NuGetPackageResolutionService>()
                     .BuildServiceProvider())
@@ -89,13 +101,14 @@ namespace DotNetOutdated
             .InformationalVersion;
 
         public Program(IFileSystem fileSystem, IReporter reporter, INuGetPackageResolutionService nugetService, IProjectAnalysisService projectAnalysisService,
-            IProjectDiscoveryService projectDiscoveryService)
+            IProjectDiscoveryService projectDiscoveryService, IDotNetAddPackageService dotNetAddPackageService)
         {
             _fileSystem = fileSystem;
             _reporter = reporter;
             _nugetService = nugetService;
             _projectAnalysisService = projectAnalysisService;
             _projectDiscoveryService = projectDiscoveryService;
+            _dotNetAddPackageService = dotNetAddPackageService;
         }
 
         public async Task<int> OnExecute(CommandLineApplication app, IConsole console)
@@ -132,6 +145,9 @@ namespace DotNetOutdated
                 // Report on the outdated dependencies
                 ReportOutdatedDependencies(projects, console);
                 
+                // Upgrade the packages
+                await UpgradePackages(projects, console);
+                
                 return 0;
             }
             catch (CommandValidationException e)
@@ -142,6 +158,67 @@ namespace DotNetOutdated
             }
         }
 
+        private async Task UpgradePackages(List<Project> projects, IConsole console)
+        {
+            if (Upgrade == UpgradeType.Yes || Upgrade == UpgradeType.Prompt)
+            {
+                console.WriteLine();
+            
+                var consolidatedPackages = projects.ConsolidatePackages();
+
+                foreach (var package in consolidatedPackages)
+                {
+                    bool upgrade = true;
+                    
+                    if (Upgrade == UpgradeType.Prompt)
+                    {
+                        string resolvedVersion = package.ResolvedVersion?.ToString() ?? "";
+                        string latestVersion = package.LatestVersion?.ToString() ?? "";
+
+                        console.Write($"The package ");
+                        console.Write(package.Description, ConsoleColor.Blue);
+                        console.Write($" can be upgraded from {resolvedVersion} to ");
+                        console.Write(latestVersion, GetLatestVersionColor(package.LatestVersion, package.ResolvedVersion));
+                        console.WriteLine(". The following project(s) will be affected:");
+                        foreach (var project in package.Projects)
+                        {
+                            WriteProjectName(project.Description, console);
+                        }
+
+                        upgrade = Prompt.GetYesNo("Do you wish to upgrade this package?", true);
+                    }
+
+                    if (upgrade)
+                    {
+                        console.Write("Upgrading ");
+                        console.Write(package.Description, ConsoleColor.Blue);
+                        console.Write("...");
+                        console.WriteLine();
+                        
+                        foreach (var project in package.Projects)
+                        {
+                            var status = _dotNetAddPackageService.AddPackage(project.ProjectFilePath, package.Name, project.Framework.ToString(), package.LatestVersion);
+
+                            if (status.IsSuccess)
+                            {
+                                console.Write($"{project.Description} upgraded successfully", ConsoleColor.Green);
+                                console.WriteLine();
+                            }
+                            else
+                            {
+                                console.Write($"An error occurred while upgrading {project.Project}", ConsoleColor.Red);
+                                console.WriteLine();
+                                console.Write(status.Errors, ConsoleColor.Red);
+                                console.WriteLine();
+                            }
+                        }
+                    }
+
+                    console.WriteLine();
+                }
+            }
+        }
+        
         private void PrintColorLegend(IConsole console)
         {
             console.WriteLine("Version color legend:");
@@ -158,12 +235,12 @@ namespace DotNetOutdated
         {
             foreach (var project in projects)
             {
-                WriteProjectName(console, project);
+                WriteProjectName(project.Name, console);
 
                 // Process each target framework with its related dependencies
                 foreach (var targetFramework in project.TargetFrameworks)
                 {
-                    WriteTargetFramework(console, targetFramework);
+                    WriteTargetFramework(targetFramework, console);
 
                     var dependencies = targetFramework.Dependencies
                         .Where(d => d.LatestVersion > d.ResolvedVersion)
@@ -249,13 +326,13 @@ namespace DotNetOutdated
             return Console.ForegroundColor;
         }
 
-        private static void WriteProjectName(IConsole console, Project project)
+        private static void WriteProjectName(string name, IConsole console)
         {
-            console.Write($"» {project.Name}", ConsoleColor.Yellow);
+            console.Write($"» {name}", ConsoleColor.Yellow);
             console.WriteLine();
         }
 
-        private static void WriteTargetFramework(IConsole console, Project.TargetFramework targetFramework)
+        private static void WriteTargetFramework(Project.TargetFramework targetFramework, IConsole console)
         {
             console.WriteIndent();
             console.Write($"[{targetFramework.Name}]", ConsoleColor.Cyan);
