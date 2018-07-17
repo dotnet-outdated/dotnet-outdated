@@ -178,7 +178,7 @@ namespace DotNetOutdated
                         console.Write($"The package ");
                         console.Write(package.Description, ConsoleColor.Blue);
                         console.Write($" can be upgraded from {resolvedVersion} to ");
-                        console.Write(latestVersion, GetLatestVersionColor(package.LatestVersion, package.ResolvedVersion));
+                        console.Write(latestVersion, GetUpgradeSeverityColor(package.LatestVersion, package.ResolvedVersion));
                         console.WriteLine(". The following project(s) will be affected:");
                         foreach (var project in package.Projects)
                         {
@@ -244,6 +244,7 @@ namespace DotNetOutdated
 
                     var dependencies = targetFramework.Dependencies
                         .Where(d => d.LatestVersion > d.ResolvedVersion)
+                        .OrderBy(d => d.Name)
                         .ToList();
 
                     if (dependencies.Count > 0)
@@ -259,7 +260,7 @@ namespace DotNetOutdated
                             console.Write(dependency.Description?.PadRight(columnWidths[0] + 2));
                             console.Write(resolvedVersion.PadRight(columnWidths[1]));
                             console.Write(" -> ");
-                            console.Write(latestVersion.PadRight(columnWidths[2]), GetLatestVersionColor(dependency.LatestVersion, dependency.ResolvedVersion));
+                            console.Write(latestVersion, GetUpgradeSeverityColor(dependency.LatestVersion, dependency.ResolvedVersion));
 
                             console.WriteLine();
                         }
@@ -311,7 +312,7 @@ namespace DotNetOutdated
             }
         }
 
-        private ConsoleColor GetLatestVersionColor(NuGetVersion latestVersion, NuGetVersion resolvedVersion)
+        private ConsoleColor GetUpgradeSeverityColor(NuGetVersion latestVersion, NuGetVersion resolvedVersion)
         {
             if (latestVersion == null || resolvedVersion == null)
                 return Console.ForegroundColor;
@@ -328,7 +329,7 @@ namespace DotNetOutdated
 
         private static void WriteProjectName(string name, IConsole console)
         {
-            console.Write($"» {name}", ConsoleColor.Yellow);
+            console.Write($"» {name}", ConsoleColor.Blue);
             console.WriteLine();
         }
 
