@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO.Abstractions;
 using System.Linq;
 using System.Reflection;
+using System.Reflection.Metadata;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using DotNetOutdated.Exceptions;
@@ -106,56 +107,31 @@ namespace DotNetOutdated
                     Path = _fileSystem.Directory.GetCurrentDirectory();
 
                 // Get all the projects
-                if (!console.IsOutputRedirected)
-                    console.Write("Discovering projects...");
+                console.Write("Discovering projects...");
                 
                 string projectPath = _projectDiscoveryService.DiscoverProject(Path);
-                
+
                 if (!console.IsOutputRedirected)
                     ClearCurrentConsoleLine();
+                else
+                    console.WriteLine();
 
                 // Analyze the projects
-                if (!console.IsOutputRedirected)
-                    console.Write("Analyzing project and restoring packages...");
+                console.Write("Analyzing project and restoring packages...");
                 
                 var projects = _projectAnalysisService.AnalyzeProject(projectPath, Transitive, TransitiveDepth);
 
                 if (!console.IsOutputRedirected)
                     ClearCurrentConsoleLine();
-
-                foreach (var project in projects)
-                {
-                    int indentLevel = 1;
-
-                    WriteProjectName(console, project);
-
-                    // Process each target framework with its related dependencies
-                    foreach (var targetFramework in project.TargetFrameworks)
-                    {
-                        WriteTargetFramework(console, targetFramework, indentLevel);
-
-                        var dependencies = targetFramework.Dependencies;
-
-                        if (!IncludeAutoReferences)
-                            dependencies = dependencies.Where(d => d.AutoReferenced == false).ToList();
-                        
-                        if (dependencies.Count > 0)
-                        {
-                            foreach (var dependency in dependencies)
-                            {
-                                await ReportDependency(console, dependency, dependency.VersionRange, project.Sources, indentLevel, targetFramework, project.FilePath);
-                            }
-                        }
-                        else
-                        {
-                            console.WriteIndent(indentLevel);
-                            console.WriteLine("-- No dependencies --");
-                        }
-                    }
-
+                else
                     console.WriteLine();
-                }
 
+                // Analyze the dependencies
+                await AnalyzeDependencies(projects, console);
+
+                // Report on the outdated dependencies
+                ReportOutdatedDependencies(projects, console);
+                
                 return 0;
             }
             catch (CommandValidationException e)
@@ -166,70 +142,124 @@ namespace DotNetOutdated
             }
         }
 
+        private void PrintColorLegend(IConsole console)
+        {
+            console.WriteLine("Version color legend:");
+            
+            console.Write("<red>".PadRight(8), Constants.ReporingColors.MajorVersionUpgrade);
+            console.WriteLine(": Major version update or pre-release version. Possible breaking changes.");
+            console.Write("<yellow>".PadRight(8), Constants.ReporingColors.MinorVersionUpgrade);
+            console.WriteLine(": Minor version update. Backwards-compatible features added.");
+            console.Write("<green>".PadRight(8), Constants.ReporingColors.PatchVersionUpgrade);
+            console.WriteLine(": Patch version update. Backwards-compatible bug fixes.");
+        }
+        
+        private void ReportOutdatedDependencies(List<Project> projects, IConsole console)
+        {
+            foreach (var project in projects)
+            {
+                WriteProjectName(console, project);
+
+                // Process each target framework with its related dependencies
+                foreach (var targetFramework in project.TargetFrameworks)
+                {
+                    WriteTargetFramework(console, targetFramework);
+
+                    var dependencies = targetFramework.Dependencies
+                        .Where(d => d.LatestVersion > d.ResolvedVersion)
+                        .ToList();
+
+                    if (dependencies.Count > 0)
+                    {
+                        int[] columnWidths = dependencies.DetermineColumnWidths();
+
+                        foreach (var dependency in dependencies)
+                        {
+                            string resolvedVersion = dependency.ResolvedVersion?.ToString() ?? "";
+                            string latestVersion = dependency.LatestVersion?.ToString() ?? "";
+
+                            console.WriteIndent();
+                            console.Write(dependency.Description?.PadRight(columnWidths[0] + 2));
+                            console.Write(resolvedVersion.PadRight(columnWidths[1]));
+                            console.Write(" -> ");
+                            console.Write(latestVersion.PadRight(columnWidths[2]), GetLatestVersionColor(dependency.LatestVersion, dependency.ResolvedVersion));
+
+                            console.WriteLine();
+                        }
+                    }
+                    else
+                    {
+                        console.WriteIndent();
+                        console.WriteLine("-- No outdated dependencies --");
+                    }
+                }
+
+                console.WriteLine();
+            }
+
+            PrintColorLegend(console);
+        }
+
+        private async Task AnalyzeDependencies(List<Project> projects, IConsole console)
+        {
+            if (console.IsOutputRedirected)
+                console.WriteLine("Analyzing dependencies...");
+                
+            foreach (var project in projects)
+            {
+                // Process each target framework with its related dependencies
+                foreach (var targetFramework in project.TargetFrameworks)
+                {
+                    var dependencies = targetFramework.Dependencies
+                        .Where(d => IncludeAutoReferences || d.IsAutoReferenced == false)
+                        .OrderBy(dependency => dependency.IsTransitive)
+                        .ThenBy(dependency => dependency.Name)
+                        .ToList();
+
+                    for (var index = 0; index < dependencies.Count; index++)
+                    {
+                        var dependency = dependencies[index];
+                        if (!console.IsOutputRedirected)
+                            console.Write($"Analyzing dependencies for {project.Name} [{targetFramework.Name}] ({index + 1}/{dependencies.Count})");
+
+                        var referencedVersion = dependency.ResolvedVersion;
+
+                        dependency.LatestVersion = await _nugetService.ResolvePackageVersions(dependency.Name, referencedVersion, project.Sources, dependency.VersionRange,
+                            VersionLock, Prerelease, targetFramework.Name, project.FilePath);
+
+                        if (!console.IsOutputRedirected)
+                            ClearCurrentConsoleLine();
+                    }
+                }
+            }
+        }
+
+        private ConsoleColor GetLatestVersionColor(NuGetVersion latestVersion, NuGetVersion resolvedVersion)
+        {
+            if (latestVersion == null || resolvedVersion == null)
+                return Console.ForegroundColor;
+
+            if (latestVersion.Major > resolvedVersion.Major || resolvedVersion.IsPrerelease)
+                return Constants.ReporingColors.MajorVersionUpgrade;
+            if (latestVersion.Minor > resolvedVersion.Minor)
+                return Constants.ReporingColors.MinorVersionUpgrade;
+            if (latestVersion.Patch > resolvedVersion.Patch || latestVersion.Revision > resolvedVersion.Revision)
+                return Constants.ReporingColors.PatchVersionUpgrade;
+
+            return Console.ForegroundColor;
+        }
+
         private static void WriteProjectName(IConsole console, Project project)
         {
             console.Write($"» {project.Name}", ConsoleColor.Yellow);
             console.WriteLine();
         }
 
-        private static void WriteTargetFramework(IConsole console, Project.TargetFramework targetFramework, int indentLevel)
+        private static void WriteTargetFramework(IConsole console, Project.TargetFramework targetFramework)
         {
-            console.WriteIndent(indentLevel);
+            console.WriteIndent();
             console.Write($"[{targetFramework.Name}]", ConsoleColor.Cyan);
             console.WriteLine();
-        }
-
-        private async Task ReportDependency(IConsole console, Project.Dependency dependency, VersionRange versionRange, List<Uri> sources, int indentLevel,
-            Project.TargetFramework targetFramework, string projectFilePath)
-        {
-            console.WriteIndent(indentLevel);
-            console.Write($"{dependency.Name}");
-
-            if (dependency.AutoReferenced)
-                console.Write(" [A]");
-
-            var referencedVersion = dependency.ResolvedVersion;
-            if (referencedVersion == null)
-            {
-                console.Write(" ");
-                console.Write("Cannot resolve referenced version", ConsoleColor.White, ConsoleColor.DarkRed);
-                console.WriteLine();
-            }
-            else
-            {
-                if (!console.IsOutputRedirected)
-                    console.Write("...");
-
-                var latestVersion = await _nugetService.ResolvePackageVersions(dependency.Name, referencedVersion, sources, versionRange, VersionLock, Prerelease, targetFramework.Name, projectFilePath);
-                
-                if (!console.IsOutputRedirected)
-                    console.Write("\b\b\b");
-                
-                console.Write(" ");
-
-                if (latestVersion != null)
-                {
-                    console.Write(referencedVersion, latestVersion > referencedVersion ? ConsoleColor.Red : ConsoleColor.Green);
-                }
-                else
-                {
-                    console.Write($"{referencedVersion} ", ConsoleColor.Yellow); 
-                    console.Write("Cannot resolve latest version", ConsoleColor.White, ConsoleColor.DarkCyan);
-                }
-
-                if (latestVersion > referencedVersion)
-                {
-                    console.Write(" (");
-                    console.Write(latestVersion, ConsoleColor.Blue);
-                    console.Write(")");
-                }
-                console.WriteLine();
-            }
-                        
-            foreach (var childDependency in dependency.Dependencies)
-            {
-                await ReportDependency(console, childDependency, childDependency.VersionRange, sources, indentLevel + 1, targetFramework, projectFilePath);
-            }            
         }
         
         public static void ClearCurrentConsoleLine()
@@ -239,6 +269,5 @@ namespace DotNetOutdated
             Console.Write(new string(' ', Console.BufferWidth));
             Console.SetCursorPosition(0, currentLineCursor);
         }
-
     }
 }

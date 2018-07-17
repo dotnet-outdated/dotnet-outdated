@@ -66,13 +66,14 @@ namespace DotNetOutdated.Services
                                 Name = projectDependency.Name,
                                 VersionRange = projectDependency.LibraryRange.VersionRange,
                                 ResolvedVersion = projectLibrary?.Version,
-                                AutoReferenced = projectDependency.AutoReferenced
+                                IsAutoReferenced = projectDependency.AutoReferenced,
+                                IsTransitive = false
                             };
                             targetFramework.Dependencies.Add(dependency);
 
                             // Process transitive dependencies for the library
                             if (includeTransitiveDependencies)
-                                AddDependencies(dependency, projectLibrary, target, 1, transitiveDepth);
+                                AddDependencies(targetFramework, projectLibrary, target, 1, transitiveDepth);
                         }
                     }
                 }
@@ -81,7 +82,7 @@ namespace DotNetOutdated.Services
             return projects;
         }
 
-        private void AddDependencies(Project.Dependency parentDependency, LockFileTargetLibrary parentLibrary, LockFileTarget target, int level, int transitiveDepth)
+        private void AddDependencies(Project.TargetFramework targetFramework, LockFileTargetLibrary parentLibrary, LockFileTarget target, int level, int transitiveDepth)
         {
             if (parentLibrary?.Dependencies != null)
             {
@@ -89,17 +90,22 @@ namespace DotNetOutdated.Services
                 {
                     var childLibrary = target.Libraries.FirstOrDefault(library => library.Name == packageDependency.Id);
 
-                    var childDependency = new Project.Dependency
+                    // Only add library and process child dependencies if we have not come across this dependency before
+                    if (!targetFramework.Dependencies.Any(dependency => dependency.Name == packageDependency.Id))
                     {
-                        Name = packageDependency.Id,
-                        VersionRange = packageDependency.VersionRange,
-                        ResolvedVersion = childLibrary?.Version
-                    };
-                    parentDependency.Dependencies.Add(childDependency);
+                        var childDependency = new Project.Dependency
+                        {
+                            Name = packageDependency.Id,
+                            VersionRange = packageDependency.VersionRange,
+                            ResolvedVersion = childLibrary?.Version,
+                            IsTransitive = true
+                        };
+                        targetFramework.Dependencies.Add(childDependency);
 
-                    // Process the dependency for this project depency
-                    if (level < transitiveDepth)
-                        AddDependencies(childDependency, childLibrary, target, level + 1, transitiveDepth);
+                        // Process the dependency for this project depency
+                        if (level < transitiveDepth)
+                            AddDependencies(targetFramework, childLibrary, target, level + 1, transitiveDepth);
+                    }
                 }
             }
         }

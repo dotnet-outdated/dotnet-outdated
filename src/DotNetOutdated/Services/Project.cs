@@ -9,16 +9,32 @@ namespace DotNetOutdated.Services
     {
         public class Dependency
         {
-            public bool AutoReferenced { get; set; }
+            public string Description
+            {
+                get
+                {
+                    string description = Name;
+
+                    if (IsAutoReferenced)
+                        description += " [A]";
+                    else if (IsTransitive)
+                        description += " [T]";
+
+                    return description;
+                }
+            }
+            
+            public bool IsAutoReferenced { get; set; }
+
+            public bool IsTransitive { get; set; }
 
             public string Name { get; set; }
 
             public VersionRange VersionRange { get; set; }
 
             public NuGetVersion ResolvedVersion { get; set; }
-            
-            public List<Dependency> Dependencies { get; set; } = new List<Dependency>();
 
+            public NuGetVersion LatestVersion { get; set; }
         }
 
         public class TargetFramework

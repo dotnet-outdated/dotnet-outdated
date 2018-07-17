@@ -26,9 +26,9 @@ namespace DotNetOutdated
             console.BackgroundColor = currentBackgroundColor;
         }
         
-        public static void WriteIndent(this IConsole console, int level)
+        public static void WriteIndent(this IConsole console)
         {
-            console.Write(new String(' ', level * 2));
+            console.Write(new String(' ', 2));
         }
     }
 }
