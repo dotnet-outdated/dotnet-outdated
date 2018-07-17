@@ -230,7 +230,42 @@ namespace DotNetOutdated
             console.Write("<green>".PadRight(8), Constants.ReporingColors.PatchVersionUpgrade);
             console.WriteLine(": Patch version update. Backwards-compatible bug fixes.");
         }
-        
+
+        private void WriteColoredUpgrade(NuGetVersion resolvedVersion, NuGetVersion latestVersion, int resolvedWidth, int latestWidth, IConsole console)
+        {
+            console.Write((resolvedVersion?.ToString() ?? "").PadRight(resolvedWidth));
+            console.Write(" -> ");
+
+            // Exit early to avoid having to handle nulls later
+            if (latestVersion == null)
+            {
+                console.Write("".PadRight(resolvedWidth));
+                return;
+            }
+
+            var diff = resolvedVersion.DiffWhenUpgradingTo(latestVersion);
+            var latestString = latestVersion.ToString().PadRight(latestWidth);
+            if (diff == UpgradeSeverity.Major || diff == UpgradeSeverity.Prerelease)
+            {
+                console.Write(latestString, diff.GetLatestVersionColor());
+            }
+            else if (diff == UpgradeSeverity.Minor)
+            {
+                console.Write($"{latestVersion.Major}.", UpgradeSeverity.None.GetLatestVersionColor());
+                console.Write(latestString.Substring(2), diff.GetLatestVersionColor());
+            }
+            else if (diff == UpgradeSeverity.Patch)
+            {
+                console.Write($"{latestVersion.Major}.{latestVersion.Minor}.", UpgradeSeverity.None.GetLatestVersionColor());
+                console.Write(latestString.Substring(4), diff.GetLatestVersionColor());
+            }
+            else
+            {
+                // Unknown difference type; falling back to default color
+                console.Write(latestVersion.ToString().PadRight(latestWidth), UpgradeSeverity.None.GetLatestVersionColor());
+            }
+        }
+
         private void ReportOutdatedDependencies(List<Project> projects, IConsole console)
         {
             foreach (var project in projects)
@@ -253,15 +288,9 @@ namespace DotNetOutdated
 
                         foreach (var dependency in dependencies)
                         {
-                            string resolvedVersion = dependency.ResolvedVersion?.ToString() ?? "";
-                            string latestVersion = dependency.LatestVersion?.ToString() ?? "";
-
                             console.WriteIndent();
                             console.Write(dependency.Description?.PadRight(columnWidths[0] + 2));
-                            console.Write(resolvedVersion.PadRight(columnWidths[1]));
-                            console.Write(" -> ");
-                            console.Write(latestVersion, GetUpgradeSeverityColor(dependency.LatestVersion, dependency.ResolvedVersion));
-
+                            WriteColoredUpgrade(dependency.ResolvedVersion, dependency.LatestVersion, columnWidths[1], columnWidths[2], console);
                             console.WriteLine();
                         }
                     }
@@ -313,19 +342,7 @@ namespace DotNetOutdated
         }
 
         private ConsoleColor GetUpgradeSeverityColor(NuGetVersion latestVersion, NuGetVersion resolvedVersion)
-        {
-            if (latestVersion == null || resolvedVersion == null)
-                return Console.ForegroundColor;
-
-            if (latestVersion.Major > resolvedVersion.Major || resolvedVersion.IsPrerelease)
-                return Constants.ReporingColors.MajorVersionUpgrade;
-            if (latestVersion.Minor > resolvedVersion.Minor)
-                return Constants.ReporingColors.MinorVersionUpgrade;
-            if (latestVersion.Patch > resolvedVersion.Patch || latestVersion.Revision > resolvedVersion.Revision)
-                return Constants.ReporingColors.PatchVersionUpgrade;
-
-            return Console.ForegroundColor;
-        }
+            => latestVersion.DiffWhenUpgradingFrom(resolvedVersion).GetLatestVersionColor();
 
         private static void WriteProjectName(string name, IConsole console)
         {
