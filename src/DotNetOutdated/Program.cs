@@ -46,7 +46,7 @@ namespace DotNetOutdated
 
         [Option(CommandOptionType.SingleValue, Description = "Specifies whether to look for pre-release versions of packages. " +
                                                              "Possible values: Auto (default), Always or Never.",
-            ShortName = "pr", LongName = "pre-release")]
+            ShortName = "pre", LongName = "pre-release")]
         public PrereleaseReporting Prerelease { get; set; } = PrereleaseReporting.Auto;
 
         [Option(CommandOptionType.SingleValue, Description = "Specifies whether the package should be locked to the current Major or Minor version. " +
