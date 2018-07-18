@@ -63,10 +63,10 @@ namespace DotNetOutdated
             ShortName="td", LongName = "transitive-depth")]
         public int TransitiveDepth { get; set; } = 1;
 
-        [Option(CommandOptionType.SingleValue, Description = "Specifies whether outdated packages should be upgraded. " +
-                                                             "Possible values: No (default), Yes or Prompt.",
-            ShortName = "u", LongName = "upgrade")]
-        public UpgradeType Upgrade { get; set; } = UpgradeType.No;
+        [Option(CommandOptionType.SingleOrNoValue, Description = "Specifies whether outdated packages should be upgraded. " +
+                                                             "Possible values for <TYPE> is Auto (default) or Prompt.",
+            ShortName = "u", LongName = "upgrade", ValueName = "TYPE")]
+        public (bool HasValue, UpgradeType UpgradeType) Upgrade { get; set; }
         
         public static int Main(string[] args)
         {
@@ -161,7 +161,7 @@ namespace DotNetOutdated
 
         private async Task UpgradePackages(List<Project> projects, IConsole console)
         {
-            if (Upgrade == UpgradeType.Yes || Upgrade == UpgradeType.Prompt)
+            if (Upgrade.HasValue)
             {
                 console.WriteLine();
             
@@ -171,13 +171,13 @@ namespace DotNetOutdated
                 {
                     bool upgrade = true;
                     
-                    if (Upgrade == UpgradeType.Prompt)
+                    if (Upgrade.UpgradeType == UpgradeType.Prompt)
                     {
                         string resolvedVersion = package.ResolvedVersion?.ToString() ?? "";
                         string latestVersion = package.LatestVersion?.ToString() ?? "";
 
                         console.Write($"The package ");
-                        console.Write(package.Description, ConsoleColor.Blue);
+                        console.Write(package.Description, Constants.ReporingColors.PackageName);
                         console.Write($" can be upgraded from {resolvedVersion} to ");
                         console.Write(latestVersion, GetUpgradeSeverityColor(package.LatestVersion, package.ResolvedVersion));
                         console.WriteLine(". The following project(s) will be affected:");
@@ -191,8 +191,8 @@ namespace DotNetOutdated
 
                     if (upgrade)
                     {
-                        console.Write("Upgrading ");
-                        console.Write(package.Description, ConsoleColor.Blue);
+                        console.Write("Upgrading package ");
+                        console.Write(package.Description, Constants.ReporingColors.PackageName);
                         console.Write("...");
                         console.WriteLine();
                         
@@ -202,14 +202,14 @@ namespace DotNetOutdated
 
                             if (status.IsSuccess)
                             {
-                                console.Write($"{project.Description} upgraded successfully", ConsoleColor.Green);
+                                console.Write($"Project {project.Description} upgraded successfully", Constants.ReporingColors.UpgradeSuccess);
                                 console.WriteLine();
                             }
                             else
                             {
-                                console.Write($"An error occurred while upgrading {project.Project}", ConsoleColor.Red);
+                                console.Write($"An error occurred while upgrading {project.Project}", Constants.ReporingColors.UpgradeFailure);
                                 console.WriteLine();
-                                console.Write(status.Errors, ConsoleColor.Red);
+                                console.Write(status.Errors, Constants.ReporingColors.UpgradeFailure);
                                 console.WriteLine();
                             }
                         }
@@ -359,14 +359,14 @@ namespace DotNetOutdated
 
         private static void WriteProjectName(string name, IConsole console)
         {
-            console.Write($"» {name}", ConsoleColor.Blue);
+            console.Write($"» {name}", Constants.ReporingColors.ProjectName);
             console.WriteLine();
         }
 
         private static void WriteTargetFramework(Project.TargetFramework targetFramework, IConsole console)
         {
             console.WriteIndent();
-            console.Write($"[{targetFramework.Name}]", ConsoleColor.Cyan);
+            console.Write($"[{targetFramework.Name}]", Constants.ReporingColors.TargetFrameworkName);
             console.WriteLine();
         }
         

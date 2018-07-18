@@ -2,8 +2,7 @@
 {
     public enum UpgradeType
     {
-        No,
-        Yes,
+        Auto,
         Prompt
     }
 }
