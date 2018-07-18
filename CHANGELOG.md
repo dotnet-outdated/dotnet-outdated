@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## [v2.0.0]
 
 - Now only displays outdated packages (See [#16](https://github.com/jerriep/dotnet-outdated/issues/16))
 - Supports upgrading package using `-u` option. To prompt for each package, your can use `-p:prompt` (See [#6](https://github.com/jerriep/dotnet-outdated/issues/6))
@@ -60,6 +60,7 @@ Initial release
 
 - A .NET Core global tool to display outdated NuGet packages in a project
 
+[v2.0.0]: https://github.com/jerriep/dotnet-outdated/tree/v2.0.0
 [v1.3.0]: https://github.com/jerriep/dotnet-outdated/tree/v1.3.0
 [v1.2.0]: https://github.com/jerriep/dotnet-outdated/tree/v1.2.0
 [v1.1.0]: https://github.com/jerriep/dotnet-outdated/tree/v1.1.0

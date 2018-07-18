@@ -16,6 +16,7 @@ A .NET Core global tool to display outdated NuGet packages in a project
 - [Installation](#installation)
 - [Usage](#usage)
 - [Specifying the path](#specifying-the-path)
+- [Upgrading Packages](#upgrading-packages)
 - [Working with secure feeds](#working-with-secure-feeds)
 - [Handling pre-release versions](#handling-pre-release-versions)
 - [Locking to the current major or minor release](#locking-to-the-current-major-or-minor-release)
@@ -33,7 +34,7 @@ dotnet tool install --global dotnet-outdated
 ## Usage
 
 ```text
-Usage: dotnet outdated [arguments] [options
+Usage: dotnet outdated [arguments] [options]
 
 Arguments:
   Path                                       The path to a .sln or .csproj file, or to a directory containing a .NET Core solution/project. If none is specified, the current directory will be used.
@@ -42,10 +43,11 @@ Options:
   --version                                  Show version information
   -?|-h|--help                               Show help information
   -i|--include-auto-references               Specifies whether to include auto-referenced packages.
-  -pr|--pre-release <PRERELEASE>             Specifies whether to look for pre-release versions of packages. Possible values: Auto (default), Always or Never.
+  -pre|--pre-release <PRERELEASE>            Specifies whether to look for pre-release versions of packages. Possible values: Auto (default), Always or Never.
   -vl|--version-lock <VERSION_LOCK>          Specifies whether the package should be locked to the current Major or Minor version. Possible values: None (default), Major or Minor.
   -t|--transitive                            Specifies whether it should detect transitive dependencies.
   -td|--transitive-depth <TRANSITIVE_DEPTH>  Defines how many levels deep transitive dependencies should be analyzed. Integer value (default = 1)
+  -u|--upgrade:<TYPE>                        Specifies whether outdated packages should be upgraded. Possible values for <TYPE> is Auto (default) or Prompt.
 ```
 
 ![Screenshot of dotnet-outdated](screenshot.png)
@@ -57,6 +59,10 @@ You can run **dotnet-outdated** without specifying the `Path` argument. In this 
 You can also pass a directory in the `Path` argument, in which case the same logic described above will be used, but in the directory specified.
 
 Lastly, you can specify the path to a solution (`.sln`) or project (`.csproj`) which **dotnet-outdated** must analyze.
+
+## Upgrading packages
+
+**dotnet-outdated** can automatically attempt to upgrade any outdated packages to the latest version by passing the `-u|--upgrade` option. You can let **dotnet-outdated** prompt you for each outdated package by using the `-u:prompt` option.
 
 ## Working with secure feeds
 
@@ -91,8 +97,6 @@ Passing a value of `Minor` will only report on later packages in the current min
 ## Reporting on transitive dependencies
 
 **dotnet-outdated** supports reporting on transitive dependencies as well. These are NuGet packages on which the NuGet packages directly referenced by your application depends. To enable reporting on transitive dependencies, you can pass the `-t|--transitive` option.
-
-For example, in the screenshot below you can see that **McMaster.Extensions.CommandLineUtils** has a transitive dependency on **System.ComponentModel.Annotations v4.4.1**, but a newer version (**v4.5.0**) of that package is available. You can therefore add a reference to **v4.5.0** directly to your project to ensure your application is referencing the latest version.
 
 ![Screenshot of analysing transitive-dependencies](transitive-screenshot.png)
 
