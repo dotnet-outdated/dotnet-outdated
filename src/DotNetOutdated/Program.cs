@@ -7,6 +7,7 @@ using System.Net.NetworkInformation;
 using System.Reflection;
 using System.Reflection.Metadata;
 using System.Runtime.CompilerServices;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using DotNetOutdated.Exceptions;
@@ -230,7 +231,42 @@ namespace DotNetOutdated
             console.Write("<green>".PadRight(8), Constants.ReporingColors.PatchVersionUpgrade);
             console.WriteLine(": Patch version update. Backwards-compatible bug fixes.");
         }
-        
+
+        public static void WriteColoredUpgrade(NuGetVersion resolvedVersion, NuGetVersion latestVersion, int resolvedWidth, int latestWidth, IConsole console)
+        {
+            console.Write((resolvedVersion?.ToString() ?? "").PadRight(resolvedWidth));
+            console.Write(" -> ");
+
+            // Exit early to avoid having to handle nulls later
+            if (latestVersion == null)
+            {
+                console.Write("".PadRight(resolvedWidth));
+                return;
+            }
+            var latestString = latestVersion.ToString().PadRight(latestWidth);
+            if (resolvedVersion == null)
+            {
+                console.Write(latestString);
+                return;
+            }
+
+            if (resolvedVersion.IsPrerelease)
+            {
+                console.Write(latestString, GetUpgradeSeverityColor(latestVersion, resolvedVersion));
+                return;
+            }
+
+            var matching = string.Join(".", resolvedVersion.GetParts()
+                .Zip(latestVersion.GetParts(), (p1, p2) => (part: p2, matches: p1 == p2))
+                .TakeWhile(p => p.matches)
+                .Select(p => p.part));
+            if (matching.Length > 0) { matching += "."; }
+            var rest = new Regex($"^{matching}").Replace(latestString, "");
+
+            console.Write($"{matching}");
+            console.Write(rest, GetUpgradeSeverityColor(latestVersion, resolvedVersion));
+        }
+
         private void ReportOutdatedDependencies(List<Project> projects, IConsole console)
         {
             foreach (var project in projects)
@@ -253,15 +289,9 @@ namespace DotNetOutdated
 
                         foreach (var dependency in dependencies)
                         {
-                            string resolvedVersion = dependency.ResolvedVersion?.ToString() ?? "";
-                            string latestVersion = dependency.LatestVersion?.ToString() ?? "";
-
                             console.WriteIndent();
                             console.Write(dependency.Description?.PadRight(columnWidths[0] + 2));
-                            console.Write(resolvedVersion.PadRight(columnWidths[1]));
-                            console.Write(" -> ");
-                            console.Write(latestVersion, GetUpgradeSeverityColor(dependency.LatestVersion, dependency.ResolvedVersion));
-
+                            WriteColoredUpgrade(dependency.ResolvedVersion, dependency.LatestVersion, columnWidths[1], columnWidths[2], console);
                             console.WriteLine();
                         }
                     }
@@ -312,7 +342,7 @@ namespace DotNetOutdated
             }
         }
 
-        private ConsoleColor GetUpgradeSeverityColor(NuGetVersion latestVersion, NuGetVersion resolvedVersion)
+        private static ConsoleColor GetUpgradeSeverityColor(NuGetVersion latestVersion, NuGetVersion resolvedVersion)
         {
             if (latestVersion == null || resolvedVersion == null)
                 return Console.ForegroundColor;
