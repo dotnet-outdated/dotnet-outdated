@@ -148,6 +148,12 @@ namespace DotNetOutdated
                 
                 // Upgrade the packages
                 await UpgradePackages(projects, console);
+
+                if (!Upgrade.HasValue)
+                {
+                    console.WriteLine();
+                    console.WriteLine("You can upgrade packages to the latest version by passing the -u or -u:prompt option.");
+                }
                 
                 return 0;
             }
