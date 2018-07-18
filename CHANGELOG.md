@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- Now only displays outdated packages (See [#16](https://github.com/jerriep/dotnet-outdated/issues/16))
+- Supports upgrading package using `-u` option. To prompt for each package, your can use `-p:prompt` (See [#6](https://github.com/jerriep/dotnet-outdated/issues/6))
+- Transitive packages are not displayed in a hierarchical view anymore. Transitive packages are simply indicated with a `[T]` indicator behind the package name.
+- Performance improvements due to caching (See [#43](https://github.com/jerriep/dotnet-outdated/pull/43)) - Thank you [thoemmi](https://github.com/thoemmi)
+- Support for V2 feeds (See [#42](https://github.com/jerriep/dotnet-outdated/issues/42)) - Thank you [thoemmi](https://github.com/thoemmi)
+- Highlights the new latest version of a package according to the severity of the upgrade (See [#45](https://github.com/jerriep/dotnet-outdated/issues/45)) - Thank you [tlycken](https://github.com/tlycken)
+- The `-pr` (pre-release) option has been renamed to `-pre`
+- Supports redirection and piping of output (See [#28](https://github.com/jerriep/dotnet-outdated/issues/28) and [#40](https://github.com/jerriep/dotnet-outdated/issues/40))
+- Supports running tool from Package Manager Console and Git Bash (See [#39](https://github.com/jerriep/dotnet-outdated/issues/39))
+
 ## [v1.3.0]
 
 This is mostly a bug fix release.
