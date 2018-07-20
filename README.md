@@ -31,6 +31,12 @@ Download and install the [.NET Core 2.1 SDK](https://www.microsoft.com/net/downl
 dotnet tool install --global dotnet-outdated
 ```
 
+If you already have a previous version of **dotnet-outdated** installed, you can upgrade to the latest version using the following command:
+
+```bash
+dotnet tool update --global dotnet-outdated
+```
+
 ## Usage
 
 ```text
