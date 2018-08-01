@@ -84,7 +84,7 @@ Also, on macOS and Linux, the password needs to be stored in clear text. You can
 
 ## Handling pre-release versions
 
-**dotnet-outdated** allows you to specify whether to use pre-release versions of packages or not by passing the `-pr|--pre-release` option.
+**dotnet-outdated** allows you to specify whether to use pre-release versions of packages or not by passing the `-pre|--pre-release` option.
 
 The default value of `Auto` will determine whether to use pre-release versions of a package based on whether the referenced version itself is a pre-release version. If the referenced version is a pre-release version, **dotnet-outdated** will include newer pre-release versions of the package. If the referenced version is not a pre-release version, **dotnet-outdated** will ignore pre-release versions.
 
