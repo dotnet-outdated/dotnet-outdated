@@ -22,6 +22,7 @@ A .NET Core global tool to display outdated NuGet packages in a project
 - [Locking to the current major or minor release](#locking-to-the-current-major-or-minor-release)
 - [Reporting on transitive dependencies](#reporting-on-transitive-dependencies)
 - [Auto-references](#auto-references)
+- [FAQ](#faq)
 
 ## Installation
 
@@ -115,3 +116,9 @@ You can also specify how many levels deep it should analyze transitive dependenc
 Before version 1.2 of **dotnet-outdated**, it used to include automatically references packages in the output. The automatically referenced packages are typically your framework packages, such as `Microsoft.NETCore.App` or `NETStandard.Library`. It does not make sense reporting on these as outdated since you should target a new framework to have these updated.
 
 From version 1.2, if you want these packages reported, you can pass the `-i|--include-auto-references` option. These packages will also be denoted with the text **[A]** appearing in the output after the package name.
+
+## FAQ
+
+### Why are the line endings in .csroj files changed to LF when running with `-u`?
+
+This is due to a [bug in MSBuild](https://github.com/Microsoft/msbuild/issues/1401).
