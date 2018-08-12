@@ -63,7 +63,7 @@ namespace DotNetOutdated.Services
 
                 return resource;
             }
-            catch (Exception e)
+            catch (Exception)
             {
                 return null;
             }
