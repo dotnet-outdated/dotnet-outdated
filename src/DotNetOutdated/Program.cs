@@ -147,7 +147,7 @@ namespace DotNetOutdated
                 ReportOutdatedDependencies(projects, console);
                 
                 // Upgrade the packages
-                await UpgradePackages(projects, console);
+                UpgradePackages(projects, console);
 
                 if (!Upgrade.HasValue)
                 {
@@ -165,7 +165,7 @@ namespace DotNetOutdated
             }
         }
 
-        private async Task UpgradePackages(List<Project> projects, IConsole console)
+        private void UpgradePackages(List<Project> projects, IConsole console)
         {
             if (Upgrade.HasValue)
             {
