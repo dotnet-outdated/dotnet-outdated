@@ -119,7 +119,7 @@ From version 1.2, if you want these packages reported, you can pass the `-i|--in
 
 ## FAQ
 
-### Why are the line endings in .csroj files changed to LF when running with `-u`?
+### Why are the line endings in .csproj files changed to LF when running with `-u`?
 
 This is due to a [bug in MSBuild](https://github.com/Microsoft/msbuild/issues/1401).
 
