@@ -62,10 +62,18 @@ namespace DotNetOutdated
                                                              "Possible values for <TYPE> is Auto (default) or Prompt.",
             ShortName = "u", LongName = "upgrade", ValueName = "TYPE")]
         public (bool HasValue, UpgradeType UpgradeType) Upgrade { get; set; }
-        
+
         [Option(CommandOptionType.NoValue, Description = "Specifies whether it should return a non-zero exit code when updates are found.",
             ShortName = "f", LongName = "fail-on-updates")]
         public bool FailOnUpdates { get; set; } = false;
+
+        [Option(CommandOptionType.SingleValue, Description = "Specifies to only look at packages where the name contains the provided string.", 
+            ShortName = "i", LongName = "include")]
+        public string FilterInclude { get; set; } = string.Empty;
+
+        [Option(CommandOptionType.SingleValue, Description = "Specifies to only look at packages where the name does not contain the provided string.",
+            ShortName = "e", LongName = "exclude")]
+        public string FilterExclude { get; set; } = string.Empty;
 
         [Option(CommandOptionType.SingleValue, Description = "Specifies the filename for a generated report. " +
                                                              "(Use the -of|--output-format option to specify the format. JSON by default.)",
@@ -361,11 +369,17 @@ namespace DotNetOutdated
                 // Process each target framework with its related dependencies
                 foreach (var targetFramework in project.TargetFrameworks)
                 {
-                    var dependencies = targetFramework.Dependencies
-                        .Where(d => IncludeAutoReferences || d.IsAutoReferenced == false)
-                        .OrderBy(dependency => dependency.IsTransitive)
-                        .ThenBy(dependency => dependency.Name)
-                        .ToList();
+                    var deps = targetFramework.Dependencies
+                        .Where(d => IncludeAutoReferences || d.IsAutoReferenced == false);
+
+                    if (!string.IsNullOrEmpty(FilterInclude))
+                        deps = deps.Where(d => d.Name.Contains(FilterInclude, StringComparison.InvariantCultureIgnoreCase));
+                    if (!string.IsNullOrEmpty(FilterExclude))
+                        deps = deps.Where(d => !d.Name.Contains(FilterExclude, StringComparison.InvariantCultureIgnoreCase));                        
+
+                    var dependencies = deps.OrderBy(dependency => dependency.IsTransitive)
+                                           .ThenBy(dependency => dependency.Name)
+                                           .ToList();
 
                     for (var index = 0; index < dependencies.Count; index++)
                     {
