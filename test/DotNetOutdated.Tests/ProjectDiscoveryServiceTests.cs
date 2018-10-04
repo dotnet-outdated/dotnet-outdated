@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.IO.Abstractions.TestingHelpers;
+using XFS = System.IO.Abstractions.TestingHelpers.MockUnixSupport;
 using DotNetOutdated.Exceptions;
 using DotNetOutdated.Services;
 using Xunit;
@@ -8,13 +9,13 @@ namespace DotNetOutdated.Tests
 {
     public class ProjectDiscoveryServiceTests
     {
-        private const string Path = @"c:\path";
-        private const string Solution1 = @"c:\path\solution1.sln";
-        private const string Solution2 = @"c:\path\solution2.sln";
-        private const string Project1 = @"c:\path\project1.csproj";
-        private const string Project2 = @"c:\path\project2.csproj";
-        private const string Project3 = @"c:\path\project3.fsproj";
-        private const string NonProjectFile = @"c:\path\file.cs";
+        private string Path = XFS.Path(@"c:\path");
+        private string Solution1 = XFS.Path(@"c:\path\solution1.sln");
+        private string Solution2 = XFS.Path(@"c:\path\solution2.sln");
+        private string Project1 = XFS.Path(@"c:\path\project1.csproj");
+        private string Project2 = XFS.Path(@"c:\path\project2.csproj");
+        private string Project3 = XFS.Path(@"c:\path\project3.fsproj");
+        private string NonProjectFile = XFS.Path(@"c:\path\file.cs");
 
         [Fact]
         public void SingleSolution_ReturnsSolution()
