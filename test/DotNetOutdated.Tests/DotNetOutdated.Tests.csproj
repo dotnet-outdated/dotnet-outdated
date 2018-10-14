@@ -19,7 +19,9 @@
     <ProjectReference Include="..\..\src\DotNetOutdated\DotNetOutdated.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <None Remove="TestData\test.dg" />
-    <EmbeddedResource Include="TestData\test.dg" />
+    <None Remove="TestData\*.dg" />
+    <None Remove="TestData\*.xml" />
+    <EmbeddedResource Include="TestData\*.dg" />
+    <EmbeddedResource Include="TestData\*.xml" />
   </ItemGroup>
 </Project>
