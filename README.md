@@ -21,6 +21,7 @@ A .NET Core global tool to display outdated NuGet packages in a project
 - [Handling pre-release versions](#handling-pre-release-versions)
 - [Locking to the current major or minor release](#locking-to-the-current-major-or-minor-release)
 - [Reporting on transitive dependencies](#reporting-on-transitive-dependencies)
+- [Failing when updates are available](#failing-when-updates-are-available)
 - [Auto-references](#auto-references)
 - [FAQ](#faq)
 
@@ -54,6 +55,7 @@ Options:
   -vl|--version-lock <VERSION_LOCK>          Specifies whether the package should be locked to the current Major or Minor version. Possible values: None (default), Major or Minor.
   -t|--transitive                            Specifies whether it should detect transitive dependencies.
   -td|--transitive-depth <TRANSITIVE_DEPTH>  Defines how many levels deep transitive dependencies should be analyzed. Integer value (default = 1)
+  -f|--fail-on-updates                       Specifies whether it should return a non-zero exit code when updates are found.
   -u|--upgrade:<TYPE>                        Specifies whether outdated packages should be upgraded. Possible values for <TYPE> is Auto (default) or Prompt.
 ```
 
@@ -110,6 +112,10 @@ Passing a value of `Minor` will only report on later packages in the current min
 You can also specify how many levels deep it should analyze transitive dependencies with the `-td|--transitive-depth` option. You can pass an integer value for this option (the default value is `1`).
 
 **Be careful with these options!**. If you try and analyze dependencies too many levels deep, the analysis can take a very long time.
+
+## Failing when updates are available
+
+**dotnet-outdated** can be easily incorporated into your build process. You can optionally enable a non-zero return code when updates are found to make failing a build easy to configure. To enable this option you can pass the `-f|--fail-on-updates` option.
 
 ## Auto-references
 
