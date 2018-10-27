@@ -11,10 +11,10 @@ namespace DotNetOutdated.Tests
 {
     public class DependencyGraphServiceTests
     {
-        private string Path = XFS.Path(@"c:\path");
-        private string SolutionPath = XFS.Path(@"c:\path\proj.sln");
-        private string Project1Path = XFS.Path(@"c:\path\proj1\proj1.csproj");
-        private string Project2Path = XFS.Path(@"c:\path\proj2\proj2.csproj");
+        private readonly string _path = XFS.Path(@"c:\path");
+        private readonly string _solutionPath = XFS.Path(@"c:\path\proj.sln");
+        private readonly string _project1Path = XFS.Path(@"c:\path\proj1\proj1.csproj");
+        private readonly string _project2Path = XFS.Path(@"c:\path\proj2\proj2.csproj");
 
         [Fact]
         public void SuccessfulDotNetRunnerExecution_ReturnsDependencyGraph()
@@ -37,13 +37,13 @@ namespace DotNetOutdated.Tests
             var graphService = new DependencyGraphService(dotNetRunner.Object, mockFileSystem);
             
             // Act
-            var dependencyGraph = graphService.GenerateDependencyGraph(Path);
+            var dependencyGraph = graphService.GenerateDependencyGraph(_path);
 
             // Assert
             Assert.NotNull(dependencyGraph);
             Assert.Equal(3, dependencyGraph.Projects.Count);
 
-            dotNetRunner.Verify(runner => runner.Run(XFS.Path(@"c:\", null), It.Is<string[]>(a => a[0] == "msbuild" && a[1] == '\"' + Path + '\"')));
+            dotNetRunner.Verify(runner => runner.Run(XFS.Path(@"c:\", null), It.Is<string[]>(a => a[0] == "msbuild" && a[1] == '\"' + _path + '\"')));
         }
         
         [Fact]
@@ -59,7 +59,7 @@ namespace DotNetOutdated.Tests
             var graphService = new DependencyGraphService(dotNetRunner.Object, mockFileSystem);
             
             // Assert
-            Assert.Throws<CommandValidationException>(() => graphService.GenerateDependencyGraph(Path));
+            Assert.Throws<CommandValidationException>(() => graphService.GenerateDependencyGraph(_path));
         }
 
         [Fact]
@@ -70,7 +70,7 @@ namespace DotNetOutdated.Tests
             // Arrange
             var dotNetRunner = new Mock<IDotNetRunner>();
 
-            string solutionProjects = string.Join(Environment.NewLine, "Project(s)", "-----------", Project1Path, Project2Path);
+            string solutionProjects = string.Join(Environment.NewLine, "Project(s)", "-----------", _project1Path, _project2Path);
             dotNetRunner.Setup(runner => runner.Run(It.IsAny<string>(), It.Is<string[]>(a => a[0] == "sln")))
                 .Returns(new RunStatus(solutionProjects, string.Empty, 0));
 
@@ -82,25 +82,25 @@ namespace DotNetOutdated.Tests
                     string tempFileName = arguments[3].Replace("/p:RestoreGraphOutputPath=", string.Empty).Trim('"');
 
                     // ... and stuff it with our dummy dependency graph
-                    string dependencyGraphFile = arguments[1] == '\"' + Project1Path + '\"' ? "test.dg" : "empty.dg";
+                    string dependencyGraphFile = arguments[1] == '\"' + _project1Path + '\"' ? "test.dg" : "empty.dg";
                     mockFileSystem.AddFileFromEmbeddedResource(tempFileName, GetType().Assembly, "DotNetOutdated.Tests.TestData." + dependencyGraphFile);
                 });
 
-            mockFileSystem.AddFileFromEmbeddedResource(Project1Path, GetType().Assembly, "DotNetOutdated.Tests.TestData.MicrosoftSdk.xml");
-            mockFileSystem.AddFileFromEmbeddedResource(Project2Path, GetType().Assembly, "DotNetOutdated.Tests.TestData.MicrosoftSdk.xml");
+            mockFileSystem.AddFileFromEmbeddedResource(_project1Path, GetType().Assembly, "DotNetOutdated.Tests.TestData.MicrosoftSdk.xml");
+            mockFileSystem.AddFileFromEmbeddedResource(_project2Path, GetType().Assembly, "DotNetOutdated.Tests.TestData.MicrosoftSdk.xml");
 
             var graphService = new DependencyGraphService(dotNetRunner.Object, mockFileSystem);
 
             // Act
-            var dependencyGraph = graphService.GenerateDependencyGraph(SolutionPath);
+            var dependencyGraph = graphService.GenerateDependencyGraph(_solutionPath);
 
             // Assert
             Assert.NotNull(dependencyGraph);
             Assert.Equal(4, dependencyGraph.Projects.Count);
 
-            dotNetRunner.Verify(runner => runner.Run(Path, It.Is<string[]>(a => a[0] == "sln" && a[2] == "list" && a[1] == '\"' + SolutionPath + '\"')));
-            dotNetRunner.Verify(runner => runner.Run(XFS.Path(@"c:\path\proj1", null), It.Is<string[]>(a => a[0] == "msbuild" && a[1] == '\"' + Project1Path + '\"')));
-            dotNetRunner.Verify(runner => runner.Run(XFS.Path(@"c:\path\proj2", null), It.Is<string[]>(a => a[0] == "msbuild" && a[1] == '\"' + Project2Path + '\"')));
+            dotNetRunner.Verify(runner => runner.Run(_path, It.Is<string[]>(a => a[0] == "sln" && a[2] == "list" && a[1] == '\"' + _solutionPath + '\"')));
+            dotNetRunner.Verify(runner => runner.Run(XFS.Path(@"c:\path\proj1", null), It.Is<string[]>(a => a[0] == "msbuild" && a[1] == '\"' + _project1Path + '\"')));
+            dotNetRunner.Verify(runner => runner.Run(XFS.Path(@"c:\path\proj2", null), It.Is<string[]>(a => a[0] == "msbuild" && a[1] == '\"' + _project2Path + '\"')));
         }
 
         [Fact]
@@ -111,7 +111,7 @@ namespace DotNetOutdated.Tests
             // Arrange
             var dotNetRunner = new Mock<IDotNetRunner>();
 
-            string solutionProjects = string.Join(Environment.NewLine, "Project(s)", "-----------", Project1Path, Project2Path);
+            string solutionProjects = string.Join(Environment.NewLine, "Project(s)", "-----------", _project1Path, _project2Path);
             dotNetRunner.Setup(runner => runner.Run(It.IsAny<string>(), It.Is<string[]>(a => a[0] == "sln")))
                 .Returns(new RunStatus(solutionProjects, string.Empty, 0));
 
@@ -123,25 +123,25 @@ namespace DotNetOutdated.Tests
                     string tempFileName = arguments[3].Replace("/p:RestoreGraphOutputPath=", string.Empty).Trim('"');
 
                     // ... and stuff it with our dummy dependency graph
-                    string dependencyGraphFile = arguments[1] == '\"' + Project1Path + '\"' ? "test.dg" : "empty.dg";
+                    string dependencyGraphFile = arguments[1] == '\"' + _project1Path + '\"' ? "test.dg" : "empty.dg";
                     mockFileSystem.AddFileFromEmbeddedResource(tempFileName, GetType().Assembly, "DotNetOutdated.Tests.TestData." + dependencyGraphFile);
                 });
 
-            mockFileSystem.AddFileFromEmbeddedResource(Project1Path, GetType().Assembly, "DotNetOutdated.Tests.TestData.LegacySdk.xml");
-            mockFileSystem.AddFileFromEmbeddedResource(Project2Path, GetType().Assembly, "DotNetOutdated.Tests.TestData.MicrosoftSdk.xml");
+            mockFileSystem.AddFileFromEmbeddedResource(_project1Path, GetType().Assembly, "DotNetOutdated.Tests.TestData.LegacySdk.xml");
+            mockFileSystem.AddFileFromEmbeddedResource(_project2Path, GetType().Assembly, "DotNetOutdated.Tests.TestData.MicrosoftSdk.xml");
 
             var graphService = new DependencyGraphService(dotNetRunner.Object, mockFileSystem);
 
             // Act
-            var dependencyGraph = graphService.GenerateDependencyGraph(SolutionPath);
+            var dependencyGraph = graphService.GenerateDependencyGraph(_solutionPath);
 
             // Assert
             Assert.NotNull(dependencyGraph);
             Assert.Equal(1, dependencyGraph.Projects.Count);
 
-            dotNetRunner.Verify(runner => runner.Run(Path, It.Is<string[]>(a => a[0] == "sln" && a[2] == "list" && a[1] == '\"' + SolutionPath + '\"')));
-            dotNetRunner.Verify(runner => runner.Run(XFS.Path(@"c:\path\proj2", null), It.Is<string[]>(a => a[0] == "msbuild" && a[1] == '\"' + Project2Path + '\"')));
-            dotNetRunner.Verify(runner => runner.Run(It.IsAny<string>(), It.Is<string[]>(a => a[0] == "msbuild" && a[1] != '\"' + Project2Path + '\"')), Times.Never());
+            dotNetRunner.Verify(runner => runner.Run(_path, It.Is<string[]>(a => a[0] == "sln" && a[2] == "list" && a[1] == '\"' + _solutionPath + '\"')));
+            dotNetRunner.Verify(runner => runner.Run(XFS.Path(@"c:\path\proj2", null), It.Is<string[]>(a => a[0] == "msbuild" && a[1] == '\"' + _project2Path + '\"')));
+            dotNetRunner.Verify(runner => runner.Run(It.IsAny<string>(), It.Is<string[]>(a => a[0] == "msbuild" && a[1] != '\"' + _project2Path + '\"')), Times.Never());
         }
 
         [Fact]
@@ -159,13 +159,13 @@ namespace DotNetOutdated.Tests
             var graphService = new DependencyGraphService(dotNetRunner.Object, mockFileSystem);
 
             // Act
-            var dependencyGraph = graphService.GenerateDependencyGraph(SolutionPath);
+            var dependencyGraph = graphService.GenerateDependencyGraph(_solutionPath);
 
             // Assert
             Assert.NotNull(dependencyGraph);
             Assert.Equal(0, dependencyGraph.Projects.Count);
 
-            dotNetRunner.Verify(runner => runner.Run(Path, It.Is<string[]>(a => a[0] == "sln" && a[2] == "list" && a[1] == '\"' + SolutionPath + '\"')));
+            dotNetRunner.Verify(runner => runner.Run(_path, It.Is<string[]>(a => a[0] == "sln" && a[2] == "list" && a[1] == '\"' + _solutionPath + '\"')));
             dotNetRunner.Verify(runner => runner.Run(It.IsAny<string>(), It.Is<string[]>(a => a[0] == "msbuild")), Times.Never());
         }
     }
