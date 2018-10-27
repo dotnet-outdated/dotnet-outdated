@@ -1,5 +1,11 @@
 # Changelog
 
+## [v2.1.0]
+
+- Excludes unsupported projects (See [#58](https://github.com/jerriep/dotnet-outdated/issues/58)) - Thank you [Thomas Levesque](https://github.com/thomaslevesque)
+- Add option to return non-zero exit code when updates are found (See [#94](https://github.com/jerriep/dotnet-outdated/pull/94)) - Thank you [Patrick Dwyer](https://github.com/patros)
+- Fixed `NullReferenceException` when unable to determine either the current or latest version of a package (See [#96](https://github.com/jerriep/dotnet-outdated/issues/96))
+
 ## [v2.0.0]
 
 - Now only displays outdated packages (See [#16](https://github.com/jerriep/dotnet-outdated/issues/16))
@@ -60,6 +66,7 @@ Initial release
 
 - A .NET Core global tool to display outdated NuGet packages in a project
 
+[v2.1.0]: https://github.com/jerriep/dotnet-outdated/tree/v2.1.0
 [v2.0.0]: https://github.com/jerriep/dotnet-outdated/tree/v2.0.0
 [v1.3.0]: https://github.com/jerriep/dotnet-outdated/tree/v1.3.0
 [v1.2.0]: https://github.com/jerriep/dotnet-outdated/tree/v1.2.0
