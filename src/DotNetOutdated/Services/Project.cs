@@ -23,7 +23,11 @@ namespace DotNetOutdated.Services
                     return description;
                 }
             }
-            
+
+            public string Error { get; set; }
+
+            public bool HasError => !string.IsNullOrEmpty(Error);
+
             public bool IsAutoReferenced { get; set; }
 
             public bool IsTransitive { get; set; }

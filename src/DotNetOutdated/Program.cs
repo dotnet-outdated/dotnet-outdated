@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel.Design;
 using System.Globalization;
 using System.IO.Abstractions;
 using System.Linq;
@@ -285,7 +286,7 @@ namespace DotNetOutdated
                     WriteTargetFramework(targetFramework, console);
 
                     var dependencies = targetFramework.Dependencies
-                        .Where(d => d.LatestVersion > d.ResolvedVersion)
+                        .Where(d => d.LatestVersion > d.ResolvedVersion || d.HasError)
                         .OrderBy(d => d.Name)
                         .ToList();
 
@@ -297,7 +298,12 @@ namespace DotNetOutdated
                         {
                             console.WriteIndent();
                             console.Write(dependency.Description?.PadRight(columnWidths[0] + 2));
-                            WriteColoredUpgrade(dependency.ResolvedVersion, dependency.LatestVersion, columnWidths[1], columnWidths[2], console);
+
+                            if (dependency.HasError)
+                                console.Write(dependency.Error, ConsoleColor.Red);
+                            else
+                                WriteColoredUpgrade(dependency.ResolvedVersion, dependency.LatestVersion, columnWidths[1], columnWidths[2], console);
+
                             console.WriteLine();
                         }
                     }
@@ -308,6 +314,12 @@ namespace DotNetOutdated
                     }
                 }
 
+                console.WriteLine();
+            }
+
+            if (projects.SelectMany(p => p.TargetFrameworks).SelectMany(f => f.Dependencies).Any(d => d.HasError))
+            {
+                console.WriteLine("Errors occurred while analyzing dependencies for some of your projects. Are you sure you can connect to all your configured NuGet servers?", ConsoleColor.Red);
                 console.WriteLine();
             }
 
@@ -338,8 +350,18 @@ namespace DotNetOutdated
 
                         var referencedVersion = dependency.ResolvedVersion;
 
-                        dependency.LatestVersion = await _nugetService.ResolvePackageVersions(dependency.Name, referencedVersion, project.Sources, dependency.VersionRange,
-                            VersionLock, Prerelease, targetFramework.Name, project.FilePath);
+                        if (referencedVersion != null)
+                        {
+                            var latestVersion = await _nugetService.ResolvePackageVersions(dependency.Name, referencedVersion, project.Sources, dependency.VersionRange,
+                                VersionLock, Prerelease, targetFramework.Name, project.FilePath);
+
+                            if (latestVersion != null)
+                                dependency.LatestVersion = latestVersion;
+                            else
+                                dependency.Error = "Cannot determine latest version!";
+                        }
+                        else
+                            dependency.Error = "Cannot determine current version!";
 
                         if (!console.IsOutputRedirected)
                             ClearCurrentConsoleLine();
