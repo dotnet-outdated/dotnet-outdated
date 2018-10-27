@@ -69,6 +69,10 @@ namespace DotNetOutdated
             ShortName = "u", LongName = "upgrade", ValueName = "TYPE")]
         public (bool HasValue, UpgradeType UpgradeType) Upgrade { get; set; }
         
+        [Option(CommandOptionType.NoValue, Description = "Specifies whether it should return a non-zero exit code when updates are found.",
+            ShortName = "f", LongName = "fail-on-updates")]
+        public bool FailOnUpdates { get; set; } = false;
+
         public static int Main(string[] args)
         {
             using (var services = new ServiceCollection()
@@ -155,7 +159,12 @@ namespace DotNetOutdated
                     console.WriteLine();
                     console.WriteLine("You can upgrade packages to the latest version by passing the -u or -u:prompt option.");
                 }
-                
+
+                if (FailOnUpdates && UpdatesExist(projects))
+                {
+                    return 2;
+                }
+
                 return 0;
             }
             catch (CommandValidationException e)
@@ -272,6 +281,15 @@ namespace DotNetOutdated
 
             console.Write($"{matching}");
             console.Write(rest, GetUpgradeSeverityColor(latestVersion, resolvedVersion));
+        }
+
+        internal static bool UpdatesExist(List<Project> projects)
+        {
+            var dependenciesWithUpdates = projects
+                .SelectMany(p => p.TargetFrameworks)
+                .SelectMany(f => f.Dependencies)
+                .Where(d => d.LatestVersion > d.ResolvedVersion);
+            return dependenciesWithUpdates.Any();
         }
 
         private void ReportOutdatedDependencies(List<Project> projects, IConsole console)
