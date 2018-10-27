@@ -5,15 +5,16 @@ using DotNetOutdated.Exceptions;
 using DotNetOutdated.Services;
 using Moq;
 using Xunit;
+using XFS = System.IO.Abstractions.TestingHelpers.MockUnixSupport;
 
 namespace DotNetOutdated.Tests
 {
     public class DependencyGraphServiceTests
     {
-        private const string Path = @"c:\path";
-        private const string SolutionPath = @"c:\path\proj.sln";
-        private const string Project1Path = @"c:\path\proj1\proj1.csproj";
-        private const string Project2Path = @"c:\path\proj2\proj2.csproj";
+        private string Path = XFS.Path(@"c:\path");
+        private string SolutionPath = XFS.Path(@"c:\path\proj.sln");
+        private string Project1Path = XFS.Path(@"c:\path\proj1\proj1.csproj");
+        private string Project2Path = XFS.Path(@"c:\path\proj2\proj2.csproj");
 
         [Fact]
         public void SuccessfulDotNetRunnerExecution_ReturnsDependencyGraph()
@@ -42,7 +43,7 @@ namespace DotNetOutdated.Tests
             Assert.NotNull(dependencyGraph);
             Assert.Equal(3, dependencyGraph.Projects.Count);
 
-            dotNetRunner.Verify(runner => runner.Run(@"c:\", It.Is<string[]>(a => a[0] == "msbuild" && a[1] == '\"' + Path + '\"')));
+            dotNetRunner.Verify(runner => runner.Run(XFS.Path(@"c:\", null), It.Is<string[]>(a => a[0] == "msbuild" && a[1] == '\"' + Path + '\"')));
         }
         
         [Fact]
@@ -98,8 +99,8 @@ namespace DotNetOutdated.Tests
             Assert.Equal(4, dependencyGraph.Projects.Count);
 
             dotNetRunner.Verify(runner => runner.Run(Path, It.Is<string[]>(a => a[0] == "sln" && a[2] == "list" && a[1] == '\"' + SolutionPath + '\"')));
-            dotNetRunner.Verify(runner => runner.Run(@"c:\path\proj1", It.Is<string[]>(a => a[0] == "msbuild" && a[1] == '\"' + Project1Path + '\"')));
-            dotNetRunner.Verify(runner => runner.Run(@"c:\path\proj2", It.Is<string[]>(a => a[0] == "msbuild" && a[1] == '\"' + Project2Path + '\"')));
+            dotNetRunner.Verify(runner => runner.Run(XFS.Path(@"c:\path\proj1", null), It.Is<string[]>(a => a[0] == "msbuild" && a[1] == '\"' + Project1Path + '\"')));
+            dotNetRunner.Verify(runner => runner.Run(XFS.Path(@"c:\path\proj2", null), It.Is<string[]>(a => a[0] == "msbuild" && a[1] == '\"' + Project2Path + '\"')));
         }
 
         [Fact]
@@ -139,7 +140,7 @@ namespace DotNetOutdated.Tests
             Assert.Equal(1, dependencyGraph.Projects.Count);
 
             dotNetRunner.Verify(runner => runner.Run(Path, It.Is<string[]>(a => a[0] == "sln" && a[2] == "list" && a[1] == '\"' + SolutionPath + '\"')));
-            dotNetRunner.Verify(runner => runner.Run(@"c:\path\proj2", It.Is<string[]>(a => a[0] == "msbuild" && a[1] == '\"' + Project2Path + '\"')));
+            dotNetRunner.Verify(runner => runner.Run(XFS.Path(@"c:\path\proj2", null), It.Is<string[]>(a => a[0] == "msbuild" && a[1] == '\"' + Project2Path + '\"')));
             dotNetRunner.Verify(runner => runner.Run(It.IsAny<string>(), It.Is<string[]>(a => a[0] == "msbuild" && a[1] != '\"' + Project2Path + '\"')), Times.Never());
         }
 
