@@ -5,6 +5,14 @@ using NuGet.Frameworks;
 
 namespace DotNetOutdated.Services
 {
+    public enum DependencyUpgradeSeverity
+    {
+        None,
+        Patch,
+        Minor,
+        Major
+    }
+
     public class Project
     {
         public class Dependency
@@ -39,6 +47,24 @@ namespace DotNetOutdated.Services
             public NuGetVersion ResolvedVersion { get; set; }
 
             public NuGetVersion LatestVersion { get; set; }
+            public DependencyUpgradeSeverity? UpgradeSeverity
+            {
+                get
+                {
+                    if (LatestVersion == null || ResolvedVersion == null)
+                        return null;
+
+                    if (LatestVersion.Major > ResolvedVersion.Major || ResolvedVersion.IsPrerelease)
+                        return DependencyUpgradeSeverity.Major;
+                    if (LatestVersion.Minor > ResolvedVersion.Minor)
+                        return DependencyUpgradeSeverity.Minor;
+                    if (LatestVersion.Patch > ResolvedVersion.Patch || LatestVersion.Revision > ResolvedVersion.Revision)
+                        return DependencyUpgradeSeverity.Patch;
+                    
+                    return DependencyUpgradeSeverity.None;
+                }
+            }
+
         }
 
         public class TargetFramework

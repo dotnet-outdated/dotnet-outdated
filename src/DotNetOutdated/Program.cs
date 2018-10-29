@@ -195,7 +195,7 @@ namespace DotNetOutdated
                         console.Write($"The package ");
                         console.Write(package.Description, Constants.ReporingColors.PackageName);
                         console.Write($" can be upgraded from {resolvedVersion} to ");
-                        console.Write(latestVersion, GetUpgradeSeverityColor(package.LatestVersion, package.ResolvedVersion));
+                        console.Write(latestVersion, GetUpgradeSeverityColor(package.UpgradeSeverity));
                         console.WriteLine(". The following project(s) will be affected:");
                         foreach (var project in package.Projects)
                         {
@@ -248,7 +248,7 @@ namespace DotNetOutdated
             console.WriteLine(": Patch version update. Backwards-compatible bug fixes.");
         }
 
-        public static void WriteColoredUpgrade(NuGetVersion resolvedVersion, NuGetVersion latestVersion, int resolvedWidth, int latestWidth, IConsole console)
+        public static void WriteColoredUpgrade(DependencyUpgradeSeverity? upgradeSeverity, NuGetVersion resolvedVersion, NuGetVersion latestVersion, int resolvedWidth, int latestWidth, IConsole console)
         {
             console.Write((resolvedVersion?.ToString() ?? "").PadRight(resolvedWidth));
             console.Write(" -> ");
@@ -268,7 +268,7 @@ namespace DotNetOutdated
 
             if (resolvedVersion.IsPrerelease)
             {
-                console.Write(latestString, GetUpgradeSeverityColor(latestVersion, resolvedVersion));
+                console.Write(latestString, GetUpgradeSeverityColor(upgradeSeverity));
                 return;
             }
 
@@ -280,7 +280,7 @@ namespace DotNetOutdated
             var rest = new Regex($"^{matching}").Replace(latestString, "");
 
             console.Write($"{matching}");
-            console.Write(rest, GetUpgradeSeverityColor(latestVersion, resolvedVersion));
+            console.Write(rest, GetUpgradeSeverityColor(upgradeSeverity));
         }
 
         internal static bool UpdatesExist(List<Project> projects)
@@ -320,7 +320,7 @@ namespace DotNetOutdated
                             if (dependency.HasError)
                                 console.Write(dependency.Error, ConsoleColor.Red);
                             else
-                                WriteColoredUpgrade(dependency.ResolvedVersion, dependency.LatestVersion, columnWidths[1], columnWidths[2], console);
+                                WriteColoredUpgrade(dependency.UpgradeSeverity, dependency.ResolvedVersion, dependency.LatestVersion, columnWidths[1], columnWidths[2], console);
 
                             console.WriteLine();
                         }
@@ -388,19 +388,20 @@ namespace DotNetOutdated
             }
         }
 
-        private static ConsoleColor GetUpgradeSeverityColor(NuGetVersion latestVersion, NuGetVersion resolvedVersion)
+        private static ConsoleColor GetUpgradeSeverityColor(DependencyUpgradeSeverity? upgradeSeverity)
         {
-            if (latestVersion == null || resolvedVersion == null)
-                return Console.ForegroundColor;
+            switch (upgradeSeverity)
+            {
+                case DependencyUpgradeSeverity.Major:
+                    return Constants.ReporingColors.MajorVersionUpgrade;
+                case DependencyUpgradeSeverity.Minor:
+                    return Constants.ReporingColors.MinorVersionUpgrade;
+                case DependencyUpgradeSeverity.Patch:
+                    return Constants.ReporingColors.PatchVersionUpgrade;
+                default:
+                    return Console.ForegroundColor;
 
-            if (latestVersion.Major > resolvedVersion.Major || resolvedVersion.IsPrerelease)
-                return Constants.ReporingColors.MajorVersionUpgrade;
-            if (latestVersion.Minor > resolvedVersion.Minor)
-                return Constants.ReporingColors.MinorVersionUpgrade;
-            if (latestVersion.Patch > resolvedVersion.Patch || latestVersion.Revision > resolvedVersion.Revision)
-                return Constants.ReporingColors.PatchVersionUpgrade;
-
-            return Console.ForegroundColor;
+            }
         }
 
         private static void WriteProjectName(string name, IConsole console)

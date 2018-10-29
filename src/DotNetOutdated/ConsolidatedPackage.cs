@@ -43,5 +43,7 @@ namespace DotNetOutdated
         public List<PackageProjectReference> Projects { get; set; }
 
         public NuGetVersion ResolvedVersion { get; set; }
+
+        public Services.DependencyUpgradeSeverity? UpgradeSeverity { get; set; }
     }
 }
