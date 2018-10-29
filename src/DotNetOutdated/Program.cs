@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.ComponentModel.Design;
 using System.Globalization;
+using System.IO;
 using System.IO.Abstractions;
 using System.Linq;
 using System.Net.NetworkInformation;
@@ -15,6 +16,7 @@ using DotNetOutdated.Exceptions;
 using DotNetOutdated.Services;
 using McMaster.Extensions.CommandLineUtils;
 using Microsoft.Extensions.DependencyInjection;
+using Newtonsoft.Json;
 using NuGet.Packaging;
 using NuGet.Protocol.Core.Types;
 using NuGet.Versioning;
@@ -72,6 +74,10 @@ namespace DotNetOutdated
         [Option(CommandOptionType.NoValue, Description = "Specifies whether it should return a non-zero exit code when updates are found.",
             ShortName = "f", LongName = "fail-on-updates")]
         public bool FailOnUpdates { get; set; } = false;
+
+        [Option(CommandOptionType.SingleValue, Description = "Specifies the filename for a generated JSON report.",
+            ShortName = "o", LongName = "output")]
+        public string OutputFilename { get; set; } = null;
 
         public static int Main(string[] args)
         {
@@ -159,6 +165,9 @@ namespace DotNetOutdated
                     console.WriteLine();
                     console.WriteLine("You can upgrade packages to the latest version by passing the -u or -u:prompt option.");
                 }
+
+                // Output report file
+                GenerateOutputFile(projects);
 
                 if (FailOnUpdates && UpdatesExist(projects))
                 {
@@ -400,7 +409,21 @@ namespace DotNetOutdated
                     return Constants.ReporingColors.PatchVersionUpgrade;
                 default:
                     return Console.ForegroundColor;
+            }
+        }
 
+        private void GenerateOutputFile(List<Project> projects)
+        {
+            if (OutputFilename != null)
+            {
+                Console.WriteLine();
+                Console.WriteLine("Generating JSON report...");
+                var report = new Report
+                {
+                    Projects = projects
+                };
+                _fileSystem.File.WriteAllText(OutputFilename, JsonConvert.SerializeObject(report, Formatting.Indented));
+                Console.WriteLine();
             }
         }
 
