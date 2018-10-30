@@ -2,6 +2,7 @@
 {
     public enum OutputFormat
     {
-        Json
+        Json,
+        Text
     }
 }

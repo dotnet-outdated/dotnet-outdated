@@ -79,7 +79,7 @@ namespace DotNetOutdated
         public string OutputFilename { get; set; } = null;
 
         [Option(CommandOptionType.SingleValue, Description = "Specifies the output format for the generated report. " +
-                                                             "Possible values: Json (default).",
+                                                             "Possible values: Json (default) or Text.",
             ShortName = "of", LongName = "output-format")]
         public OutputFormat OutputFileFormat { get; set; } = OutputFormat.Json;
 
@@ -422,7 +422,17 @@ namespace DotNetOutdated
             {
                 Console.WriteLine();
                 Console.WriteLine(string.Format("Generating {0} report...", OutputFileFormat));
-                _fileSystem.File.WriteAllText(OutputFilename, Report.GetJsonReportContent(projects));
+                string reportContent;
+                switch (OutputFileFormat)
+                {
+                    case OutputFormat.Text:
+                        reportContent = Report.GetTextReportContent(projects);
+                        break;
+                    default:
+                        reportContent = Report.GetJsonReportContent(projects);
+                        break;
+                }
+                _fileSystem.File.WriteAllText(OutputFilename, reportContent);
                 Console.WriteLine();
             }
         }
