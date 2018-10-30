@@ -33,5 +33,14 @@ namespace DotNetOutdated.Services
     public class Report
     {
         public List<Project> Projects { get; set; }
+
+        public static string GetJsonReportContent(List<Project> projects)
+        {
+            var report = new Report
+            {
+                Projects = projects
+            };
+            return JsonConvert.SerializeObject(report, Formatting.Indented);
+        }
     }
 }

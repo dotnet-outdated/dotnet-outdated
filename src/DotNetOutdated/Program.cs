@@ -74,9 +74,14 @@ namespace DotNetOutdated
             ShortName = "f", LongName = "fail-on-updates")]
         public bool FailOnUpdates { get; set; } = false;
 
-        [Option(CommandOptionType.SingleValue, Description = "Specifies the filename for a generated JSON report.",
+        [Option(CommandOptionType.SingleValue, Description = "Specifies the filename for a generated report (Json by default).",
             ShortName = "o", LongName = "output")]
         public string OutputFilename { get; set; } = null;
+
+        [Option(CommandOptionType.SingleValue, Description = "Specifies the output format for the generated report. " +
+                                                             "Possible values: Json (default).",
+            ShortName = "of", LongName = "output-format")]
+        public OutputFormat OutputFileFormat { get; set; } = OutputFormat.Json;
 
         public static int Main(string[] args)
         {
@@ -416,12 +421,8 @@ namespace DotNetOutdated
             if (OutputFilename != null)
             {
                 Console.WriteLine();
-                Console.WriteLine("Generating JSON report...");
-                var report = new Report
-                {
-                    Projects = projects
-                };
-                _fileSystem.File.WriteAllText(OutputFilename, JsonConvert.SerializeObject(report, Formatting.Indented));
+                Console.WriteLine(string.Format("Generating {0} report...", OutputFileFormat));
+                _fileSystem.File.WriteAllText(OutputFilename, Report.GetJsonReportContent(projects));
                 Console.WriteLine();
             }
         }
