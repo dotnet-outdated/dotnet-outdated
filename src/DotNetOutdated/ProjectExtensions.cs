@@ -22,7 +22,8 @@ namespace DotNetOutdated
                     ResolvedVersion = d.ResolvedVersion,
                     LatestVersion = d.LatestVersion,
                     IsAutoReferenced = d.IsAutoReferenced,
-                    IsTransitive = d.IsTransitive
+                    IsTransitive = d.IsTransitive,
+                    UpgradeSeverity = d.UpgradeSeverity
                 };
 
             // Now group them by package
@@ -32,7 +33,8 @@ namespace DotNetOutdated
                     p.ResolvedVersion,
                     p.LatestVersion,
                     p.IsTransitive,
-                    p.IsAutoReferenced
+                    p.IsAutoReferenced,
+                    p.UpgradeSeverity
                 })
                 .Select(gp => new ConsolidatedPackage
                 {
@@ -41,6 +43,7 @@ namespace DotNetOutdated
                     LatestVersion = gp.Key.LatestVersion,
                     IsTransitive = gp.Key.IsTransitive,
                     IsAutoReferenced = gp.Key.IsAutoReferenced,
+                    UpgradeSeverity = gp.Key.UpgradeSeverity,
                     Projects = gp.Select(v => new ConsolidatedPackage.PackageProjectReference
                     {
                         Project = v.Project,

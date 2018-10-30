@@ -57,6 +57,7 @@ Options:
   -td|--transitive-depth <TRANSITIVE_DEPTH>  Defines how many levels deep transitive dependencies should be analyzed. Integer value (default = 1)
   -f|--fail-on-updates                       Specifies whether it should return a non-zero exit code when updates are found.
   -u|--upgrade:<TYPE>                        Specifies whether outdated packages should be upgraded. Possible values for <TYPE> is Auto (default) or Prompt.
+  -o|--output <FILENAME>                     Specifies the filename for a generated JSON report.
 ```
 
 ![Screenshot of dotnet-outdated](screenshot.png)

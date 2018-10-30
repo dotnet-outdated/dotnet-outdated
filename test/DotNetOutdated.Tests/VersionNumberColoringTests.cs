@@ -26,7 +26,7 @@ namespace DotNetOutdated.Tests
 
             var console = new MockConsole();
 
-            Program.WriteColoredUpgrade(resolvedVersion, latestVersion, 9, 9, console);
+            Program.WriteColoredUpgrade(Services.DependencyUpgradeSeverity.Major, resolvedVersion, latestVersion, 9, 9, console);
 
             Assert.Equal($"{resolved} -> [Red]{latest}[White]", console.WrittenOut);
         }
@@ -41,7 +41,7 @@ namespace DotNetOutdated.Tests
 
             var console = new MockConsole();
 
-            Program.WriteColoredUpgrade(resolvedVersion, latestVersion, 9, 9, console);
+            Program.WriteColoredUpgrade(Services.DependencyUpgradeSeverity.Major, resolvedVersion, latestVersion, 9, 9, console);
 
             Assert.Equal($"{resolved} -> [Red]{latest}[White]", console.WrittenOut);
         }
@@ -57,7 +57,7 @@ namespace DotNetOutdated.Tests
 
             var console = new MockConsole();
 
-            Program.WriteColoredUpgrade(resolvedVersion, latestVersion, 9, 9, console);
+            Program.WriteColoredUpgrade(Services.DependencyUpgradeSeverity.Minor, resolvedVersion, latestVersion, 9, 9, console);
             var firstDot = latest.IndexOf(".") + 1;
             Assert.Equal($"{resolved} -> {latest.Substring(0, firstDot)}[Yellow]{latest.Substring(firstDot)}[White]", console.WrittenOut);
         }
@@ -74,7 +74,7 @@ namespace DotNetOutdated.Tests
 
             var console = new MockConsole();
 
-            Program.WriteColoredUpgrade(resolvedVersion, latestVersion, 9, 9, console);
+            Program.WriteColoredUpgrade(Services.DependencyUpgradeSeverity.Patch, resolvedVersion, latestVersion, 9, 9, console);
             var secondDot = latest.IndexOf(".", latest.IndexOf(".") + 1) + 1;
             Assert.Equal($"{resolved} -> {latest.Substring(0, secondDot)}[Green]{latest.Substring(secondDot)}[White]", console.WrittenOut);
         }

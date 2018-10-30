@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.ComponentModel.Design;
 using System.Globalization;
+using System.IO;
 using System.IO.Abstractions;
 using System.Linq;
 using System.Net.NetworkInformation;
@@ -15,6 +16,7 @@ using DotNetOutdated.Exceptions;
 using DotNetOutdated.Services;
 using McMaster.Extensions.CommandLineUtils;
 using Microsoft.Extensions.DependencyInjection;
+using Newtonsoft.Json;
 using NuGet.Packaging;
 using NuGet.Protocol.Core.Types;
 using NuGet.Versioning;
@@ -72,6 +74,10 @@ namespace DotNetOutdated
         [Option(CommandOptionType.NoValue, Description = "Specifies whether it should return a non-zero exit code when updates are found.",
             ShortName = "f", LongName = "fail-on-updates")]
         public bool FailOnUpdates { get; set; } = false;
+
+        [Option(CommandOptionType.SingleValue, Description = "Specifies the filename for a generated JSON report.",
+            ShortName = "o", LongName = "output")]
+        public string OutputFilename { get; set; } = null;
 
         public static int Main(string[] args)
         {
@@ -160,6 +166,9 @@ namespace DotNetOutdated
                     console.WriteLine("You can upgrade packages to the latest version by passing the -u or -u:prompt option.");
                 }
 
+                // Output report file
+                GenerateOutputFile(projects);
+
                 if (FailOnUpdates && UpdatesExist(projects))
                 {
                     return 2;
@@ -195,7 +204,7 @@ namespace DotNetOutdated
                         console.Write($"The package ");
                         console.Write(package.Description, Constants.ReporingColors.PackageName);
                         console.Write($" can be upgraded from {resolvedVersion} to ");
-                        console.Write(latestVersion, GetUpgradeSeverityColor(package.LatestVersion, package.ResolvedVersion));
+                        console.Write(latestVersion, GetUpgradeSeverityColor(package.UpgradeSeverity));
                         console.WriteLine(". The following project(s) will be affected:");
                         foreach (var project in package.Projects)
                         {
@@ -248,7 +257,7 @@ namespace DotNetOutdated
             console.WriteLine(": Patch version update. Backwards-compatible bug fixes.");
         }
 
-        public static void WriteColoredUpgrade(NuGetVersion resolvedVersion, NuGetVersion latestVersion, int resolvedWidth, int latestWidth, IConsole console)
+        public static void WriteColoredUpgrade(DependencyUpgradeSeverity? upgradeSeverity, NuGetVersion resolvedVersion, NuGetVersion latestVersion, int resolvedWidth, int latestWidth, IConsole console)
         {
             console.Write((resolvedVersion?.ToString() ?? "").PadRight(resolvedWidth));
             console.Write(" -> ");
@@ -268,7 +277,7 @@ namespace DotNetOutdated
 
             if (resolvedVersion.IsPrerelease)
             {
-                console.Write(latestString, GetUpgradeSeverityColor(latestVersion, resolvedVersion));
+                console.Write(latestString, GetUpgradeSeverityColor(upgradeSeverity));
                 return;
             }
 
@@ -280,7 +289,7 @@ namespace DotNetOutdated
             var rest = new Regex($"^{matching}").Replace(latestString, "");
 
             console.Write($"{matching}");
-            console.Write(rest, GetUpgradeSeverityColor(latestVersion, resolvedVersion));
+            console.Write(rest, GetUpgradeSeverityColor(upgradeSeverity));
         }
 
         internal static bool UpdatesExist(List<Project> projects)
@@ -320,7 +329,7 @@ namespace DotNetOutdated
                             if (dependency.HasError)
                                 console.Write(dependency.Error, ConsoleColor.Red);
                             else
-                                WriteColoredUpgrade(dependency.ResolvedVersion, dependency.LatestVersion, columnWidths[1], columnWidths[2], console);
+                                WriteColoredUpgrade(dependency.UpgradeSeverity, dependency.ResolvedVersion, dependency.LatestVersion, columnWidths[1], columnWidths[2], console);
 
                             console.WriteLine();
                         }
@@ -388,19 +397,34 @@ namespace DotNetOutdated
             }
         }
 
-        private static ConsoleColor GetUpgradeSeverityColor(NuGetVersion latestVersion, NuGetVersion resolvedVersion)
+        private static ConsoleColor GetUpgradeSeverityColor(DependencyUpgradeSeverity? upgradeSeverity)
         {
-            if (latestVersion == null || resolvedVersion == null)
-                return Console.ForegroundColor;
+            switch (upgradeSeverity)
+            {
+                case DependencyUpgradeSeverity.Major:
+                    return Constants.ReporingColors.MajorVersionUpgrade;
+                case DependencyUpgradeSeverity.Minor:
+                    return Constants.ReporingColors.MinorVersionUpgrade;
+                case DependencyUpgradeSeverity.Patch:
+                    return Constants.ReporingColors.PatchVersionUpgrade;
+                default:
+                    return Console.ForegroundColor;
+            }
+        }
 
-            if (latestVersion.Major > resolvedVersion.Major || resolvedVersion.IsPrerelease)
-                return Constants.ReporingColors.MajorVersionUpgrade;
-            if (latestVersion.Minor > resolvedVersion.Minor)
-                return Constants.ReporingColors.MinorVersionUpgrade;
-            if (latestVersion.Patch > resolvedVersion.Patch || latestVersion.Revision > resolvedVersion.Revision)
-                return Constants.ReporingColors.PatchVersionUpgrade;
-
-            return Console.ForegroundColor;
+        private void GenerateOutputFile(List<Project> projects)
+        {
+            if (OutputFilename != null)
+            {
+                Console.WriteLine();
+                Console.WriteLine("Generating JSON report...");
+                var report = new Report
+                {
+                    Projects = projects
+                };
+                _fileSystem.File.WriteAllText(OutputFilename, JsonConvert.SerializeObject(report, Formatting.Indented));
+                Console.WriteLine();
+            }
         }
 
         private static void WriteProjectName(string name, IConsole console)
