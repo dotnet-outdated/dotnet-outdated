@@ -132,3 +132,9 @@ This is due to a [bug in MSBuild](https://github.com/Microsoft/msbuild/issues/14
 ### Why are unrelated changes made to .csproj files when running with `-u`?
 
 `dotnet-outdated` does not make any changes to .csproj files directly. Instead, it runs `dotnet add package` to update packages, so that command is responsible for all changes made. To track issues related to this command, head over to the [.NET CLI repo](https://github.com/dotnet/cli)
+
+### Why I am getting an error about required library hostfxr.dll/libhostfxr.so/libhostfxr.dylib not found?
+
+If you download the .NET Core CLI as a .zip/.tar.gz and extract it to a non default location, then you may encounter this error after installing and launching **dotnet-outdated**.
+
+You can fix this error by setting the `DOTNET_ROOT` environment variable to point to the location of your .NET Core CLI installation. For more information, please refer to [this blog post](https://natemcmaster.com/blog/2018/05/12/dotnet-global-tools/#installing-the-net-core-cli-into-a-non-default-location).
