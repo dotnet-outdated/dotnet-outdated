@@ -3,6 +3,6 @@
     public enum OutputFormat
     {
         Json,
-        Text
+        Csv
     }
 }

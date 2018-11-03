@@ -61,6 +61,7 @@ namespace DotNetOutdated.Services
                     }
                 }
             }
+
             return sb.ToString();
         }
 

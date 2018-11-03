@@ -66,12 +66,13 @@ namespace DotNetOutdated
             ShortName = "f", LongName = "fail-on-updates")]
         public bool FailOnUpdates { get; set; } = false;
 
-        [Option(CommandOptionType.SingleValue, Description = "Specifies the filename for a generated report (Json by default).",
+        [Option(CommandOptionType.SingleValue, Description = "Specifies the filename for a generated report. " +
+                                                             "(Use the -of|--output-format option to specify the format. JSON by default.)",
             ShortName = "o", LongName = "output")]
         public string OutputFilename { get; set; } = null;
 
         [Option(CommandOptionType.SingleValue, Description = "Specifies the output format for the generated report. " +
-                                                             "Possible values: Json (default) or Text.",
+                                                             "Possible values: json (default) or csv.",
             ShortName = "of", LongName = "output-format")]
         public OutputFormat OutputFileFormat { get; set; } = OutputFormat.Json;
 
@@ -309,7 +310,7 @@ namespace DotNetOutdated
                     WriteTargetFramework(targetFramework, console);
 
                     var dependencies = targetFramework.Dependencies
-                        .Where(d => d.LatestVersion > d.ResolvedVersion || d.HasError)
+                        .Where(d => (d.UpgradeSeverity.HasValue && d.UpgradeSeverity != DependencyUpgradeSeverity.None) || d.HasError)
                         .OrderBy(d => d.Name)
                         .ToList();
 
@@ -413,11 +414,11 @@ namespace DotNetOutdated
             if (OutputFilename != null)
             {
                 Console.WriteLine();
-                Console.WriteLine(string.Format("Generating {0} report...", OutputFileFormat));
+                Console.WriteLine($"Generating {OutputFileFormat.ToString().ToUpper()} report...");
                 string reportContent;
                 switch (OutputFileFormat)
                 {
-                    case OutputFormat.Text:
+                    case OutputFormat.Csv:
                         reportContent = Report.GetTextReportContent(projects);
                         break;
                     default:
@@ -425,6 +426,8 @@ namespace DotNetOutdated
                         break;
                 }
                 _fileSystem.File.WriteAllText(OutputFilename, reportContent);
+
+                Console.WriteLine($"Report written to {OutputFilename}");
                 Console.WriteLine();
             }
         }
