@@ -1,0 +1,12 @@
+<Project>
+ 
+  <PropertyGroup>
+    <Version>1.0.0</Version>
+    <Authors>Jerrie Pelser</Authors>
+  </PropertyGroup>
+ 
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="11.0.1" />
+  </ItemGroup>
+
+</Project>
