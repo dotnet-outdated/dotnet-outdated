@@ -1,9 +1,7 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using McMaster.Extensions.CommandLineUtils;
-using Xunit.Abstractions;
 
 namespace DotNetOutdated.Tests
 {

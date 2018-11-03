@@ -1,7 +1,4 @@
 using System;
-using System.Collections.Generic;
-using McMaster.Extensions.CommandLineUtils;
-using Moq;
 using NuGet.Frameworks;
 using NuGet.Versioning;
 using Xunit;

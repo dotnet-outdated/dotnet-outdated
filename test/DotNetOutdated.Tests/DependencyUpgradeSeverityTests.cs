@@ -1,5 +1,3 @@
-using McMaster.Extensions.CommandLineUtils;
-using Moq;
 using NuGet.Versioning;
 using Xunit;
 using Xunit.Abstractions;

@@ -2,9 +2,6 @@ using System;
 using System.Text;
 using System.Collections.Generic;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Converters;
-using NuGet.Versioning;
-using NuGet.Frameworks;
 
 namespace DotNetOutdated.Services
 {
