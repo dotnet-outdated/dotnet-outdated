@@ -1,5 +1,6 @@
 using NuGet.Versioning;
 using System.Collections.Generic;
+using DotNetOutdated.Models;
 using Xunit;
 using DotNetOutdated.Services;
 
@@ -11,27 +12,27 @@ namespace DotNetOutdated.Tests
         public void ProjectsWithUpdates_ReturnsTrue()
         {
             // Arrange
-            var dependencyWithUpdate = new Project.Dependency
+            var dependencyWithUpdate = new Dependency
             {
                 ResolvedVersion = new NuGetVersion("1.0.0"),
                 LatestVersion = new NuGetVersion("1.0.1")
             };
-            var dependencyWithoutUpdate = new Project.Dependency
+            var dependencyWithoutUpdate = new Dependency
             {
                 ResolvedVersion = new NuGetVersion("1.0.0"),
                 LatestVersion = new NuGetVersion("1.0.0")
             };
-            var targetFrameworkWithUpdate = new Project.TargetFramework
+            var targetFrameworkWithUpdate = new TargetFramework
             {
-                Dependencies = new List<Project.Dependency>
+                Dependencies = new List<Dependency>
                 {
                     dependencyWithoutUpdate,
                     dependencyWithUpdate
                 }
             };
-            var targetFrameworkWithoutUpdate = new Project.TargetFramework
+            var targetFrameworkWithoutUpdate = new TargetFramework
             {
-                Dependencies = new List<Project.Dependency>
+                Dependencies = new List<Dependency>
                 {
                     dependencyWithoutUpdate,
                     dependencyWithoutUpdate
@@ -41,7 +42,7 @@ namespace DotNetOutdated.Tests
             {
                 new Project
                 {
-                    TargetFrameworks = new List<Project.TargetFramework>
+                    TargetFrameworks = new List<TargetFramework>
                     {
                         targetFrameworkWithoutUpdate,
                         targetFrameworkWithUpdate
@@ -60,14 +61,14 @@ namespace DotNetOutdated.Tests
         public void ProjectsWithoutUpdates_ReturnsFalse()
         {
             // Arrange
-            var dependencyWithoutUpdate = new Project.Dependency
+            var dependencyWithoutUpdate = new Dependency
             {
                 ResolvedVersion = new NuGetVersion("1.0.0"),
                 LatestVersion = new NuGetVersion("1.0.0")
             };
-            var targetFrameworkWithoutUpdate = new Project.TargetFramework
+            var targetFrameworkWithoutUpdate = new TargetFramework
             {
-                Dependencies = new List<Project.Dependency>
+                Dependencies = new List<Dependency>
                 {
                     dependencyWithoutUpdate,
                     dependencyWithoutUpdate
@@ -77,7 +78,7 @@ namespace DotNetOutdated.Tests
             {
                 new Project
                 {
-                    TargetFrameworks = new List<Project.TargetFramework>
+                    TargetFrameworks = new List<TargetFramework>
                     {
                         targetFrameworkWithoutUpdate,
                         targetFrameworkWithoutUpdate

@@ -1,11 +1,26 @@
 using System;
 using System.Text;
 using System.Collections.Generic;
+using System.Threading.Tasks;
+using DotNetOutdated.Models;
 using Newtonsoft.Json;
 
 namespace DotNetOutdated.Services
 {
-    class ToStringJsonConverter : JsonConverter
+    public interface IReportingService
+    {
+        Task WriteReport(string filename, List<Project> projects);
+    }
+
+    public class JsonReporingService : IReportingService
+    {
+        public Task WriteReport(string filename, List<Project> projects)
+        {
+            throw new NotImplementedException();
+        }
+    }
+
+    internal class ToStringJsonConverter : JsonConverter
     {
         public override bool CanConvert(Type objectType)
         {
@@ -32,7 +47,7 @@ namespace DotNetOutdated.Services
     {
         public List<Project> Projects { get; set; }
 
-        internal static string GetTextReportLine(Project project, Project.TargetFramework targetFramework, Project.Dependency dependency)
+        internal static string GetTextReportLine(Project project, TargetFramework targetFramework, Dependency dependency)
         {
             var upgradeSeverity = "";
             if (dependency.UpgradeSeverity.HasValue)

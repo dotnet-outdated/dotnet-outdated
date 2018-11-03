@@ -1,4 +1,5 @@
 using System;
+using DotNetOutdated.Models;
 using NuGet.Frameworks;
 using NuGet.Versioning;
 using Xunit;
@@ -59,11 +60,11 @@ namespace DotNetOutdated.Tests
                 Name = projectName
             };
             var frameworkVersion = new Version(targetFrameworkVersion);
-            var targetFramework = new Project.TargetFramework
+            var targetFramework = new TargetFramework
             {
                 Name = new NuGetFramework(targetFrameworkName, frameworkVersion)
             };
-            var dependency = new Project.Dependency
+            var dependency = new Dependency
             {
                 Name = dependencyName,
                 ResolvedVersion = new NuGetVersion(resolved),
@@ -92,11 +93,11 @@ namespace DotNetOutdated.Tests
                 Name = projectName
             };
             var frameworkVersion = new Version(targetFrameworkVersion);
-            var targetFramework = new Project.TargetFramework
+            var targetFramework = new TargetFramework
             {
                 Name = new NuGetFramework(targetFrameworkName, frameworkVersion)
             };
-            var dependency = new Project.Dependency
+            var dependency = new Dependency
             {
                 Name = dependencyName,
                 ResolvedVersion = new NuGetVersion(resolved),

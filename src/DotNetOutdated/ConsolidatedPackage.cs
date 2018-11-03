@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using DotNetOutdated.Models;
 using NuGet.Frameworks;
 using NuGet.Versioning;
 
@@ -44,6 +45,6 @@ namespace DotNetOutdated
 
         public NuGetVersion ResolvedVersion { get; set; }
 
-        public Services.DependencyUpgradeSeverity? UpgradeSeverity { get; set; }
+        public DependencyUpgradeSeverity? UpgradeSeverity { get; set; }
     }
 }

@@ -7,6 +7,7 @@ using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using DotNetOutdated.Exceptions;
+using DotNetOutdated.Models;
 using DotNetOutdated.Services;
 using McMaster.Extensions.CommandLineUtils;
 using Microsoft.Extensions.DependencyInjection;
@@ -438,7 +439,7 @@ namespace DotNetOutdated
             console.WriteLine();
         }
 
-        private static void WriteTargetFramework(Project.TargetFramework targetFramework, IConsole console)
+        private static void WriteTargetFramework(TargetFramework targetFramework, IConsole console)
         {
             console.WriteIndent();
             console.Write($"[{targetFramework.Name}]", Constants.ReporingColors.TargetFrameworkName);

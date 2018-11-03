@@ -1,3 +1,4 @@
+using DotNetOutdated.Models;
 using NuGet.Versioning;
 using Xunit;
 using Xunit.Abstractions;
@@ -23,7 +24,7 @@ namespace DotNetOutdated.Tests
             var resolvedVersion = new NuGetVersion(resolved);
             var latestVersion = new NuGetVersion(latest);
 
-            var dependency = new Project.Dependency
+            var dependency = new Dependency
             {
                 ResolvedVersion = resolvedVersion,
                 LatestVersion = latestVersion
@@ -40,7 +41,7 @@ namespace DotNetOutdated.Tests
             var resolvedVersion = new NuGetVersion(resolved);
             var latestVersion = new NuGetVersion(latest);
 
-            var dependency = new Project.Dependency
+            var dependency = new Dependency
             {
                 ResolvedVersion = resolvedVersion,
                 LatestVersion = latestVersion
@@ -58,7 +59,7 @@ namespace DotNetOutdated.Tests
             var resolvedVersion = new NuGetVersion(resolved);
             var latestVersion = new NuGetVersion(latest);
 
-            var dependency = new Project.Dependency
+            var dependency = new Dependency
             {
                 ResolvedVersion = resolvedVersion,
                 LatestVersion = latestVersion
@@ -76,7 +77,7 @@ namespace DotNetOutdated.Tests
             var resolvedVersion = new NuGetVersion(resolved);
             var latestVersion = new NuGetVersion(latest);
 
-            var dependency = new Project.Dependency
+            var dependency = new Dependency
             {
                 ResolvedVersion = resolvedVersion,
                 LatestVersion = latestVersion
@@ -94,7 +95,7 @@ namespace DotNetOutdated.Tests
             var resolvedVersion = new NuGetVersion(resolved);
             var latestVersion = new NuGetVersion(latest);
 
-            var dependency = new Project.Dependency
+            var dependency = new Dependency
             {
                 ResolvedVersion = resolvedVersion,
                 LatestVersion = latestVersion

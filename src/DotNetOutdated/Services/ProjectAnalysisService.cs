@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO.Abstractions;
 using System.Linq;
+using DotNetOutdated.Models;
 using NuGet.ProjectModel;
 
 namespace DotNetOutdated.Services
@@ -47,7 +48,7 @@ namespace DotNetOutdated.Services
                 // Get the target frameworks with their dependencies 
                 foreach (var targetFrameworkInformation in packageSpec.TargetFrameworks)
                 {
-                    var targetFramework = new Project.TargetFramework
+                    var targetFramework = new TargetFramework
                     {
                         Name = targetFrameworkInformation.FrameworkName,
                     };
@@ -61,7 +62,7 @@ namespace DotNetOutdated.Services
                         {
                            var projectLibrary = target.Libraries.FirstOrDefault(library => string.Equals(library.Name, projectDependency.Name, StringComparison.OrdinalIgnoreCase));
 
-                            var dependency = new Project.Dependency
+                            var dependency = new Dependency
                             {
                                 Name = projectDependency.Name,
                                 VersionRange = projectDependency.LibraryRange.VersionRange,
@@ -82,7 +83,7 @@ namespace DotNetOutdated.Services
             return projects;
         }
 
-        private void AddDependencies(Project.TargetFramework targetFramework, LockFileTargetLibrary parentLibrary, LockFileTarget target, int level, int transitiveDepth)
+        private void AddDependencies(TargetFramework targetFramework, LockFileTargetLibrary parentLibrary, LockFileTarget target, int level, int transitiveDepth)
         {
             if (parentLibrary?.Dependencies != null)
             {
@@ -93,7 +94,7 @@ namespace DotNetOutdated.Services
                     // Only add library and process child dependencies if we have not come across this dependency before
                     if (!targetFramework.Dependencies.Any(dependency => dependency.Name == packageDependency.Id))
                     {
-                        var childDependency = new Project.Dependency
+                        var childDependency = new Dependency
                         {
                             Name = packageDependency.Id,
                             VersionRange = packageDependency.VersionRange,
