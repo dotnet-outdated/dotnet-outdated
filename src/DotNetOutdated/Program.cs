@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.ComponentModel.Design;
 using System.Globalization;
-using System.IO;
 using System.IO.Abstractions;
 using System.Linq;
 using System.Net.NetworkInformation;
@@ -75,9 +74,14 @@ namespace DotNetOutdated
             ShortName = "f", LongName = "fail-on-updates")]
         public bool FailOnUpdates { get; set; } = false;
 
-        [Option(CommandOptionType.SingleValue, Description = "Specifies the filename for a generated JSON report.",
+        [Option(CommandOptionType.SingleValue, Description = "Specifies the filename for a generated report (Json by default).",
             ShortName = "o", LongName = "output")]
         public string OutputFilename { get; set; } = null;
+
+        [Option(CommandOptionType.SingleValue, Description = "Specifies the output format for the generated report. " +
+                                                             "Possible values: Json (default) or Text.",
+            ShortName = "of", LongName = "output-format")]
+        public OutputFormat OutputFileFormat { get; set; } = OutputFormat.Json;
 
         public static int Main(string[] args)
         {
@@ -417,12 +421,18 @@ namespace DotNetOutdated
             if (OutputFilename != null)
             {
                 Console.WriteLine();
-                Console.WriteLine("Generating JSON report...");
-                var report = new Report
+                Console.WriteLine(string.Format("Generating {0} report...", OutputFileFormat));
+                string reportContent;
+                switch (OutputFileFormat)
                 {
-                    Projects = projects
-                };
-                _fileSystem.File.WriteAllText(OutputFilename, JsonConvert.SerializeObject(report, Formatting.Indented));
+                    case OutputFormat.Text:
+                        reportContent = Report.GetTextReportContent(projects);
+                        break;
+                    default:
+                        reportContent = Report.GetJsonReportContent(projects);
+                        break;
+                }
+                _fileSystem.File.WriteAllText(OutputFilename, reportContent);
                 Console.WriteLine();
             }
         }
