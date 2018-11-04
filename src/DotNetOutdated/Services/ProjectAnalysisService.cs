@@ -3,7 +3,11 @@ using System.Collections.Generic;
 using System.IO.Abstractions;
 using System.Linq;
 using DotNetOutdated.Models;
+using NuGet.Common;
+using NuGet.Packaging;
+using NuGet.Packaging.Core;
 using NuGet.ProjectModel;
+using NuGet.Protocol;
 
 namespace DotNetOutdated.Services
 {
@@ -34,8 +38,8 @@ namespace DotNetOutdated.Services
                 
                 // Load the lock file
                 string lockFilePath = _fileSystem.Path.Combine(packageSpec.RestoreMetadata.OutputPath, "project.assets.json");
-                var lockFile = LockFileUtilities.GetLockFile(lockFilePath, NuGet.Common.NullLogger.Instance);
-                
+                var lockFile = LockFileUtilities.GetLockFile(lockFilePath, NullLogger.Instance);
+
                 // Create a project
                 var project = new Project
                 {
@@ -62,6 +66,13 @@ namespace DotNetOutdated.Services
                         {
                            var projectLibrary = target.Libraries.FirstOrDefault(library => string.Equals(library.Name, projectDependency.Name, StringComparison.OrdinalIgnoreCase));
 
+                            // Determine whether this is a development dependency
+                            bool isDevelopmentDependency = false;
+                            var packageIdentity = new PackageIdentity(projectLibrary.Name, projectLibrary.Version);
+                            var packageInfo = LocalFolderUtility.GetPackageV3(packageSpec.RestoreMetadata.PackagesPath, packageIdentity, NullLogger.Instance);
+                            if (packageInfo != null)
+                                isDevelopmentDependency = packageInfo.GetReader().GetDevelopmentDependency();
+
                             var dependency = new Dependency
                             {
                                 Name = projectDependency.Name,
@@ -69,11 +80,7 @@ namespace DotNetOutdated.Services
                                 ResolvedVersion = projectLibrary?.Version,
                                 IsAutoReferenced = projectDependency.AutoReferenced,
                                 IsTransitive = false,
-
-                                // We have no sure way to determine if this is a development dependency. For now, we simply look whether the
-                                // package contains build assets or alternatively if it contains no runtime and compile time assemblies
-                                IsDevelopmentDependency = projectLibrary != null && (projectLibrary.Build.Any() 
-                                                                                     || (!projectLibrary.CompileTimeAssemblies.Any() && !projectLibrary.RuntimeAssemblies.Any()))
+                                IsDevelopmentDependency = isDevelopmentDependency
                             };
                             targetFramework.Dependencies.Add(dependency);
 
