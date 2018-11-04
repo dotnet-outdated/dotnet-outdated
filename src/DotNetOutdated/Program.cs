@@ -378,7 +378,7 @@ namespace DotNetOutdated
                         if (referencedVersion != null)
                         {
                             var latestVersion = await _nugetService.ResolvePackageVersions(dependency.Name, referencedVersion, project.Sources, dependency.VersionRange,
-                                VersionLock, Prerelease, targetFramework.Name, project.FilePath);
+                                VersionLock, Prerelease, targetFramework.Name, project.FilePath, dependency.IsDevelopmentDependency);
 
                             if (latestVersion != null)
                                 dependency.LatestVersion = latestVersion;

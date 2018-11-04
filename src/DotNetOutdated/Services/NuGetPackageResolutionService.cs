@@ -17,7 +17,7 @@ namespace DotNetOutdated.Services
         }
 
         public async Task<NuGetVersion> ResolvePackageVersions(string packageName, NuGetVersion referencedVersion, List<Uri> sources, VersionRange currentVersionRange,
-            VersionLock versionLock, PrereleaseReporting prerelease, NuGetFramework targetFrameworkName, string projectFilePath)
+            VersionLock versionLock, PrereleaseReporting prerelease, NuGetFramework targetFrameworkName, string projectFilePath, bool isDevelopmentDependency)
         {
             // Determine whether we are interested in pre-releases
             bool includePrerelease = referencedVersion.IsPrerelease;
@@ -30,7 +30,7 @@ namespace DotNetOutdated.Services
             if (!_cache.TryGetValue(cacheKey, out var allVersions))
             {
                 // Get all the available versions
-                allVersions = await _nugetService.GetAllVersions(packageName, sources, includePrerelease, targetFrameworkName, projectFilePath);
+                allVersions = await _nugetService.GetAllVersions(packageName, sources, includePrerelease, targetFrameworkName, projectFilePath, isDevelopmentDependency);
                 _cache.Add(cacheKey, allVersions);
             }
 

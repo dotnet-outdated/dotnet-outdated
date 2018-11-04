@@ -8,6 +8,7 @@ namespace DotNetOutdated.Services
 {
     internal interface INuGetPackageInfoService
     {
-        Task<IReadOnlyList<NuGetVersion>> GetAllVersions(string package, List<Uri> sources, bool includePrerelease, NuGetFramework targetFramework, string projectFilePath);
+        Task<IReadOnlyList<NuGetVersion>> GetAllVersions(string package, List<Uri> sources, bool includePrerelease, NuGetFramework targetFramework, string projectFilePath,
+            bool isDevelopmentDependency);
     }
 }

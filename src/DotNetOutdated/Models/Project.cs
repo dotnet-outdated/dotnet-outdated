@@ -60,6 +60,8 @@ namespace DotNetOutdated.Models
 
         public bool IsAutoReferenced { get; set; }
 
+        public bool IsDevelopmentDependency { get; set; }
+
         public bool IsTransitive { get; set; }
 
         [JsonProperty(Order=0)]

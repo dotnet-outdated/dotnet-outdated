@@ -70,7 +70,7 @@ namespace DotNetOutdated.Services
         }
 
         public async Task<IReadOnlyList<NuGetVersion>> GetAllVersions(string package, List<Uri> sources, bool includePrerelease, NuGetFramework targetFramework,
-            string projectFilePath)
+            string projectFilePath, bool isDevelopmentDependency)
         {
             var allVersions = new List<NuGetVersion>();
             foreach (var source in sources)
@@ -80,14 +80,18 @@ namespace DotNetOutdated.Services
                     var metadata = await FindMetadataResourceForSource(source, projectFilePath);
                     if (metadata != null)
                     {
-                        var reducer = new FrameworkReducer();
+                        var compatibleMetadataList = (await metadata.GetMetadataAsync(package, includePrerelease, false, _context, NullLogger.Instance, CancellationToken.None)).ToList();
 
-                        // We need to ensure that we only get package versions which are compatible with the requested target framework. For certain package types (such as
-                        // Roslyn Analyzers) there is no target framework listed for the actual package itself, as it does not contain libraries. So we need to also allow package
-                        // versions where there are no dependency sets listed
-                        var compatibleMetadataList = (await metadata.GetMetadataAsync(package, includePrerelease, false, _context, NullLogger.Instance, CancellationToken.None))
-                            .Where(meta => meta.DependencySets == null || !meta.DependencySets.Any() ||
-                                           reducer.GetNearest(targetFramework, meta.DependencySets.Select(ds => ds.TargetFramework)) != null);
+                        // We need to ensure that we only get package versions which are compatible with the requested target framework.
+                        // For development dependencies, we do not perform this check
+                        if (!isDevelopmentDependency)
+                        {
+                            var reducer = new FrameworkReducer();
+
+                            compatibleMetadataList = compatibleMetadataList
+                                .Where(meta => reducer.GetNearest(targetFramework, meta.DependencySets.Select(ds => ds.TargetFramework)) != null)
+                                .ToList();
+                        }
 
                         foreach (var m in compatibleMetadataList)
                         {

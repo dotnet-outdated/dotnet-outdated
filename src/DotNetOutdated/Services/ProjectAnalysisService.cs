@@ -68,7 +68,12 @@ namespace DotNetOutdated.Services
                                 VersionRange = projectDependency.LibraryRange.VersionRange,
                                 ResolvedVersion = projectLibrary?.Version,
                                 IsAutoReferenced = projectDependency.AutoReferenced,
-                                IsTransitive = false
+                                IsTransitive = false,
+
+                                // We have no sure way to determine if this is a development dependency. For now, we simply look whether the
+                                // package contains build assets or alternatively if it contains no runtime and compile time assemblies
+                                IsDevelopmentDependency = projectLibrary != null && (projectLibrary.Build.Any() 
+                                                                                     || (!projectLibrary.CompileTimeAssemblies.Any() && !projectLibrary.RuntimeAssemblies.Any()))
                             };
                             targetFramework.Dependencies.Add(dependency);
 
