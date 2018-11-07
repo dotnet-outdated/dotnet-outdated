@@ -11,7 +11,11 @@
 [main-myget]: https://www.myget.org/feed/jerriep/package/nuget/dotnet-outdated
 [main-myget-badge]: https://img.shields.io/www.myget/jerriep/vpre/dotnet-outdated.svg?style=flat-square&label=myget
 
-A .NET Core global tool to display outdated NuGet packages in a project
+## Overview
+
+When using an IDE such as Visual Studio, it is easy to find out whether newer versions of the NuGet packages used by your project is available, by using the NuGet Package Manager. However, the .NET Core command-line tools do not provide a built-in way for you to report on outdated NuGet packages.
+
+**dotnet-outdated** is a .NET Core Global tool that allows you to quickly report on any outdated NuGet packages in your .NET Core and .NET Standard projects. 
 
 - [Installation](#installation)
 - [Usage](#usage)
