@@ -1,7 +1,10 @@
 using System;
 using System.Text;
 using System.Collections.Generic;
+using System.IO;
+using System.Resources;
 using System.Threading.Tasks;
+using CsvHelper;
 using DotNetOutdated.Models;
 using Newtonsoft.Json;
 
@@ -12,7 +15,7 @@ namespace DotNetOutdated.Services
         Task WriteReport(string filename, List<Project> projects);
     }
 
-    public class JsonReporingService : IReportingService
+    public class JsonReportingService : IReportingService
     {
         public Task WriteReport(string filename, List<Project> projects)
         {
@@ -63,21 +66,39 @@ namespace DotNetOutdated.Services
                 upgradeSeverity);
         }
 
-        public static string GetTextReportContent(List<Project> projects)
+        public static string GetCsvReportContent(List<Project> projects)
         {
-            var sb = new StringBuilder();
-            foreach (var project in projects)
+            using (var sw = new StringWriter())
+            using (var csv = new CsvWriter(sw))
             {
-                foreach (var targetFramework in project.TargetFrameworks)
+                foreach (var project in projects)
                 {
-                    foreach (var dependency in targetFramework.Dependencies)
+                    foreach (var targetFramework in project.TargetFrameworks)
                     {
-                        sb.AppendLine(Report.GetTextReportLine(project, targetFramework, dependency));
+                        foreach (var dependency in targetFramework.Dependencies)
+                        {
+                            var upgradeSeverity = "";
+                            if (dependency.UpgradeSeverity.HasValue)
+                            {
+                                upgradeSeverity = Enum.GetName(typeof(DependencyUpgradeSeverity), dependency.UpgradeSeverity);
+                            }
+
+                            csv.WriteRecord(new
+                            {
+                                ProjectName = project.Name,
+                                TargetFrameworkName = targetFramework.Name.DotNetFrameworkName,
+                                DependencyName = dependency.Name,
+                                ResolvedVersion = dependency.ResolvedVersion?.ToString(),
+                                LatestVersion = dependency.LatestVersion?.ToString(),
+                                UpgradeSeverity = upgradeSeverity
+                            });
+                            csv.NextRecord();
+                        }
                     }
                 }
-            }
 
-            return sb.ToString();
+                return sw.ToString();
+            }
         }
 
         public static string GetJsonReportContent(List<Project> projects)

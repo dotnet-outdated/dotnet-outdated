@@ -420,7 +420,7 @@ namespace DotNetOutdated
                 switch (OutputFileFormat)
                 {
                     case OutputFormat.Csv:
-                        reportContent = Report.GetTextReportContent(projects);
+                        reportContent = Report.GetCsvReportContent(projects);
                         break;
                     default:
                         reportContent = Report.GetJsonReportContent(projects);
