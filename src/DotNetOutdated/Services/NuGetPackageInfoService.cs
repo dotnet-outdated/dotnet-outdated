@@ -103,6 +103,10 @@ namespace DotNetOutdated.Services
                             {
                                 allVersions.Add(packageSearchMetadataV2Feed.Version);
                             }
+                            else if (m is LocalPackageSearchMetadata localPackageSearchMetadata)
+                            {
+                                allVersions.Add(localPackageSearchMetadata.Identity.Version);
+                            }
                         };
                     }
                 }
