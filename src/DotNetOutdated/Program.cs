@@ -68,11 +68,11 @@ namespace DotNetOutdated
         public bool FailOnUpdates { get; set; } = false;
 
         [Option(CommandOptionType.SingleValue, Description = "Specifies to only look at packages where the name contains the provided string.", 
-            ShortName = "i", LongName = "include")]
+            ShortName = "inc", LongName = "include")]
         public string FilterInclude { get; set; } = string.Empty;
 
         [Option(CommandOptionType.SingleValue, Description = "Specifies to only look at packages where the name does not contain the provided string.",
-            ShortName = "e", LongName = "exclude")]
+            ShortName = "exc", LongName = "exclude")]
         public string FilterExclude { get; set; } = string.Empty;
 
         [Option(CommandOptionType.SingleValue, Description = "Specifies the filename for a generated report. " +
