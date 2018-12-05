@@ -1,100 +1,62 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using DotNetOutdated.Services;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Converters;
 using NuGet.Frameworks;
 using NuGet.Versioning;
 
 namespace DotNetOutdated.Models
 {
-    [JsonObject(MemberSerialization.OptIn)]
     public class Project
     {
-        public List<Uri> Sources { get; set; } = new List<Uri>();
-        
-        [JsonProperty(Order=2)]
-        public List<TargetFramework> TargetFrameworks { get; set; } = new List<TargetFramework>();
+        public string FilePath { get; }
 
-        [JsonProperty(Order=0)]
-        public string Name { get; set; }
+        public string Name { get; }
 
-        [JsonProperty(Order=1)]
-        public string FilePath { get; set; }
+        public IList<Uri> Sources { get; }
+
+        public IList<TargetFramework> TargetFrameworks { get; } = new List<TargetFramework>();
+
+        public Project(string name, string filePath, IEnumerable<Uri> sources)
+        {
+            FilePath = filePath;
+            Name = name;
+            Sources = new List<Uri>(sources);
+        }
     }
 
-    [JsonObject(MemberSerialization.OptIn)]
     public class TargetFramework
     {
-        [JsonProperty(Order=1)]
-        public List<Dependency> Dependencies { get; set; } = new List<Dependency>();
+        public IList<Dependency> Dependencies { get; } = new List<Dependency>();
 
-
-        [JsonProperty(Order=0)]
-        [JsonConverter(typeof(ToStringJsonConverter))]
         public NuGetFramework Name { get; set; }
+
+        public TargetFramework(NuGetFramework name)
+        {
+            Name = name;
+        }
     }
 
-    [JsonObject(MemberSerialization.OptIn)]
     public class Dependency
     {
-        public string Description
+        public bool IsAutoReferenced { get; }
+
+        public bool IsDevelopmentDependency { get; }
+
+        public bool IsTransitive { get; }
+
+        public string Name { get; }
+
+        public NuGetVersion ResolvedVersion { get; }
+
+        public VersionRange VersionRange { get; }
+
+        public Dependency(string name, VersionRange versionRange, NuGetVersion resolvedVersion, bool isAutoReferenced, bool isTransitive, bool isDevelopmentDependency)
         {
-            get
-            {
-                string description = Name;
-
-                if (IsAutoReferenced)
-                    description += " [A]";
-                else if (IsTransitive)
-                    description += " [T]";
-
-                return description;
-            }
-        }
-
-        public string Error { get; set; }
-
-        public bool HasError => !String.IsNullOrEmpty(Error);
-
-        public bool IsAutoReferenced { get; set; }
-
-        public bool IsDevelopmentDependency { get; set; }
-
-        public bool IsTransitive { get; set; }
-
-        [JsonProperty(Order=0)]
-        public string Name { get; set; }
-            
-        public VersionRange VersionRange { get; set; }
-
-        [JsonProperty(Order=1)]
-        [JsonConverter(typeof(ToStringJsonConverter))]
-        public NuGetVersion ResolvedVersion { get; set; }
-
-        [JsonProperty(Order=2)]
-        [JsonConverter(typeof(ToStringJsonConverter))]
-        public NuGetVersion LatestVersion { get; set; }
-
-        [JsonProperty(Order=3)]
-        [JsonConverter(typeof(StringEnumConverter))]
-        public DependencyUpgradeSeverity? UpgradeSeverity
-        {
-            get
-            {
-                if (LatestVersion == null || ResolvedVersion == null)
-                    return null;
-
-                if (LatestVersion.Major > ResolvedVersion.Major || ResolvedVersion.IsPrerelease)
-                    return DependencyUpgradeSeverity.Major;
-                if (LatestVersion.Minor > ResolvedVersion.Minor)
-                    return DependencyUpgradeSeverity.Minor;
-                if (LatestVersion.Patch > ResolvedVersion.Patch || LatestVersion.Revision > ResolvedVersion.Revision)
-                    return DependencyUpgradeSeverity.Patch;
-                    
-                return DependencyUpgradeSeverity.None;
-            }
+            Name = name;
+            VersionRange = versionRange;
+            ResolvedVersion = resolvedVersion;
+            IsAutoReferenced = isAutoReferenced;
+            IsTransitive = isTransitive;
+            IsDevelopmentDependency = isDevelopmentDependency;
         }
     }
 }

@@ -5,6 +5,7 @@
         None,
         Patch,
         Minor,
-        Major
+        Major,
+        Unknown
     }
 }
