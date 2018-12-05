@@ -57,12 +57,15 @@ namespace DotNetOutdated.Services
                         {
                            var projectLibrary = target.Libraries.FirstOrDefault(library => string.Equals(library.Name, projectDependency.Name, StringComparison.OrdinalIgnoreCase));
 
-                            // Determine whether this is a development dependency
                             bool isDevelopmentDependency = false;
-                            var packageIdentity = new PackageIdentity(projectLibrary.Name, projectLibrary.Version);
-                            var packageInfo = LocalFolderUtility.GetPackageV3(packageSpec.RestoreMetadata.PackagesPath, packageIdentity, NullLogger.Instance);
-                            if (packageInfo != null)
-                                isDevelopmentDependency = packageInfo.GetReader().GetDevelopmentDependency();
+                            if (projectLibrary != null)
+                            {
+                                // Determine whether this is a development dependency
+                                var packageIdentity = new PackageIdentity(projectLibrary.Name, projectLibrary.Version);
+                                var packageInfo = LocalFolderUtility.GetPackageV3(packageSpec.RestoreMetadata.PackagesPath, packageIdentity, NullLogger.Instance);
+                                if (packageInfo != null)
+                                    isDevelopmentDependency = packageInfo.GetReader().GetDevelopmentDependency();
+                            }
 
                             var dependency = new Dependency(projectDependency.Name, projectDependency.LibraryRange.VersionRange, projectLibrary?.Version,
                                 projectDependency.AutoReferenced, false, isDevelopmentDependency);
