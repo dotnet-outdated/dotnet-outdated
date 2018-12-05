@@ -160,24 +160,29 @@ namespace DotNetOutdated
                 // Analyze the dependencies
                 var outdatedProjects = await AnalyzeDependencies(projects, console);
 
-                // Report on the outdated dependencies
-                ReportOutdatedDependencies(outdatedProjects, console);
-                
-                // Upgrade the packages
-                UpgradePackages(outdatedProjects, console);
-
-                if (!Upgrade.HasValue)
+                if (outdatedProjects.Any())
                 {
-                    console.WriteLine();
-                    console.WriteLine("You can upgrade packages to the latest version by passing the -u or -u:prompt option.");
+                    // Report on the outdated dependencies
+                    ReportOutdatedDependencies(outdatedProjects, console);
+
+                    // Upgrade the packages
+                    UpgradePackages(outdatedProjects, console);
+
+                    if (!Upgrade.HasValue)
+                    {
+                        console.WriteLine();
+                        console.WriteLine("You can upgrade packages to the latest version by passing the -u or -u:prompt option.");
+                    }
+
+                    // Output report file
+                    GenerateOutputFile(outdatedProjects);
+
+                    if (FailOnUpdates)
+                        return 2;
                 }
-
-                // Output report file
-                GenerateOutputFile(outdatedProjects);
-
-                if (FailOnUpdates && outdatedProjects.Any())
+                else
                 {
-                    return 2;
+                    console.WriteLine("No outdated dependencies were detected");
                 }
 
                 return 0;
@@ -300,12 +305,6 @@ namespace DotNetOutdated
 
         private void ReportOutdatedDependencies(List<AnalyzedProject> projects, IConsole console)
         {
-            if (!projects.Any())
-            {
-                console.WriteLine("No outdated dependencies were detected");
-                return;
-            }
-
             foreach (var project in projects)
             {
                 WriteProjectName(project.Name, console);
