@@ -89,7 +89,8 @@ namespace DotNetOutdated.Services
                             var reducer = new FrameworkReducer();
 
                             compatibleMetadataList = compatibleMetadataList
-                                .Where(meta => reducer.GetNearest(targetFramework, meta.DependencySets.Select(ds => ds.TargetFramework)) != null)
+                                .Where(meta => meta.DependencySets == null || !meta.DependencySets.Any() ||
+                                               reducer.GetNearest(targetFramework, meta.DependencySets.Select(ds => ds.TargetFramework)) != null)
                                 .ToList();
                         }
 
