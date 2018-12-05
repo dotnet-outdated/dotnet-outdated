@@ -27,6 +27,8 @@ When using an IDE such as Visual Studio, it is easy to find out whether newer ve
 - [Reporting on transitive dependencies](#reporting-on-transitive-dependencies)
 - [Failing when updates are available](#failing-when-updates-are-available)
 - [Auto-references](#auto-references)
+- [Saving results to a file](#saving-results-to-a-file)
+- [Including and excluding packages](#including-and-excluding-packages)
 - [FAQ](#faq)
 
 ## Installation
@@ -59,11 +61,12 @@ Options:
   -vl|--version-lock <VERSION_LOCK>          Specifies whether the package should be locked to the current Major or Minor version. Possible values: None (default), Major or Minor.
   -t|--transitive                            Specifies whether it should detect transitive dependencies.
   -td|--transitive-depth <TRANSITIVE_DEPTH>  Defines how many levels deep transitive dependencies should be analyzed. Integer value (default = 1)
-  -f|--fail-on-updates                       Specifies whether it should return a non-zero exit code when updates are found.
   -u|--upgrade:<TYPE>                        Specifies whether outdated packages should be upgraded. Possible values for <TYPE> is Auto (default) or Prompt.
-  -o|--output <FILENAME>                     Specifies the filename for a generated JSON report.
-  -e|--exclude                               Specifies to only look at packages where the name does not contain the provided string.
-  -i|--include                               Specifies to only look at packages where the name contains the provided string.
+  -f|--fail-on-updates                       Specifies whether it should return a non-zero exit code when updates are found.
+  -inc|--include <FILTER_INCLUDE>            Specifies to only look at packages where the name contains the provided string.
+  -exc|--exclude <FILTER_EXCLUDE>            Specifies to only look at packages where the name does not contain the provided string.
+  -o|--output <OUTPUT_FILENAME>              Specifies the filename for a generated report. (Use the -of|--output-format option to specify the format. JSON by default.)
+  -of|--output-format <OUTPUT_FILE_FORMAT>   Specifies the output format for the generated report. Possible values: json (default) or csv.```
 ```
 
 ![Screenshot of dotnet-outdated](screenshot.png)
@@ -129,6 +132,16 @@ You can also specify how many levels deep it should analyze transitive dependenc
 Before version 1.2 of **dotnet-outdated**, it used to include automatically references packages in the output. The automatically referenced packages are typically your framework packages, such as `Microsoft.NETCore.App` or `NETStandard.Library`. It does not make sense reporting on these as outdated since you should target a new framework to have these updated.
 
 From version 1.2, if you want these packages reported, you can pass the `-i|--include-auto-references` option. These packages will also be denoted with the text **[A]** appearing in the output after the package name.
+
+## Saving results to a file
+
+You can save the results of **dotnet-outdated** to a file by specifying the name of an output file using the `-o|--output` option. By default, the results will be saved in JSON format. You can specify an alternate format using the `-of|--output-format` option.
+
+## Including and excluding packages
+
+You can choose to include only specific packages by using the `-inc|--include` option. Only packages whose name contain the specified value will be included. For example, if you only want to analyze packages containing the value "microsoft", you can use the command `dotnet outdated --include microsoft`.
+
+Conversely, you can exclude specific packages by using the `-exc|--exclude` option. In this case all packages will be analyzed except packages whose name contain the specified value. For example, if you want to exclude packages containing the value "microsoft", you can use the command `dotnet outdated --exclude microsoft`
 
 ## FAQ
 

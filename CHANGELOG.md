@@ -1,5 +1,11 @@
 # Changelog
 
+## [v2.2.0]
+
+- Add ability to filter packages with the `--include` and `--exclude` option (See [#55](https://github.com/jerriep/dotnet-outdated/issues/55)) - Thank you [Jeppe Ravn Christiansen](https://github.com/jepperc)
+- Add ability to save results to a JSON or CSV file (See [#29](https://github.com/jerriep/dotnet-outdated/issues/29) and [#57](https://github.com/jerriep/dotnet-outdated/issues/57)) - Thank you [Patrick Dwyer](https://github.com/patros)
+- Fix some scenarios where current or latest versions for certain packages could not be resolved 
+
 ## [v2.1.0]
 
 - Excludes unsupported projects (See [#58](https://github.com/jerriep/dotnet-outdated/issues/58)) - Thank you [Thomas Levesque](https://github.com/thomaslevesque)
@@ -66,6 +72,7 @@ Initial release
 
 - A .NET Core global tool to display outdated NuGet packages in a project
 
+[v2.2.0]: https://github.com/jerriep/dotnet-outdated/tree/v2.2.0
 [v2.1.0]: https://github.com/jerriep/dotnet-outdated/tree/v2.1.0
 [v2.0.0]: https://github.com/jerriep/dotnet-outdated/tree/v2.0.0
 [v1.3.0]: https://github.com/jerriep/dotnet-outdated/tree/v1.3.0
