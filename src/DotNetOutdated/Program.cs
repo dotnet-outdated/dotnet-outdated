@@ -300,6 +300,12 @@ namespace DotNetOutdated
 
         private void ReportOutdatedDependencies(List<AnalyzedProject> projects, IConsole console)
         {
+            if (!projects.Any())
+            {
+                console.WriteLine("No outdated dependencies were detected");
+                return;
+            }
+
             foreach (var project in projects)
             {
                 WriteProjectName(project.Name, console);
@@ -313,24 +319,16 @@ namespace DotNetOutdated
                         .OrderBy(d => d.Name)
                         .ToList();
 
-                    if (dependencies.Count > 0)
-                    {
-                        int[] columnWidths = dependencies.DetermineColumnWidths();
+                    int[] columnWidths = dependencies.DetermineColumnWidths();
 
-                        foreach (var dependency in dependencies)
-                        {
-                            console.WriteIndent();
-                            console.Write(dependency.Description?.PadRight(columnWidths[0] + 2));
-
-                            WriteColoredUpgrade(dependency.UpgradeSeverity, dependency.ResolvedVersion, dependency.LatestVersion, columnWidths[1], columnWidths[2], console);
-
-                            console.WriteLine();
-                        }
-                    }
-                    else
+                    foreach (var dependency in dependencies)
                     {
                         console.WriteIndent();
-                        console.WriteLine("-- No outdated dependencies --");
+                        console.Write(dependency.Description?.PadRight(columnWidths[0] + 2));
+
+                        WriteColoredUpgrade(dependency.UpgradeSeverity, dependency.ResolvedVersion, dependency.LatestVersion, columnWidths[1], columnWidths[2], console);
+
+                        console.WriteLine();
                     }
                 }
 
