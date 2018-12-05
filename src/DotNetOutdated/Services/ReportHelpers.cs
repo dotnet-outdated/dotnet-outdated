@@ -1,8 +1,6 @@
 using System;
-using System.Text;
 using System.Collections.Generic;
 using System.IO;
-using System.Resources;
 using System.Threading.Tasks;
 using CsvHelper;
 using DotNetOutdated.Models;
@@ -48,15 +46,11 @@ namespace DotNetOutdated.Services
 
     public class Report
     {
-        public List<Project> Projects { get; set; }
+        public List<AnalyzedProject> Projects { get; set; }
 
-        internal static string GetTextReportLine(Project project, TargetFramework targetFramework, Dependency dependency)
+        internal static string GetTextReportLine(AnalyzedProject project, AnalyzedTargetFramework targetFramework, AnalyzedDependency dependency)
         {
-            var upgradeSeverity = "";
-            if (dependency.UpgradeSeverity.HasValue)
-            {
-                upgradeSeverity = Enum.GetName(typeof(DependencyUpgradeSeverity), dependency.UpgradeSeverity);
-            }
+            var upgradeSeverity = Enum.GetName(typeof(DependencyUpgradeSeverity), dependency.UpgradeSeverity);
             return string.Format("{0};{1};{2};{3};{4};{5}",
                 project.Name,
                 targetFramework.Name,
@@ -66,7 +60,7 @@ namespace DotNetOutdated.Services
                 upgradeSeverity);
         }
 
-        public static string GetCsvReportContent(List<Project> projects)
+        public static string GetCsvReportContent(List<AnalyzedProject> projects)
         {
             using (var sw = new StringWriter())
             using (var csv = new CsvWriter(sw))
@@ -77,11 +71,7 @@ namespace DotNetOutdated.Services
                     {
                         foreach (var dependency in targetFramework.Dependencies)
                         {
-                            var upgradeSeverity = "";
-                            if (dependency.UpgradeSeverity.HasValue)
-                            {
-                                upgradeSeverity = Enum.GetName(typeof(DependencyUpgradeSeverity), dependency.UpgradeSeverity);
-                            }
+                            var upgradeSeverity = Enum.GetName(typeof(DependencyUpgradeSeverity), dependency.UpgradeSeverity);
 
                             csv.WriteRecord(new
                             {
@@ -101,7 +91,7 @@ namespace DotNetOutdated.Services
             }
         }
 
-        public static string GetJsonReportContent(List<Project> projects)
+        public static string GetJsonReportContent(List<AnalyzedProject> projects)
         {
             var report = new Report
             {

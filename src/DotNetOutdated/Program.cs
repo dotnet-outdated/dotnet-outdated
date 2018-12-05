@@ -150,13 +150,13 @@ namespace DotNetOutdated
                     console.WriteLine();
 
                 // Analyze the dependencies
-                await AnalyzeDependencies(projects, console);
+                var outdatedProjects = await AnalyzeDependencies(projects, console);
 
                 // Report on the outdated dependencies
-                ReportOutdatedDependencies(projects, console);
+                ReportOutdatedDependencies(outdatedProjects, console);
                 
                 // Upgrade the packages
-                UpgradePackages(projects, console);
+                UpgradePackages(outdatedProjects, console);
 
                 if (!Upgrade.HasValue)
                 {
@@ -165,9 +165,9 @@ namespace DotNetOutdated
                 }
 
                 // Output report file
-                GenerateOutputFile(projects);
+                GenerateOutputFile(outdatedProjects);
 
-                if (FailOnUpdates && UpdatesExist(projects))
+                if (FailOnUpdates && outdatedProjects.Any())
                 {
                     return 2;
                 }
@@ -182,7 +182,7 @@ namespace DotNetOutdated
             }
         }
 
-        private void UpgradePackages(List<Project> projects, IConsole console)
+        private void UpgradePackages(List<AnalyzedProject> projects, IConsole console)
         {
             if (Upgrade.HasValue)
             {
@@ -290,16 +290,7 @@ namespace DotNetOutdated
             console.Write(rest, GetUpgradeSeverityColor(upgradeSeverity));
         }
 
-        internal static bool UpdatesExist(List<Project> projects)
-        {
-            var dependenciesWithUpdates = projects
-                .SelectMany(p => p.TargetFrameworks)
-                .SelectMany(f => f.Dependencies)
-                .Where(d => d.LatestVersion > d.ResolvedVersion);
-            return dependenciesWithUpdates.Any();
-        }
-
-        private void ReportOutdatedDependencies(List<Project> projects, IConsole console)
+        private void ReportOutdatedDependencies(List<AnalyzedProject> projects, IConsole console)
         {
             foreach (var project in projects)
             {
@@ -311,7 +302,6 @@ namespace DotNetOutdated
                     WriteTargetFramework(targetFramework, console);
 
                     var dependencies = targetFramework.Dependencies
-                        .Where(d => (d.UpgradeSeverity.HasValue && d.UpgradeSeverity != DependencyUpgradeSeverity.None) || d.HasError)
                         .OrderBy(d => d.Name)
                         .ToList();
 
@@ -324,10 +314,7 @@ namespace DotNetOutdated
                             console.WriteIndent();
                             console.Write(dependency.Description?.PadRight(columnWidths[0] + 2));
 
-                            if (dependency.HasError)
-                                console.Write(dependency.Error, ConsoleColor.Red);
-                            else
-                                WriteColoredUpgrade(dependency.UpgradeSeverity, dependency.ResolvedVersion, dependency.LatestVersion, columnWidths[1], columnWidths[2], console);
+                            WriteColoredUpgrade(dependency.UpgradeSeverity, dependency.ResolvedVersion, dependency.LatestVersion, columnWidths[1], columnWidths[2], console);
 
                             console.WriteLine();
                         }
@@ -342,7 +329,7 @@ namespace DotNetOutdated
                 console.WriteLine();
             }
 
-            if (projects.SelectMany(p => p.TargetFrameworks).SelectMany(f => f.Dependencies).Any(d => d.HasError))
+            if (projects.SelectMany(p => p.TargetFrameworks).SelectMany(f => f.Dependencies).Any(d => d.UpgradeSeverity == DependencyUpgradeSeverity.Unknown))
             {
                 console.WriteLine("Errors occurred while analyzing dependencies for some of your projects. Are you sure you can connect to all your configured NuGet servers?", ConsoleColor.Red);
                 console.WriteLine();
@@ -351,16 +338,22 @@ namespace DotNetOutdated
             PrintColorLegend(console);
         }
 
-        private async Task AnalyzeDependencies(List<Project> projects, IConsole console)
+        private async Task<List<AnalyzedProject>> AnalyzeDependencies(List<Project> projects, IConsole console)
         {
+            var outdatedProjects = new List<AnalyzedProject>();
+
             if (console.IsOutputRedirected)
                 console.WriteLine("Analyzing dependencies...");
-                
+
             foreach (var project in projects)
             {
+                var outdatedFrameworks = new List<AnalyzedTargetFramework>();
+
                 // Process each target framework with its related dependencies
                 foreach (var targetFramework in project.TargetFrameworks)
                 {
+                    var outdatedDependencies = new List<AnalyzedDependency>();
+
                     var dependencies = targetFramework.Dependencies
                         .Where(d => IncludeAutoReferences || d.IsAutoReferenced == false)
                         .OrderBy(dependency => dependency.IsTransitive)
@@ -374,25 +367,30 @@ namespace DotNetOutdated
                             console.Write($"Analyzing dependencies for {project.Name} [{targetFramework.Name}] ({index + 1}/{dependencies.Count})");
 
                         var referencedVersion = dependency.ResolvedVersion;
+                        NuGetVersion latestVersion = null;
 
                         if (referencedVersion != null)
                         {
-                            var latestVersion = await _nugetService.ResolvePackageVersions(dependency.Name, referencedVersion, project.Sources, dependency.VersionRange,
+                            latestVersion = await _nugetService.ResolvePackageVersions(dependency.Name, referencedVersion, project.Sources, dependency.VersionRange,
                                 VersionLock, Prerelease, targetFramework.Name, project.FilePath, dependency.IsDevelopmentDependency);
-
-                            if (latestVersion != null)
-                                dependency.LatestVersion = latestVersion;
-                            else
-                                dependency.Error = "Cannot determine latest version!";
                         }
-                        else
-                            dependency.Error = "Cannot determine current version!";
+
+                        if (referencedVersion == null || latestVersion == null || referencedVersion != latestVersion)
+                            outdatedDependencies.Add(new AnalyzedDependency(dependency, latestVersion));
 
                         if (!console.IsOutputRedirected)
                             ClearCurrentConsoleLine();
                     }
+
+                    if (outdatedDependencies.Count > 0) 
+                        outdatedFrameworks.Add(new AnalyzedTargetFramework(targetFramework.Name, outdatedDependencies));
                 }
+
+                if (outdatedFrameworks.Count > 0)
+                    outdatedProjects.Add(new AnalyzedProject(project.Name, project.FilePath, outdatedFrameworks));
             }
+
+            return outdatedProjects;
         }
 
         private static ConsoleColor GetUpgradeSeverityColor(DependencyUpgradeSeverity? upgradeSeverity)
@@ -410,7 +408,7 @@ namespace DotNetOutdated
             }
         }
 
-        private void GenerateOutputFile(List<Project> projects)
+        private void GenerateOutputFile(List<AnalyzedProject> projects)
         {
             if (OutputFilename != null)
             {
@@ -439,7 +437,7 @@ namespace DotNetOutdated
             console.WriteLine();
         }
 
-        private static void WriteTargetFramework(TargetFramework targetFramework, IConsole console)
+        private static void WriteTargetFramework(AnalyzedTargetFramework targetFramework, IConsole console)
         {
             console.WriteIndent();
             console.Write($"[{targetFramework.Name}]", Constants.ReporingColors.TargetFrameworkName);

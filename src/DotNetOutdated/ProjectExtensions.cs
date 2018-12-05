@@ -1,13 +1,12 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
 using DotNetOutdated.Models;
-using DotNetOutdated.Services;
 
 namespace DotNetOutdated
 {
     public static class ProjectExtensions
     {
-        public static List<ConsolidatedPackage> ConsolidatePackages(this List<Project> projects)
+        public static List<ConsolidatedPackage> ConsolidatePackages(this List<AnalyzedProject> projects)
         {
             // Get a flattened view of all the outdated packages
             var outdated = from p in projects
