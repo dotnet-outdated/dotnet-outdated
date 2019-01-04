@@ -66,7 +66,7 @@ Options:
   -inc|--include <FILTER_INCLUDE>            Specifies to only look at packages where the name contains the provided string.
   -exc|--exclude <FILTER_EXCLUDE>            Specifies to only look at packages where the name does not contain the provided string.
   -o|--output <OUTPUT_FILENAME>              Specifies the filename for a generated report. (Use the -of|--output-format option to specify the format. JSON by default.)
-  -of|--output-format <OUTPUT_FILE_FORMAT>   Specifies the output format for the generated report. Possible values: json (default) or csv.```
+  -of|--output-format <OUTPUT_FILE_FORMAT>   Specifies the output format for the generated report. Possible values: json (default) or csv.
 ```
 
 ![Screenshot of dotnet-outdated](screenshot.png)
