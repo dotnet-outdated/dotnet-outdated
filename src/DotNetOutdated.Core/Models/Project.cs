@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using NuGet.Frameworks;
 using NuGet.Versioning;
 
-namespace DotNetOutdated.Models
+namespace DotNetOutdated.Core.Models
 {
     public class Project
     {
