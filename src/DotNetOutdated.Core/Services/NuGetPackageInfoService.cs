@@ -4,6 +4,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
+using DotNetOutdated.Core.Extensions;
 using NuGet.Common;
 using NuGet.Configuration;
 using NuGet.Frameworks;

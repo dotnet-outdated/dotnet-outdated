@@ -5,10 +5,26 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="McMaster.Extensions.CommandLineUtils" Version="2.2.5" />
     <PackageReference Include="NuGet.Configuration" Version="4.8.0-preview1.5156" />
     <PackageReference Include="NuGet.ProjectModel" Version="4.8.0-preview1.5156" />
     <PackageReference Include="NuGet.Protocol" Version="4.8.0-preview1.5156" />
     <PackageReference Include="NuGet.Versioning" Version="4.8.0-preview1.5156" />
     <PackageReference Include="System.IO.Abstractions" Version="3.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Update="Resources\ValidationErrorMessages.Designer.cs">
+      <DependentUpon>ValidationErrorMessages.resx</DependentUpon>
+      <DesignTime>True</DesignTime>
+      <AutoGen>True</AutoGen>
+    </Compile>
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Update="Resources\ValidationErrorMessages.resx">
+      <LastGenOutput>ValidationErrorMessages.Designer.cs</LastGenOutput>
+      <Generator>ResXFileCodeGenerator</Generator>
+    </EmbeddedResource>
   </ItemGroup>
 </Project>

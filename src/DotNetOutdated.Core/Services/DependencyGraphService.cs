@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Abstractions;
 using System.Xml.Linq;
-using DotNetOutdated.Exceptions;
+using DotNetOutdated.Core.Exceptions;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using NuGet.ProjectModel;

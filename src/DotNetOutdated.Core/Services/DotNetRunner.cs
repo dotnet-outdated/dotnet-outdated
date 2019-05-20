@@ -1,8 +1,8 @@
-﻿using System.Diagnostics;
+﻿using McMaster.Extensions.CommandLineUtils;
+using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Threading.Tasks;
-using McMaster.Extensions.CommandLineUtils;
 
 namespace DotNetOutdated.Core.Services
 {

@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.IO.Abstractions;
 using System.Linq;
-using DotNetOutdated.Models;
+using DotNetOutdated.Core.Models;
 using NuGet.Common;
 using NuGet.Packaging.Core;
 using NuGet.ProjectModel;
