@@ -2,6 +2,9 @@
 
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>DotNetOutdated.Core</PackageId>
+    <PackageTags>dotnet;outdated;core;lib</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>
