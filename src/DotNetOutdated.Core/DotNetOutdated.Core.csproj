@@ -15,16 +15,16 @@
 
   <ItemGroup>
     <Compile Update="Resources\ValidationErrorMessages.Designer.cs">
-      <DependentUpon>ValidationErrorMessages.resx</DependentUpon>
       <DesignTime>True</DesignTime>
       <AutoGen>True</AutoGen>
+      <DependentUpon>ValidationErrorMessages.resx</DependentUpon>
     </Compile>
   </ItemGroup>
 
   <ItemGroup>
     <EmbeddedResource Update="Resources\ValidationErrorMessages.resx">
-      <LastGenOutput>ValidationErrorMessages.Designer.cs</LastGenOutput>
       <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>ValidationErrorMessages.Designer.cs</LastGenOutput>
     </EmbeddedResource>
   </ItemGroup>
 </Project>

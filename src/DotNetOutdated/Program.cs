@@ -6,12 +6,15 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
-using DotNetOutdated.Exceptions;
+using DotNetOutdated.Core.Exceptions;
 using DotNetOutdated.Models;
+using DotNetOutdated.Core.Models;
 using DotNetOutdated.Services;
+using DotNetOutdated.Core.Services;
 using McMaster.Extensions.CommandLineUtils;
 using Microsoft.Extensions.DependencyInjection;
 using NuGet.Versioning;
+using DotNetOutdated.Core;
 
 [assembly: InternalsVisibleTo("DotNetOutdated.Tests")]
 [assembly: InternalsVisibleTo("DynamicProxyGenAssembly2")]

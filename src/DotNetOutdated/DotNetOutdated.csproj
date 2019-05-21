@@ -20,16 +20,6 @@
     <PackageReference Include="System.IO.Abstractions" Version="3.0.2" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Update="Resources\ValidationErrorMessages.Designer.cs">
-      <DesignTime>True</DesignTime>
-      <AutoGen>True</AutoGen>
-      <DependentUpon>ValidationErrorMessages.resx</DependentUpon>
-    </Compile>
-  </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Update="Resources\ValidationErrorMessages.resx">
-      <Generator>ResXFileCodeGenerator</Generator>
-      <LastGenOutput>ValidationErrorMessages.Designer.cs</LastGenOutput>
-    </EmbeddedResource>
+    <ProjectReference Include="..\DotNetOutdated.Core\DotNetOutdated.Core.csproj" />
   </ItemGroup>
 </Project>

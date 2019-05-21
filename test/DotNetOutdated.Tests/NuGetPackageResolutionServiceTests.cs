@@ -1,7 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using DotNetOutdated.Services;
+using DotNetOutdated.Core;
+using DotNetOutdated.Core.Services;
 using Moq;
 using NuGet.Frameworks;
 using NuGet.Versioning;

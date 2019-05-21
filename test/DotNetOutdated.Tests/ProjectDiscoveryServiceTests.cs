@@ -1,9 +1,10 @@
+using DotNetOutdated.Core.Exceptions;
+using DotNetOutdated.Core.Resources;
+using DotNetOutdated.Core.Services;
 using System.Collections.Generic;
 using System.IO.Abstractions.TestingHelpers;
-using XFS = System.IO.Abstractions.TestingHelpers.MockUnixSupport;
-using DotNetOutdated.Exceptions;
-using DotNetOutdated.Services;
 using Xunit;
+using XFS = System.IO.Abstractions.TestingHelpers.MockUnixSupport;
 
 namespace DotNetOutdated.Tests
 {
@@ -49,7 +50,7 @@ namespace DotNetOutdated.Tests
             
             // Assert
             var exception = Assert.Throws<CommandValidationException>(() => projectDiscoveryService.DiscoverProject(_path));
-            Assert.Equal(exception.Message, string.Format(Resources.ValidationErrorMessages.DirectoryContainsMultipleSolutions, _path));
+            Assert.Equal(exception.Message, string.Format(ValidationErrorMessages.DirectoryContainsMultipleSolutions, _path));
         }
         
         [Fact]
@@ -101,7 +102,7 @@ namespace DotNetOutdated.Tests
             
             // Assert
             var exception = Assert.Throws<CommandValidationException>(() => projectDiscoveryService.DiscoverProject(_path));
-            Assert.Equal(exception.Message, string.Format(Resources.ValidationErrorMessages.DirectoryContainsMultipleProjects, _path));
+            Assert.Equal(exception.Message, string.Format(ValidationErrorMessages.DirectoryContainsMultipleProjects, _path));
         }
 
         [Fact]
@@ -118,7 +119,7 @@ namespace DotNetOutdated.Tests
             
             // Assert
             var exception = Assert.Throws<CommandValidationException>(() => projectDiscoveryService.DiscoverProject(_path));
-            Assert.Equal(exception.Message, string.Format(Resources.ValidationErrorMessages.DirectoryDoesNotContainSolutionsOrProjects, _path));
+            Assert.Equal(exception.Message, string.Format(ValidationErrorMessages.DirectoryDoesNotContainSolutionsOrProjects, _path));
         }
         
         [Fact]
@@ -132,7 +133,7 @@ namespace DotNetOutdated.Tests
             
             // Assert
             var exception = Assert.Throws<CommandValidationException>(() => projectDiscoveryService.DiscoverProject(_path));
-            Assert.Equal(exception.Message, string.Format(Resources.ValidationErrorMessages.DirectoryOrFileDoesNotExist, _path));
+            Assert.Equal(exception.Message, string.Format(ValidationErrorMessages.DirectoryOrFileDoesNotExist, _path));
         }
         
         
@@ -150,7 +151,7 @@ namespace DotNetOutdated.Tests
             
             // Assert
             var exception = Assert.Throws<CommandValidationException>(() => projectDiscoveryService.DiscoverProject(_nonProjectFile));
-            Assert.Equal(exception.Message, string.Format(Resources.ValidationErrorMessages.FileNotAValidSolutionOrProject, _nonProjectFile));
+            Assert.Equal(exception.Message, string.Format(ValidationErrorMessages.FileNotAValidSolutionOrProject, _nonProjectFile));
         }
     }
 }
