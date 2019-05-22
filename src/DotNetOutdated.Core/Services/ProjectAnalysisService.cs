@@ -40,7 +40,7 @@ namespace DotNetOutdated.Core.Services
                 var lockFile = LockFileUtilities.GetLockFile(lockFilePath, NullLogger.Instance);
 
                 // Create a project
-                var project = new Project(packageSpec.Name, packageSpec.FilePath, packageSpec.RestoreMetadata.Sources.Select(s => s.SourceUri).ToList());
+                var project = new Project(packageSpec.Name, packageSpec.FilePath, packageSpec.RestoreMetadata.Sources.Select(s => s.SourceUri).ToList(), packageSpec.Version);
                 projects.Add(project);
 
                 // Get the target frameworks with their dependencies 
