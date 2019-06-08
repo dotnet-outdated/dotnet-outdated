@@ -43,7 +43,7 @@ namespace DotNetOutdated.Tests
             Assert.NotNull(dependencyGraph);
             Assert.Equal(3, dependencyGraph.Projects.Count);
 
-            dotNetRunner.Verify(runner => runner.Run(XFS.Path(@"c:\", null), It.Is<string[]>(a => a[0] == "msbuild" && a[1] == '\"' + _path + '\"')));
+            dotNetRunner.Verify(runner => runner.Run(XFS.Path(@"c:\"), It.Is<string[]>(a => a[0] == "msbuild" && a[1] == '\"' + _path + '\"')));
         }
         
         [Fact]
@@ -99,8 +99,8 @@ namespace DotNetOutdated.Tests
             Assert.Equal(4, dependencyGraph.Projects.Count);
 
             dotNetRunner.Verify(runner => runner.Run(_path, It.Is<string[]>(a => a[0] == "sln" && a[2] == "list" && a[1] == '\"' + _solutionPath + '\"')));
-            dotNetRunner.Verify(runner => runner.Run(XFS.Path(@"c:\path\proj1", null), It.Is<string[]>(a => a[0] == "msbuild" && a[1] == '\"' + _project1Path + '\"')));
-            dotNetRunner.Verify(runner => runner.Run(XFS.Path(@"c:\path\proj2", null), It.Is<string[]>(a => a[0] == "msbuild" && a[1] == '\"' + _project2Path + '\"')));
+            dotNetRunner.Verify(runner => runner.Run(XFS.Path(@"c:\path\proj1"), It.Is<string[]>(a => a[0] == "msbuild" && a[1] == '\"' + _project1Path + '\"')));
+            dotNetRunner.Verify(runner => runner.Run(XFS.Path(@"c:\path\proj2"), It.Is<string[]>(a => a[0] == "msbuild" && a[1] == '\"' + _project2Path + '\"')));
         }
 
         [Fact]
@@ -140,7 +140,7 @@ namespace DotNetOutdated.Tests
             Assert.Equal(1, dependencyGraph.Projects.Count);
 
             dotNetRunner.Verify(runner => runner.Run(_path, It.Is<string[]>(a => a[0] == "sln" && a[2] == "list" && a[1] == '\"' + _solutionPath + '\"')));
-            dotNetRunner.Verify(runner => runner.Run(XFS.Path(@"c:\path\proj2", null), It.Is<string[]>(a => a[0] == "msbuild" && a[1] == '\"' + _project2Path + '\"')));
+            dotNetRunner.Verify(runner => runner.Run(XFS.Path(@"c:\path\proj2"), It.Is<string[]>(a => a[0] == "msbuild" && a[1] == '\"' + _project2Path + '\"')));
             dotNetRunner.Verify(runner => runner.Run(It.IsAny<string>(), It.Is<string[]>(a => a[0] == "msbuild" && a[1] != '\"' + _project2Path + '\"')), Times.Never());
         }
 

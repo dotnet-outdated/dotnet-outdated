@@ -11,6 +11,7 @@ namespace DotNetOutdated.Tests
     public class ProjectDiscoveryServiceTests
     {
         private readonly string _path = XFS.Path(@"c:\path");
+        private readonly string _someOtherPath = XFS.Path(@"c:\another_path");
         private readonly string _solution1 = XFS.Path(@"c:\path\solution1.sln");
         private readonly string _solution2 = XFS.Path(@"c:\path\solution2.sln");
         private readonly string _project1 = XFS.Path(@"c:\path\project1.csproj");
@@ -109,10 +110,7 @@ namespace DotNetOutdated.Tests
         public void NoSolutionsOrProjects_Throws()
         {
             // Arrange
-            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
-            {
-                {_nonProjectFile, MockFileData.NullObject}
-            }, _path);
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>(), _path);
             var projectDiscoveryService = new ProjectDiscoveryService(fileSystem);
             
             // Act
@@ -126,7 +124,7 @@ namespace DotNetOutdated.Tests
         public void NonExistentPath_Throws()
         {
             // Arrange
-            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>(), _path);
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>(), _someOtherPath);
             var projectDiscoveryService = new ProjectDiscoveryService(fileSystem);
             
             // Act
