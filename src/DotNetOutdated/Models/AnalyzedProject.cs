@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using DotNetOutdated.Core.Models;
 using DotNetOutdated.Services;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;

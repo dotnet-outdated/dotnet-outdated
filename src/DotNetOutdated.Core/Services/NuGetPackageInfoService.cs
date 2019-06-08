@@ -4,6 +4,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
+using DotNetOutdated.Core.Extensions;
 using NuGet.Common;
 using NuGet.Configuration;
 using NuGet.Frameworks;
@@ -11,9 +12,9 @@ using NuGet.Protocol;
 using NuGet.Protocol.Core.Types;
 using NuGet.Versioning;
 
-namespace DotNetOutdated.Services
+namespace DotNetOutdated.Core.Services
 {
-    internal class NuGetPackageInfoService : INuGetPackageInfoService, IDisposable
+    public class NuGetPackageInfoService : INuGetPackageInfoService, IDisposable
     {
         private IEnumerable<PackageSource> _enabledSources = null;
         private readonly SourceCacheContext _context;

@@ -1,3 +1,4 @@
+using DotNetOutdated.Core.Models;
 using DotNetOutdated.Models;
 using NuGet.Versioning;
 using Xunit;

@@ -1,7 +1,7 @@
 ﻿using System.IO.Abstractions;
 using NuGet.Versioning;
 
-namespace DotNetOutdated.Services
+namespace DotNetOutdated.Core.Services
 {
     public class DotNetAddPackageService : IDotNetAddPackageService
     {

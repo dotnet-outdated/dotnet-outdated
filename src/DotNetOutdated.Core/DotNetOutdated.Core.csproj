@@ -1,0 +1,34 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>DotNetOutdated.Core</PackageId>
+    <PackageTags>dotnet;outdated;core;lib</PackageTags>
+    <Description>The core functionality of DotNet Outdated as a library which allows you to embed it into your own applications</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="McMaster.Extensions.CommandLineUtils" Version="2.2.5" />
+    <PackageReference Include="NuGet.Configuration" Version="4.8.0-preview1.5156" />
+    <PackageReference Include="NuGet.ProjectModel" Version="4.8.0-preview1.5156" />
+    <PackageReference Include="NuGet.Protocol" Version="4.8.0-preview1.5156" />
+    <PackageReference Include="NuGet.Versioning" Version="4.8.0-preview1.5156" />
+    <PackageReference Include="System.IO.Abstractions" Version="3.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Update="Resources\ValidationErrorMessages.Designer.cs">
+      <DesignTime>True</DesignTime>
+      <AutoGen>True</AutoGen>
+      <DependentUpon>ValidationErrorMessages.resx</DependentUpon>
+    </Compile>
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Update="Resources\ValidationErrorMessages.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>ValidationErrorMessages.Designer.cs</LastGenOutput>
+    </EmbeddedResource>
+  </ItemGroup>
+</Project>

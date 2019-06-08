@@ -1,10 +1,10 @@
-﻿using System.Diagnostics;
+﻿using McMaster.Extensions.CommandLineUtils;
+using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Threading.Tasks;
-using McMaster.Extensions.CommandLineUtils;
 
-namespace DotNetOutdated.Services
+namespace DotNetOutdated.Core.Services
 {
     /// <remarks>
     /// Credit for the stuff happening in here goes to the https://github.com/jaredcnance/dotnet-status project

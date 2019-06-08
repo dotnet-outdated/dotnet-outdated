@@ -1,4 +1,4 @@
-﻿namespace DotNetOutdated
+﻿namespace DotNetOutdated.Core
 {
     public enum PrereleaseReporting
     {

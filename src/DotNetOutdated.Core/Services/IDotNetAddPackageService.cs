@@ -1,6 +1,6 @@
 ﻿using NuGet.Versioning;
 
-namespace DotNetOutdated.Services
+namespace DotNetOutdated.Core.Services
 {
     public interface IDotNetAddPackageService
     {

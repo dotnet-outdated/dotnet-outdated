@@ -4,9 +4,9 @@ using System.Threading.Tasks;
 using NuGet.Frameworks;
 using NuGet.Versioning;
 
-namespace DotNetOutdated.Services
+namespace DotNetOutdated.Core.Services
 {
-    internal class NuGetPackageResolutionService : INuGetPackageResolutionService
+    public class NuGetPackageResolutionService : INuGetPackageResolutionService
     {
         private readonly INuGetPackageInfoService _nugetService;
         private readonly Dictionary<string, IReadOnlyList<NuGetVersion>> _cache = new Dictionary<string, IReadOnlyList<NuGetVersion>>();

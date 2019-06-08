@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using NuGet.Frameworks;
 using NuGet.Versioning;
 
-namespace DotNetOutdated.Models
+namespace DotNetOutdated.Core.Models
 {
     public class Project
     {
@@ -15,11 +15,14 @@ namespace DotNetOutdated.Models
 
         public IList<TargetFramework> TargetFrameworks { get; } = new List<TargetFramework>();
 
-        public Project(string name, string filePath, IEnumerable<Uri> sources)
+        public NuGetVersion Version { get; }
+
+        public Project(string name, string filePath, IEnumerable<Uri> sources, NuGetVersion version)
         {
             FilePath = filePath;
             Name = name;
             Sources = new List<Uri>(sources);
+            Version = version;
         }
     }
 

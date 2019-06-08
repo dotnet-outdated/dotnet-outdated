@@ -1,9 +1,9 @@
 ﻿using System.Collections.Generic;
-using DotNetOutdated.Models;
+using DotNetOutdated.Core.Models;
 
-namespace DotNetOutdated.Services
+namespace DotNetOutdated.Core.Services
 {
-    internal interface IProjectAnalysisService
+    public interface IProjectAnalysisService
     {
         List<Project> AnalyzeProject(string projectPath, bool includeTransitiveDependencies, int transitiveDepth);
     }

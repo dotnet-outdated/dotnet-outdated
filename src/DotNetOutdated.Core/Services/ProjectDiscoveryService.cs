@@ -2,11 +2,11 @@
 using System.IO;
 using System.IO.Abstractions;
 using System.Linq;
-using DotNetOutdated.Exceptions;
+using DotNetOutdated.Core.Exceptions;
 
-namespace DotNetOutdated.Services
+namespace DotNetOutdated.Core.Services
 {
-    internal class ProjectDiscoveryService : IProjectDiscoveryService
+    public class ProjectDiscoveryService : IProjectDiscoveryService
     {
         private readonly IFileSystem _fileSystem;
 

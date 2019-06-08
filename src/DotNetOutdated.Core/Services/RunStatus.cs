@@ -1,4 +1,4 @@
-﻿namespace DotNetOutdated.Services
+﻿namespace DotNetOutdated.Core.Services
 {
     public class RunStatus
     {

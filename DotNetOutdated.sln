@@ -5,11 +5,13 @@ VisualStudioVersion = 15.0.26124.0
 MinimumVisualStudioVersion = 15.0.26124.0
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{93E73D30-2A5C-43D0-AF5A-D06EB025369B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GitStatusCli", "src\DotNetOutdated\DotNetOutdated.csproj", "{C525E180-B95F-4D31-AEF4-2A7EC6814357}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DotNetOutdated", "src\DotNetOutdated\DotNetOutdated.csproj", "{C525E180-B95F-4D31-AEF4-2A7EC6814357}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "test", "test", "{A6799F6B-C25D-4BAE-AF5B-5774FAFA9CE2}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DotNetOutdated.Tests", "test\DotNetOutdated.Tests\DotNetOutdated.Tests.csproj", "{A2C313F9-FA24-4CF0-A88B-1D315CCD24CC}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DotNetOutdated.Tests", "test\DotNetOutdated.Tests\DotNetOutdated.Tests.csproj", "{A2C313F9-FA24-4CF0-A88B-1D315CCD24CC}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DotNetOutdated.Core", "src\DotNetOutdated.Core\DotNetOutdated.Core.csproj", "{F999D35D-EDCF-42B5-A34A-C6B954A473B6}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -19,9 +21,6 @@ Global
 		Release|Any CPU = Release|Any CPU
 		Release|x64 = Release|x64
 		Release|x86 = Release|x86
-	EndGlobalSection
-	GlobalSection(SolutionProperties) = preSolution
-		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 		{C525E180-B95F-4D31-AEF4-2A7EC6814357}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
@@ -48,9 +47,28 @@ Global
 		{A2C313F9-FA24-4CF0-A88B-1D315CCD24CC}.Release|x64.Build.0 = Release|Any CPU
 		{A2C313F9-FA24-4CF0-A88B-1D315CCD24CC}.Release|x86.ActiveCfg = Release|Any CPU
 		{A2C313F9-FA24-4CF0-A88B-1D315CCD24CC}.Release|x86.Build.0 = Release|Any CPU
+		{F999D35D-EDCF-42B5-A34A-C6B954A473B6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F999D35D-EDCF-42B5-A34A-C6B954A473B6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F999D35D-EDCF-42B5-A34A-C6B954A473B6}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{F999D35D-EDCF-42B5-A34A-C6B954A473B6}.Debug|x64.Build.0 = Debug|Any CPU
+		{F999D35D-EDCF-42B5-A34A-C6B954A473B6}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{F999D35D-EDCF-42B5-A34A-C6B954A473B6}.Debug|x86.Build.0 = Debug|Any CPU
+		{F999D35D-EDCF-42B5-A34A-C6B954A473B6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F999D35D-EDCF-42B5-A34A-C6B954A473B6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F999D35D-EDCF-42B5-A34A-C6B954A473B6}.Release|x64.ActiveCfg = Release|Any CPU
+		{F999D35D-EDCF-42B5-A34A-C6B954A473B6}.Release|x64.Build.0 = Release|Any CPU
+		{F999D35D-EDCF-42B5-A34A-C6B954A473B6}.Release|x86.ActiveCfg = Release|Any CPU
+		{F999D35D-EDCF-42B5-A34A-C6B954A473B6}.Release|x86.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{C525E180-B95F-4D31-AEF4-2A7EC6814357} = {93E73D30-2A5C-43D0-AF5A-D06EB025369B}
 		{A2C313F9-FA24-4CF0-A88B-1D315CCD24CC} = {A6799F6B-C25D-4BAE-AF5B-5774FAFA9CE2}
+		{F999D35D-EDCF-42B5-A34A-C6B954A473B6} = {93E73D30-2A5C-43D0-AF5A-D06EB025369B}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {98E97F2C-24B0-49B9-BB2D-2B8702743703}
 	EndGlobalSection
 EndGlobal

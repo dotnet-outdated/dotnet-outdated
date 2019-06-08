@@ -1,8 +1,8 @@
 ﻿using System.IO.Abstractions;
 
-namespace DotNetOutdated.Services
+namespace DotNetOutdated.Core.Services
 {
-    internal class DotNetRestoreService : IDotNetRestoreService
+    public class DotNetRestoreService : IDotNetRestoreService
     {
         private readonly IDotNetRunner _dotNetRunner;
         private readonly IFileSystem _fileSystem;

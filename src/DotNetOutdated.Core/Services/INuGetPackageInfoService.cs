@@ -4,9 +4,9 @@ using System.Threading.Tasks;
 using NuGet.Frameworks;
 using NuGet.Versioning;
 
-namespace DotNetOutdated.Services
+namespace DotNetOutdated.Core.Services
 {
-    internal interface INuGetPackageInfoService
+    public interface INuGetPackageInfoService
     {
         Task<IReadOnlyList<NuGetVersion>> GetAllVersions(string package, IEnumerable<Uri> sources, bool includePrerelease, NuGetFramework targetFramework, string projectFilePath,
             bool isDevelopmentDependency);

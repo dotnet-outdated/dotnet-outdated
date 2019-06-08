@@ -2,15 +2,15 @@
 using System.Collections.Generic;
 using System.IO.Abstractions;
 using System.Linq;
-using DotNetOutdated.Models;
+using DotNetOutdated.Core.Models;
 using NuGet.Common;
 using NuGet.Packaging.Core;
 using NuGet.ProjectModel;
 using NuGet.Protocol;
 
-namespace DotNetOutdated.Services
+namespace DotNetOutdated.Core.Services
 {
-    internal class ProjectAnalysisService : IProjectAnalysisService
+    public class ProjectAnalysisService : IProjectAnalysisService
     {
         private readonly IDependencyGraphService _dependencyGraphService;
         private readonly IDotNetRestoreService _dotNetRestoreService;
@@ -40,7 +40,7 @@ namespace DotNetOutdated.Services
                 var lockFile = LockFileUtilities.GetLockFile(lockFilePath, NullLogger.Instance);
 
                 // Create a project
-                var project = new Project(packageSpec.Name, packageSpec.FilePath, packageSpec.RestoreMetadata.Sources.Select(s => s.SourceUri).ToList());
+                var project = new Project(packageSpec.Name, packageSpec.FilePath, packageSpec.RestoreMetadata.Sources.Select(s => s.SourceUri).ToList(), packageSpec.Version);
                 projects.Add(project);
 
                 // Get the target frameworks with their dependencies 

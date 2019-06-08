@@ -8,9 +8,8 @@
 // </auto-generated>
 //------------------------------------------------------------------------------
 
-namespace DotNetOutdated.Resources {
+namespace DotNetOutdated.Core.Resources {
     using System;
-    
     
     /// <summary>
     ///   A strongly-typed resource class, for looking up localized strings, etc.
@@ -39,7 +38,7 @@ namespace DotNetOutdated.Resources {
         internal static global::System.Resources.ResourceManager ResourceManager {
             get {
                 if (object.ReferenceEquals(resourceMan, null)) {
-                    global::System.Resources.ResourceManager temp = new global::System.Resources.ResourceManager("DotNetOutdated.Resources.ValidationErrorMessages", typeof(ValidationErrorMessages).Assembly);
+                    global::System.Resources.ResourceManager temp = new global::System.Resources.ResourceManager("DotNetOutdated.Core.Resources.ValidationErrorMessages", typeof(ValidationErrorMessages).Assembly);
                     resourceMan = temp;
                 }
                 return resourceMan;

@@ -3,17 +3,17 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Abstractions;
 using System.Xml.Linq;
-using DotNetOutdated.Exceptions;
+using DotNetOutdated.Core.Exceptions;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using NuGet.ProjectModel;
 
-namespace DotNetOutdated.Services
+namespace DotNetOutdated.Core.Services
 {
     /// <remarks>
     /// Credit for the stuff happening in here goes to the https://github.com/jaredcnance/dotnet-status project
     /// </remarks>
-    internal class DependencyGraphService : IDependencyGraphService
+    public class DependencyGraphService : IDependencyGraphService
     {
         private readonly IDotNetRunner _dotNetRunner;
         private readonly IFileSystem _fileSystem;
