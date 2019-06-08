@@ -1,5 +1,9 @@
 # Changelog
 
+## [v2.3.0]
+
+- Split core functionality into a stand-alone library (`DotNetOutdated.Core`) which can be used in your own applications or libraries - Thank you [Gianluca Stoob](https://github.com/GStoob)
+
 ## [v2.2.0]
 
 - Add ability to filter packages with the `--include` and `--exclude` option (See [#55](https://github.com/jerriep/dotnet-outdated/issues/55)) - Thank you [Jeppe Ravn Christiansen](https://github.com/jepperc)
@@ -72,6 +76,7 @@ Initial release
 
 - A .NET Core global tool to display outdated NuGet packages in a project
 
+[v2.3.0]: https://github.com/jerriep/dotnet-outdated/tree/v2.3.0
 [v2.2.0]: https://github.com/jerriep/dotnet-outdated/tree/v2.2.0
 [v2.1.0]: https://github.com/jerriep/dotnet-outdated/tree/v2.1.0
 [v2.0.0]: https://github.com/jerriep/dotnet-outdated/tree/v2.0.0
