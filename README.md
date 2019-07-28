@@ -48,7 +48,7 @@ dotnet tool update --global dotnet-outdated
 ## Usage
 
 ```text
-Usage: dotnet outdated [arguments] [options]
+Usage: dotnet outdated [options] <Path>
 
 Arguments:
   Path                                       The path to a .sln, .csproj or .fsproj file, or to a directory containing a .NET Core solution/project. If none is specified, the current directory will be used.
@@ -61,10 +61,10 @@ Options:
   -vl|--version-lock <VERSION_LOCK>          Specifies whether the package should be locked to the current Major or Minor version. Possible values: None (default), Major or Minor.
   -t|--transitive                            Specifies whether it should detect transitive dependencies.
   -td|--transitive-depth <TRANSITIVE_DEPTH>  Defines how many levels deep transitive dependencies should be analyzed. Integer value (default = 1)
-  -u|--upgrade:<TYPE>                        Specifies whether outdated packages should be upgraded. Possible values for <TYPE> is Auto (default) or Prompt.
+  -u|--upgrade[:<TYPE>]                      Specifies whether outdated packages should be upgraded. Possible values for <TYPE> is Auto (default) or Prompt.
   -f|--fail-on-updates                       Specifies whether it should return a non-zero exit code when updates are found.
-  -inc|--include <FILTER_INCLUDE>            Specifies to only look at packages where the name contains the provided string.
-  -exc|--exclude <FILTER_EXCLUDE>            Specifies to only look at packages where the name does not contain the provided string.
+  -inc|--include <FILTER_INCLUDE>            Specifies to only look at packages where the name contains the provided string. Culture and case insensitive. If provided multiple times, a single match is enough to include a package.
+  -exc|--exclude <FILTER_EXCLUDE>            Specifies to only look at packages where the name does not contain the provided string. Culture and case insensitive. If provided multiple times, a single match is enough to exclude a package.
   -o|--output <OUTPUT_FILENAME>              Specifies the filename for a generated report. (Use the -of|--output-format option to specify the format. JSON by default.)
   -of|--output-format <OUTPUT_FILE_FORMAT>   Specifies the output format for the generated report. Possible values: json (default) or csv.
 ```
@@ -139,9 +139,11 @@ You can save the results of **dotnet-outdated** to a file by specifying the name
 
 ## Including and excluding packages
 
-You can choose to include only specific packages by using the `-inc|--include` option. Only packages whose name contain the specified value will be included. For example, if you only want to analyze packages containing the value "microsoft", you can use the command `dotnet outdated --include microsoft`.
+You can choose to include only specific packages by using the `-inc|--include` option. Only packages whose name contain the specified value will be included. For example, if you only want to analyze packages containing the value "microsoft", you can use the command `dotnet outdated --include microsoft`. This option can be passed in multiple times: each package will be evaluated against all the filters. One single match is enough to include that package.
 
-Conversely, you can exclude specific packages by using the `-exc|--exclude` option. In this case all packages will be analyzed except packages whose name contain the specified value. For example, if you want to exclude packages containing the value "microsoft", you can use the command `dotnet outdated --exclude microsoft`
+Conversely, you can exclude specific packages by using the `-exc|--exclude` option. In this case all packages will be analyzed except packages whose name contain the specified value. For example, if you want to exclude packages containing the value "microsoft", you can use the command `dotnet outdated --exclude microsoft`. This option can be passed in multiple times: each package will be evaluated against all filters. One single match is enough to exclude that package.
+
+Please note that for both include and exclude, the comparison is culture and case insensitive.
 
 ## FAQ
 

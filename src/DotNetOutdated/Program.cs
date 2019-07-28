@@ -70,13 +70,13 @@ namespace DotNetOutdated
             ShortName = "f", LongName = "fail-on-updates")]
         public bool FailOnUpdates { get; set; } = false;
 
-        [Option(CommandOptionType.SingleValue, Description = "Specifies to only look at packages where the name contains the provided string.", 
+        [Option(CommandOptionType.MultipleValue, Description = "Specifies to only look at packages where the name contains the provided string. Culture and case insensitive. If provided multiple times, a single match is enough to include a package.", 
             ShortName = "inc", LongName = "include")]
-        public string FilterInclude { get; set; } = string.Empty;
+        public List<string> FilterInclude { get; set; } = new List<string>();
 
-        [Option(CommandOptionType.SingleValue, Description = "Specifies to only look at packages where the name does not contain the provided string.",
+        [Option(CommandOptionType.MultipleValue, Description = "Specifies to only look at packages where the name does not contain the provided string. Culture and case insensitive. If provided multiple times, a single match is enough to exclude a package.",
             ShortName = "exc", LongName = "exclude")]
-        public string FilterExclude { get; set; } = string.Empty;
+        public List<string> FilterExclude { get; set; } = new List<string>();
 
         [Option(CommandOptionType.SingleValue, Description = "Specifies the filename for a generated report. " +
                                                              "(Use the -of|--output-format option to specify the format. JSON by default.)",
@@ -365,10 +365,11 @@ namespace DotNetOutdated
                     var deps = targetFramework.Dependencies
                         .Where(d => IncludeAutoReferences || d.IsAutoReferenced == false);
 
-                    if (!string.IsNullOrEmpty(FilterInclude))
-                        deps = deps.Where(d => d.Name.Contains(FilterInclude, StringComparison.InvariantCultureIgnoreCase));
-                    if (!string.IsNullOrEmpty(FilterExclude))
-                        deps = deps.Where(d => !d.Name.Contains(FilterExclude, StringComparison.InvariantCultureIgnoreCase));                        
+                    if (FilterInclude.Any())
+                        deps = deps.Where(AnyIncludeFilterMatches);
+
+                    if (FilterExclude.Any())
+                        deps = deps.Where(NoExcludeFilterMatches);
 
                     var dependencies = deps.OrderBy(dependency => dependency.IsTransitive)
                                            .ThenBy(dependency => dependency.Name)
@@ -406,6 +407,15 @@ namespace DotNetOutdated
 
             return outdatedProjects;
         }
+
+        private bool AnyIncludeFilterMatches(Dependency dep) =>
+            FilterInclude.Any(f => NameContains(dep, f));
+
+        private bool NoExcludeFilterMatches(Dependency dep) =>
+            !FilterExclude.Any(f => NameContains(dep, f));
+
+        private bool NameContains(Dependency dep, string part) =>
+            dep.Name.Contains(part, StringComparison.InvariantCultureIgnoreCase);
 
         private static ConsoleColor GetUpgradeSeverityColor(DependencyUpgradeSeverity? upgradeSeverity)
         {

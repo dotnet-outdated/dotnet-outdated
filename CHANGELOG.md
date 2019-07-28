@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+
+- Allow the `--include` and `--exclude` parameters to be passed multiple times
+
 ## [v2.3.0]
 
 - Split core functionality into a stand-alone library (`DotNetOutdated.Core`) which can be used in your own applications or libraries - Thank you [Gianluca Stoob](https://github.com/GStoob)
