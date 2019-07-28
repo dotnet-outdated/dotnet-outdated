@@ -1,8 +1,8 @@
 # Changelog
 
-## [Unreleased]
+## [v2.4.0]
 
-- Allow the `--include` and `--exclude` parameters to be passed multiple times
+- Allow the `--include` and `--exclude` parameters to be passed multiple times - Thank you [Fábio Beirão](https://github.com/fdbeirao)
 
 ## [v2.3.0]
 
