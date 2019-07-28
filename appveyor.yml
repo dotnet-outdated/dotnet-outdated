@@ -1,4 +1,4 @@
-version: 2.4.0.{build}
+version: 2.5.0.{build}
 install:
   - ps: iwr https://get.dot.net/v1/dotnet-install.ps1 -outfile dotnet-install.ps1
   - ps: .\dotnet-install.ps1 -Version 2.1.300 -InstallDir $env:ProgramFiles/dotnet
