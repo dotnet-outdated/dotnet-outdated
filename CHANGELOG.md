@@ -1,5 +1,9 @@
 # Changelog
 
+## [v2.5.0]
+
+- Fix bug where certain private Nuget feeds weren't picked up - Thank you [Abbotware](https://github.com/abbotware)
+
 ## [v2.4.0]
 
 - Allow the `--include` and `--exclude` parameters to be passed multiple times - Thank you [Fábio Beirão](https://github.com/fdbeirao)
