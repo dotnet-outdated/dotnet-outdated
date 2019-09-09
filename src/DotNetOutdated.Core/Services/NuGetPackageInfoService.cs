@@ -108,6 +108,9 @@ namespace DotNetOutdated.Core.Services
                             else if (m is LocalPackageSearchMetadata localPackageSearchMetadata)
                             {
                                 allVersions.Add(localPackageSearchMetadata.Identity.Version);
+                            } else
+                            {
+                                allVersions.Add(m.Identity.Version);
                             }
                         };
                     }
