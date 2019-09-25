@@ -15,6 +15,7 @@ using McMaster.Extensions.CommandLineUtils;
 using Microsoft.Extensions.DependencyInjection;
 using NuGet.Versioning;
 using DotNetOutdated.Core;
+using NuGet.Credentials;
 
 [assembly: InternalsVisibleTo("DotNetOutdated.Tests")]
 [assembly: InternalsVisibleTo("DynamicProxyGenAssembly2")]
@@ -142,6 +143,8 @@ namespace DotNetOutdated
 
                 // Get all the projects
                 console.Write("Discovering projects...");
+
+                DefaultCredentialServiceUtility.SetupDefaultCredentialService(new NuGet.Common.NullLogger(), true);
                 
                 string projectPath = _projectDiscoveryService.DiscoverProject(Path);
 
