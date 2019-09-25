@@ -5,7 +5,7 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="McMaster.Extensions.CommandLineUtils" Version="2.4.2" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.1.1" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.3.0" />
     <PackageReference Include="Moq" Version="4.13.0" />
     <PackageReference Include="Newtonsoft.Json" Version="12.0.2" />
     <PackageReference Include="NuGet.ProjectModel" Version="5.1.0" />
