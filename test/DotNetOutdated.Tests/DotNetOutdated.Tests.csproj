@@ -10,7 +10,7 @@
     <PackageReference Include="Newtonsoft.Json" Version="12.0.2" />
     <PackageReference Include="NuGet.ProjectModel" Version="5.1.0" />
     <PackageReference Include="System.IO.Abstractions" Version="6.0.36" />
-    <PackageReference Include="System.IO.Abstractions.TestingHelpers" Version="6.0.1" />
+    <PackageReference Include="System.IO.Abstractions.TestingHelpers" Version="6.0.36" />
     <PackageReference Include="xunit" Version="2.4.1" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.4.1" />
     <DotNetCliToolReference Include="dotnet-xunit" Version="2.3.1" />
