@@ -9,7 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="McMaster.Extensions.CommandLineUtils" Version="2.3.4" />
+    <PackageReference Include="McMaster.Extensions.CommandLineUtils" Version="2.4.2" />
     <PackageReference Include="NuGet.Configuration" Version="5.1.0" />
     <PackageReference Include="NuGet.Credentials" Version="5.1.0" />
     <PackageReference Include="NuGet.ProjectModel" Version="5.1.0" />
