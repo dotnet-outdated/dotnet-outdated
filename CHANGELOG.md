@@ -1,5 +1,9 @@
 # Changelog
 
+## [v2.6.0]
+
+- Better support for NuGet credential providers - Thank you [Ran Sagy](https://github.com/ransagy)
+
 ## [v2.5.0]
 
 - Fix bug where certain private Nuget feeds weren't picked up - Thank you [Abbotware](https://github.com/abbotware)
@@ -84,6 +88,9 @@ Initial release
 
 - A .NET Core global tool to display outdated NuGet packages in a project
 
+[v2.6.0]: https://github.com/jerriep/dotnet-outdated/tree/v2.6.0
+[v2.5.0]: https://github.com/jerriep/dotnet-outdated/tree/v2.5.0
+[v2.4.0]: https://github.com/jerriep/dotnet-outdated/tree/v2.4.0
 [v2.3.0]: https://github.com/jerriep/dotnet-outdated/tree/v2.3.0
 [v2.2.0]: https://github.com/jerriep/dotnet-outdated/tree/v2.2.0
 [v2.1.0]: https://github.com/jerriep/dotnet-outdated/tree/v2.1.0
