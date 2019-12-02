@@ -1,5 +1,9 @@
 # Changelog
 
+## [v2.7.0]
+
+- Support for .NET Core SDK 3.0 - Thank you [Anton Hryshchanka](ahryshchanka)
+
 ## [v2.6.0]
 
 - Better support for NuGet credential providers - Thank you [Ran Sagy](https://github.com/ransagy)
@@ -88,6 +92,7 @@ Initial release
 
 - A .NET Core global tool to display outdated NuGet packages in a project
 
+[v2.7.0]: https://github.com/jerriep/dotnet-outdated/tree/v2.7.0
 [v2.6.0]: https://github.com/jerriep/dotnet-outdated/tree/v2.6.0
 [v2.5.0]: https://github.com/jerriep/dotnet-outdated/tree/v2.5.0
 [v2.4.0]: https://github.com/jerriep/dotnet-outdated/tree/v2.4.0
