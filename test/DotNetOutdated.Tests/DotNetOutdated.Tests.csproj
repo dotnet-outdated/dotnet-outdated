@@ -9,7 +9,7 @@
     <PackageReference Include="Moq" Version="4.13.1" />
     <PackageReference Include="Newtonsoft.Json" Version="12.0.3" />
     <PackageReference Include="NuGet.ProjectModel" Version="5.1.0" />
-    <PackageReference Include="System.IO.Abstractions" Version="7.0.7" />
+    <PackageReference Include="System.IO.Abstractions" Version="7.0.15" />
     <PackageReference Include="System.IO.Abstractions.TestingHelpers" Version="7.0.7" />
     <PackageReference Include="xunit" Version="2.4.1" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.4.1" />
