@@ -15,7 +15,7 @@
     <PackageReference Include="NuGet.ProjectModel" Version="5.1.0" />
     <PackageReference Include="NuGet.Protocol" Version="5.1.0" />
     <PackageReference Include="NuGet.Versioning" Version="5.1.0" />
-    <PackageReference Include="System.IO.Abstractions" Version="7.0.7" />
+    <PackageReference Include="System.IO.Abstractions" Version="7.0.15" />
   </ItemGroup>
 
   <ItemGroup>
