@@ -9,6 +9,6 @@ namespace DotNetOutdated.Core.Services
     public interface INuGetPackageInfoService
     {
         Task<IReadOnlyList<NuGetVersion>> GetAllVersions(string package, IEnumerable<Uri> sources, bool includePrerelease, NuGetFramework targetFramework, string projectFilePath,
-            bool isDevelopmentDependency);
+            bool isDevelopmentDependency, int olderThanDays);
     }
 }
