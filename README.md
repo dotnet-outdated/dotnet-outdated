@@ -150,9 +150,9 @@ Please note that for both include and exclude, the comparison is culture and cas
 
 There are some packages that have new updates almost on daily basis, and it might slow down development and will break all CI builds if dotnet-outdated is integrated into the CI - so the development team needs to urgently react on every single update.
 
-This will let the developers finish their job and update the packages on their own pace.
+This command will let the developers finish their job and update the packages on their own pace.
 
-For failing CI builds, a proposed protocol is to have another CI build will be scheduled weekly to inform developers of new packages, and they will react accordingly.
+For failing CI builds, a proposed protocol is to have another CI build which will be scheduled weekly to inform developers of new packages, and they will react accordingly.
 
 Also, some companies/users do not feel comfortable jumping directly on the newest versions, as they might contain some bugs, and might want to wait for some time before updating to the newest pacakge.
 
