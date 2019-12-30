@@ -71,6 +71,12 @@ namespace DotNetOutdated.Core.Services
         }
 
         public async Task<IReadOnlyList<NuGetVersion>> GetAllVersions(string package, IEnumerable<Uri> sources, bool includePrerelease, NuGetFramework targetFramework,
+            string projectFilePath, bool isDevelopmentDependency)
+        {
+            return await GetAllVersions(package, sources, includePrerelease, targetFramework, projectFilePath, isDevelopmentDependency, 0);
+        }
+
+        public async Task<IReadOnlyList<NuGetVersion>> GetAllVersions(string package, IEnumerable<Uri> sources, bool includePrerelease, NuGetFramework targetFramework,
             string projectFilePath, bool isDevelopmentDependency, int olderThanDays)
         {
             var allVersions = new List<NuGetVersion>();
