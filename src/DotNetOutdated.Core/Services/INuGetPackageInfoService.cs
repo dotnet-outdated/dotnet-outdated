@@ -10,5 +10,8 @@ namespace DotNetOutdated.Core.Services
     {
         Task<IReadOnlyList<NuGetVersion>> GetAllVersions(string package, IEnumerable<Uri> sources, bool includePrerelease, NuGetFramework targetFramework, string projectFilePath,
             bool isDevelopmentDependency);
+
+        Task<IReadOnlyList<NuGetVersion>> GetAllVersions(string package, IEnumerable<Uri> sources, bool includePrerelease, NuGetFramework targetFramework, string projectFilePath,
+            bool isDevelopmentDependency, int olderThanDays);
     }
 }

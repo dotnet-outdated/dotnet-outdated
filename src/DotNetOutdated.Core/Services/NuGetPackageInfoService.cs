@@ -73,6 +73,12 @@ namespace DotNetOutdated.Core.Services
         public async Task<IReadOnlyList<NuGetVersion>> GetAllVersions(string package, IEnumerable<Uri> sources, bool includePrerelease, NuGetFramework targetFramework,
             string projectFilePath, bool isDevelopmentDependency)
         {
+            return await GetAllVersions(package, sources, includePrerelease, targetFramework, projectFilePath, isDevelopmentDependency, 0);
+        }
+
+        public async Task<IReadOnlyList<NuGetVersion>> GetAllVersions(string package, IEnumerable<Uri> sources, bool includePrerelease, NuGetFramework targetFramework,
+            string projectFilePath, bool isDevelopmentDependency, int olderThanDays)
+        {
             var allVersions = new List<NuGetVersion>();
             foreach (var source in sources)
             {
@@ -82,6 +88,12 @@ namespace DotNetOutdated.Core.Services
                     if (metadata != null)
                     {
                         var compatibleMetadataList = (await metadata.GetMetadataAsync(package, includePrerelease, false, _context, NullLogger.Instance, CancellationToken.None)).ToList();
+
+                        if (olderThanDays > 0)
+                        {
+                            compatibleMetadataList = compatibleMetadataList.Where(c => !c.Published.HasValue ||
+                                                                                       c.Published <= DateTimeOffset.UtcNow.AddDays(-olderThanDays)).ToList();
+                        }
 
                         // We need to ensure that we only get package versions which are compatible with the requested target framework.
                         // For development dependencies, we do not perform this check

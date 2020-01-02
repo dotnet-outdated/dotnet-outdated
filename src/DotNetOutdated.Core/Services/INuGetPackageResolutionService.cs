@@ -11,5 +11,9 @@ namespace DotNetOutdated.Core.Services
         Task<NuGetVersion> ResolvePackageVersions(string packageName,
             NuGetVersion referencedVersion, IEnumerable<Uri> sources, VersionRange currentVersionRange, VersionLock versionLock, PrereleaseReporting prerelease,
             NuGetFramework targetFrameworkName, string projectFilePath, bool isDevelopmentDependency);
+
+        Task<NuGetVersion> ResolvePackageVersions(string packageName,
+            NuGetVersion referencedVersion, IEnumerable<Uri> sources, VersionRange currentVersionRange, VersionLock versionLock, PrereleaseReporting prerelease,
+            NuGetFramework targetFrameworkName, string projectFilePath, bool isDevelopmentDependency, int olderThanDays);
     }
 }

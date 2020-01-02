@@ -67,6 +67,7 @@ Options:
   -exc|--exclude <FILTER_EXCLUDE>            Specifies to only look at packages where the name does not contain the provided string. Culture and case insensitive. If provided multiple times, a single match is enough to exclude a package.
   -o|--output <OUTPUT_FILENAME>              Specifies the filename for a generated report. (Use the -of|--output-format option to specify the format. JSON by default.)
   -of|--output-format <OUTPUT_FILE_FORMAT>   Specifies the output format for the generated report. Possible values: json (default) or csv.
+  -ot|--older-than <NUMBER_OF_DAYS>          Only include package versions that are older than the specified number of days.
 ```
 
 ![Screenshot of dotnet-outdated](screenshot.png)
@@ -144,6 +145,16 @@ You can choose to include only specific packages by using the `-inc|--include` o
 Conversely, you can exclude specific packages by using the `-exc|--exclude` option. In this case all packages will be analyzed except packages whose name contain the specified value. For example, if you want to exclude packages containing the value "microsoft", you can use the command `dotnet outdated --exclude microsoft`. This option can be passed in multiple times: each package will be evaluated against all filters. One single match is enough to exclude that package.
 
 Please note that for both include and exclude, the comparison is culture and case insensitive.
+
+## Only listing new version of packages older than a specified the number of days
+
+There are some packages that have new updates almost on daily basis, and it might slow down development and will break all CI builds if dotnet-outdated is integrated into the CI - so the development team needs to urgently react on every single update.
+
+This command will let the developers finish their job and update the packages on their own pace.
+
+For failing CI builds, a proposed protocol is to have another CI build which will be scheduled weekly to inform developers of new packages, and they will react accordingly.
+
+Also, some companies/users do not feel comfortable jumping directly on the newest versions, as they might contain some bugs, and might want to wait for some time before updating to the newest pacakge.
 
 ## FAQ
 

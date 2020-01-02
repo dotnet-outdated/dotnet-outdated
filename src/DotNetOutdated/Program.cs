@@ -89,6 +89,10 @@ namespace DotNetOutdated
             ShortName = "of", LongName = "output-format")]
         public OutputFormat OutputFileFormat { get; set; } = OutputFormat.Json;
 
+        [Option(CommandOptionType.SingleValue, Description = "Only include package versions that are older than the specified number of days.",
+            ShortName = "ot", LongName = "older-than")]
+        public int OlderThanDays { get; set; }
+
         public static int Main(string[] args)
         {
             using (var services = new ServiceCollection()
@@ -390,7 +394,7 @@ namespace DotNetOutdated
                         if (referencedVersion != null)
                         {
                             latestVersion = await _nugetService.ResolvePackageVersions(dependency.Name, referencedVersion, project.Sources, dependency.VersionRange,
-                                VersionLock, Prerelease, targetFramework.Name, project.FilePath, dependency.IsDevelopmentDependency);
+                                VersionLock, Prerelease, targetFramework.Name, project.FilePath, dependency.IsDevelopmentDependency, OlderThanDays);
                         }
 
                         if (referencedVersion == null || latestVersion == null || referencedVersion != latestVersion)
