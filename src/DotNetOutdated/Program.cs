@@ -89,8 +89,8 @@ namespace DotNetOutdated
             ShortName = "of", LongName = "output-format")]
         public OutputFormat OutputFileFormat { get; set; } = OutputFormat.Json;
 
-        [Option(CommandOptionType.SingleValue, Description = "Specifies the number of days the package should be published before failing.",
-            ShortName = "fot", LongName = "fail-if-older-than")]
+        [Option(CommandOptionType.SingleValue, Description = "Only include package versions that are older than the specified number of days.",
+            ShortName = "ot", LongName = "older-than")]
         public int OlderThanDays { get; set; }
 
         public static int Main(string[] args)

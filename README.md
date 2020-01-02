@@ -67,7 +67,7 @@ Options:
   -exc|--exclude <FILTER_EXCLUDE>            Specifies to only look at packages where the name does not contain the provided string. Culture and case insensitive. If provided multiple times, a single match is enough to exclude a package.
   -o|--output <OUTPUT_FILENAME>              Specifies the filename for a generated report. (Use the -of|--output-format option to specify the format. JSON by default.)
   -of|--output-format <OUTPUT_FILE_FORMAT>   Specifies the output format for the generated report. Possible values: json (default) or csv.
-  -fot|--fail-if-older-than <NUMBER_OF_DAYS> Specifies the number of days the package should be published before failing.
+  -ot|--older-than <NUMBER_OF_DAYS>          Only include package versions that are older than the specified number of days.
 ```
 
 ![Screenshot of dotnet-outdated](screenshot.png)
@@ -146,7 +146,7 @@ Conversely, you can exclude specific packages by using the `-exc|--exclude` opti
 
 Please note that for both include and exclude, the comparison is culture and case insensitive.
 
-## Failing only if the new version of the package is older than the number of days
+## Only listing new version of packages older than a specified the number of days
 
 There are some packages that have new updates almost on daily basis, and it might slow down development and will break all CI builds if dotnet-outdated is integrated into the CI - so the development team needs to urgently react on every single update.
 

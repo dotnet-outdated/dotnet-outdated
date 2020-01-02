@@ -89,7 +89,11 @@ namespace DotNetOutdated.Core.Services
                     {
                         var compatibleMetadataList = (await metadata.GetMetadataAsync(package, includePrerelease, false, _context, NullLogger.Instance, CancellationToken.None)).ToList();
 
-                        compatibleMetadataList.RemoveAll(c => c.Published.HasValue && c.Published >= DateTimeOffset.UtcNow.AddDays(-olderThanDays));
+                        if (olderThanDays > 0)
+                        {
+                            compatibleMetadataList = compatibleMetadataList.Where(c => !c.Published.HasValue ||
+                                                                                       c.Published <= DateTimeOffset.UtcNow.AddDays(-olderThanDays)).ToList();
+                        }
 
                         // We need to ensure that we only get package versions which are compatible with the requested target framework.
                         // For development dependencies, we do not perform this check
