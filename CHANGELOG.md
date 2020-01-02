@@ -1,8 +1,12 @@
 # Changelog
 
+## [v2.8.0]
+
+- Add a new flag (`-ot`) to only include packages that are older than the specified number of days - Thank you [Boris](https://github.com/bdn-mca)
+
 ## [v2.7.0]
 
-- Support for .NET Core SDK 3.0 - Thank you [Anton Hryshchanka](ahryshchanka)
+- Support for .NET Core SDK 3.0 - Thank you [Anton Hryshchanka](https://github.com/ahryshchanka)
 
 ## [v2.6.0]
 
@@ -92,6 +96,7 @@ Initial release
 
 - A .NET Core global tool to display outdated NuGet packages in a project
 
+[v2.8.0]: https://github.com/jerriep/dotnet-outdated/tree/v2.8.0
 [v2.7.0]: https://github.com/jerriep/dotnet-outdated/tree/v2.7.0
 [v2.6.0]: https://github.com/jerriep/dotnet-outdated/tree/v2.6.0
 [v2.5.0]: https://github.com/jerriep/dotnet-outdated/tree/v2.5.0
