@@ -22,6 +22,9 @@ using NuGet.Credentials;
 
 namespace DotNetOutdated
 {
+    using System.Collections.Concurrent;
+    using System.Diagnostics;
+
     [Command(
         Name = "dotnet outdated",
         FullName = "A .NET Core global tool to list outdated Nuget packages.")]
@@ -141,6 +144,8 @@ namespace DotNetOutdated
         {
             try
             {
+                var stopwatch = Stopwatch.StartNew();
+
                 // If no path is set, use the current directory
                 if (string.IsNullOrEmpty(Path))
                     Path = _fileSystem.Directory.GetCurrentDirectory();
@@ -158,8 +163,8 @@ namespace DotNetOutdated
                     console.WriteLine();
 
                 // Analyze the projects
-                console.Write("Analyzing project and restoring packages...");
-
+                console.Write("Analyzing project(s) and restoring packages...");
+                
                 var projects = _projectAnalysisService.AnalyzeProject(projectPath, Transitive, TransitiveDepth);
 
                 if (!console.IsOutputRedirected)
@@ -194,6 +199,8 @@ namespace DotNetOutdated
                 {
                     console.WriteLine("No outdated dependencies were detected");
                 }
+
+                console.WriteLine($"Elapsed: {stopwatch.Elapsed}");
 
                 return 0;
             }
@@ -364,26 +371,30 @@ namespace DotNetOutdated
 
         private async Task<List<AnalyzedProject>> AnalyzeDependencies(List<Project> projects, IConsole console)
         {
-            var outdatedProjects = new List<AnalyzedProject>();
+            var outdatedProjects = new ConcurrentBag<AnalyzedProject>();
 
-            if (console.IsOutputRedirected)
-                console.WriteLine("Analyzing dependencies...");
+            console.WriteLine("Analyzing dependencies...");
 
-            foreach (var project in projects)
+            var tasks = new Task[projects.Count];
+
+            for (var index = 0; index < projects.Count; index++)
             {
-                var outdatedFrameworks = new List<AnalyzedTargetFramework>();
+                var project = projects[index];
+                tasks[index] = this.AddOutdatedProjectsIfNeeded(project, outdatedProjects);
+            }
 
-                // Process each target framework with its related dependencies
-                foreach (var targetFramework in project.TargetFrameworks)
-                {
-                    var outdatedDependencies = new List<AnalyzedDependency>();
+            await Task.WhenAll(tasks);
 
-                    var deps = targetFramework.Dependencies
-                        .Where(d => IncludeAutoReferences || d.IsAutoReferenced == false);
+            return outdatedProjects.ToList();
+        }
 
+        private async Task AddOutdatedProjectsIfNeeded(Project project, ConcurrentBag<AnalyzedProject> outdatedProjects)
+        {
+            var outdatedFrameworks = new ConcurrentBag<AnalyzedTargetFramework>();
                     if (FilterInclude.Any())
                         deps = deps.Where(AnyIncludeFilterMatches);
 
+            var tasks = new Task[project.TargetFrameworks.Count];
                     if (FilterExclude.Any())
                         deps = deps.Where(NoExcludeFilterMatches);
 
@@ -391,37 +402,50 @@ namespace DotNetOutdated
                                            .ThenBy(dependency => dependency.Name)
                                            .ToList();
 
-                    for (var index = 0; index < dependencies.Count; index++)
-                    {
-                        var dependency = dependencies[index];
-                        if (!console.IsOutputRedirected)
-                            console.Write($"Analyzing dependencies for {project.Name} [{targetFramework.Name}] ({index + 1}/{dependencies.Count})");
+            // Process each target framework with its related dependencies
+            for (var index = 0; index < project.TargetFrameworks.Count; index++)
+            {
+                var targetFramework = project.TargetFrameworks[index];
+                tasks[index] = this.AddOutdatedFrameworkIfNeeded(targetFramework, project, outdatedFrameworks);
+            }
 
-                        var referencedVersion = dependency.ResolvedVersion;
-                        NuGetVersion latestVersion = null;
+            await Task.WhenAll(tasks);
 
                         if (referencedVersion != null)
                         {
                             latestVersion = await _nugetService.ResolvePackageVersions(dependency.Name, referencedVersion, project.Sources, dependency.VersionRange,
                                 VersionLock, Prerelease, targetFramework.Name, project.FilePath, dependency.IsDevelopmentDependency, OlderThanDays);
                         }
+            if (outdatedFrameworks.Count > 0)
+                outdatedProjects.Add(new AnalyzedProject(project.Name, project.FilePath, outdatedFrameworks));
+        }
 
-                        if (referencedVersion == null || latestVersion == null || referencedVersion != latestVersion)
-                            outdatedDependencies.Add(new AnalyzedDependency(dependency, latestVersion));
+        private async Task AddOutdatedFrameworkIfNeeded(TargetFramework targetFramework, Project project, ConcurrentBag<AnalyzedTargetFramework> outdatedFrameworks)
+        {
+            var outdatedDependencies = new ConcurrentBag<AnalyzedDependency>();
 
-                        if (!console.IsOutputRedirected)
-                            ClearCurrentConsoleLine();
-                    }
+            var deps = targetFramework.Dependencies.Where(d => this.IncludeAutoReferences || d.IsAutoReferenced == false);
 
-                    if (outdatedDependencies.Count > 0)
-                        outdatedFrameworks.Add(new AnalyzedTargetFramework(targetFramework.Name, outdatedDependencies));
-                }
+            if (!string.IsNullOrEmpty(this.FilterInclude))
+                deps = deps.Where(d => d.Name.Contains(this.FilterInclude, StringComparison.InvariantCultureIgnoreCase));
+            if (!string.IsNullOrEmpty(this.FilterExclude))
+                deps = deps.Where(d => !d.Name.Contains(this.FilterExclude, StringComparison.InvariantCultureIgnoreCase));
 
-                if (outdatedFrameworks.Count > 0)
-                    outdatedProjects.Add(new AnalyzedProject(project.Name, project.FilePath, outdatedFrameworks));
+            var dependencies = deps.OrderBy(dependency => dependency.IsTransitive).ThenBy(dependency => dependency.Name).ToList();
+
+            var tasks = new Task[dependencies.Count];
+
+            for (var index = 0; index < dependencies.Count; index++)
+            {
+                var dependency = dependencies[index];
+
+                tasks[index] = this.AddOutdatedDependencyIfNeeded(project, targetFramework, dependency, outdatedDependencies);
             }
 
-            return outdatedProjects;
+            await Task.WhenAll(tasks);
+
+            if (outdatedDependencies.Count > 0)
+                outdatedFrameworks.Add(new AnalyzedTargetFramework(targetFramework.Name, outdatedDependencies));
         }
 
         private bool AnyIncludeFilterMatches(Dependency dep) =>
@@ -432,6 +456,21 @@ namespace DotNetOutdated
 
         private bool NameContains(Dependency dep, string part) =>
             dep.Name.Contains(part, StringComparison.InvariantCultureIgnoreCase);
+
+        private async Task AddOutdatedDependencyIfNeeded(Project project, TargetFramework targetFramework, Dependency dependency, ConcurrentBag<AnalyzedDependency> outdatedDependencies)
+        {
+            var referencedVersion = dependency.ResolvedVersion;
+            NuGetVersion latestVersion = null;
+
+            if (referencedVersion != null)
+            {
+                latestVersion = await _nugetService.ResolvePackageVersions(dependency.Name, referencedVersion, project.Sources, dependency.VersionRange,
+                                                                           VersionLock, Prerelease, targetFramework.Name, project.FilePath, dependency.IsDevelopmentDependency);
+            }
+
+            if (referencedVersion == null || latestVersion == null || referencedVersion != latestVersion)
+                outdatedDependencies.Add(new AnalyzedDependency(dependency, latestVersion));
+        }
 
         private static ConsoleColor GetUpgradeSeverityColor(DependencyUpgradeSeverity? upgradeSeverity)
         {
