@@ -6,10 +6,12 @@ using NuGet.Versioning;
 
 namespace DotNetOutdated.Core.Services
 {
+    using System.Collections.Concurrent;
+
     public class NuGetPackageResolutionService : INuGetPackageResolutionService
     {
         private readonly INuGetPackageInfoService _nugetService;
-        private readonly Dictionary<string, IReadOnlyList<NuGetVersion>> _cache = new Dictionary<string, IReadOnlyList<NuGetVersion>>();
+        private readonly ConcurrentDictionary<string, Lazy<Task<IReadOnlyList<NuGetVersion>>>> _cache = new ConcurrentDictionary<string, Lazy<Task<IReadOnlyList<NuGetVersion>>>>();
 
         public NuGetPackageResolutionService(INuGetPackageInfoService nugetService)
         {
@@ -34,12 +36,10 @@ namespace DotNetOutdated.Core.Services
                 includePrerelease = false;
 
             string cacheKey = (packageName + "-" + includePrerelease + "-" + targetFrameworkName).ToLowerInvariant();
-            if (!_cache.TryGetValue(cacheKey, out var allVersions))
-            {
-                // Get all the available versions
-                allVersions = await _nugetService.GetAllVersions(packageName, sources, includePrerelease, targetFrameworkName, projectFilePath, isDevelopmentDependency, olderThanDays);
-                _cache.Add(cacheKey, allVersions);
-            }
+
+            // Get all the available versions
+            var allVersionsRequest = new Lazy<Task<IReadOnlyList<NuGetVersion>>>(() => this._nugetService.GetAllVersions(packageName, sources, includePrerelease, targetFrameworkName, projectFilePath, isDevelopmentDependency));
+            var allVersions = await this._cache.GetOrAdd(cacheKey, allVersionsRequest).Value;
 
             // Determine the floating behaviour
             var floatingBehaviour = includePrerelease ? NuGetVersionFloatBehavior.AbsoluteLatest : NuGetVersionFloatBehavior.Major;
