@@ -163,9 +163,9 @@ namespace DotNetOutdated
                     console.WriteLine();
 
                 // Analyze the projects
-                console.Write("Analyzing project(s) and restoring packages...");
+                console.Write("Analyzing project(s)...");
                 
-                var projects = _projectAnalysisService.AnalyzeProject(projectPath, Transitive, TransitiveDepth);
+                var projects = _projectAnalysisService.AnalyzeProject(projectPath, false, Transitive, TransitiveDepth);
 
                 if (!console.IsOutputRedirected)
                     ClearCurrentConsoleLine();

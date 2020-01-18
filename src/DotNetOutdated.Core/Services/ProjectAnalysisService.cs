@@ -23,7 +23,7 @@ namespace DotNetOutdated.Core.Services
             _fileSystem = fileSystem;
         }
         
-        public List<Project> AnalyzeProject(string projectPath, bool includeTransitiveDependencies, int transitiveDepth)
+        public List<Project> AnalyzeProject(string projectPath, bool runRestore, bool includeTransitiveDependencies, int transitiveDepth)
         {
             var dependencyGraph = _dependencyGraphService.GenerateDependencyGraph(projectPath);
             if (dependencyGraph == null)
@@ -33,8 +33,11 @@ namespace DotNetOutdated.Core.Services
             foreach (var packageSpec in dependencyGraph.Projects.Where(p => p.RestoreMetadata.ProjectStyle == ProjectStyle.PackageReference))
             {
                 // Restore the packages
-                _dotNetRestoreService.Restore(packageSpec.FilePath);
-                
+                if (runRestore)
+                {
+                    _dotNetRestoreService.Restore(packageSpec.FilePath);
+                }
+
                 // Load the lock file
                 string lockFilePath = _fileSystem.Path.Combine(packageSpec.RestoreMetadata.OutputPath, "project.assets.json");
                 var lockFile = LockFileUtilities.GetLockFile(lockFilePath, NullLogger.Instance);
