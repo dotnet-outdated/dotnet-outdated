@@ -38,7 +38,7 @@ namespace DotNetOutdated.Core.Services
             string cacheKey = (packageName + "-" + includePrerelease + "-" + targetFrameworkName).ToLowerInvariant();
 
             // Get all the available versions
-            var allVersionsRequest = new Lazy<Task<IReadOnlyList<NuGetVersion>>>(() => this._nugetService.GetAllVersions(packageName, sources, includePrerelease, targetFrameworkName, projectFilePath, isDevelopmentDependency));
+            var allVersionsRequest = new Lazy<Task<IReadOnlyList<NuGetVersion>>>(() => this._nugetService.GetAllVersions(packageName, sources, includePrerelease, targetFrameworkName, projectFilePath, isDevelopmentDependency, olderThanDays));
             var allVersions = await this._cache.GetOrAdd(cacheKey, allVersionsRequest).Value;
 
             // Determine the floating behaviour

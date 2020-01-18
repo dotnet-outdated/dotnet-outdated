@@ -380,7 +380,7 @@ namespace DotNetOutdated
             for (var index = 0; index < projects.Count; index++)
             {
                 var project = projects[index];
-                tasks[index] = this.AddOutdatedProjectsIfNeeded(project, outdatedProjects);
+                tasks[index] = this.AddOutdatedProjectsIfNeeded(project, outdatedProjects, console);
             }
 
             await Task.WhenAll(tasks);
@@ -388,50 +388,51 @@ namespace DotNetOutdated
             return outdatedProjects.ToList();
         }
 
-        private async Task AddOutdatedProjectsIfNeeded(Project project, ConcurrentBag<AnalyzedProject> outdatedProjects)
+        private bool AnyIncludeFilterMatches(Dependency dep) =>
+            FilterInclude.Any(f => NameContains(dep, f));
+
+        private bool NoExcludeFilterMatches(Dependency dep) =>
+            !FilterExclude.Any(f => NameContains(dep, f));
+
+        private bool NameContains(Dependency dep, string part) =>
+            dep.Name.Contains(part, StringComparison.InvariantCultureIgnoreCase);
+
+        private async Task AddOutdatedProjectsIfNeeded(Project project, ConcurrentBag<AnalyzedProject> outdatedProjects, IConsole console)
         {
             var outdatedFrameworks = new ConcurrentBag<AnalyzedTargetFramework>();
-                    if (FilterInclude.Any())
-                        deps = deps.Where(AnyIncludeFilterMatches);
 
             var tasks = new Task[project.TargetFrameworks.Count];
-                    if (FilterExclude.Any())
-                        deps = deps.Where(NoExcludeFilterMatches);
-
-                    var dependencies = deps.OrderBy(dependency => dependency.IsTransitive)
-                                           .ThenBy(dependency => dependency.Name)
-                                           .ToList();
 
             // Process each target framework with its related dependencies
             for (var index = 0; index < project.TargetFrameworks.Count; index++)
             {
                 var targetFramework = project.TargetFrameworks[index];
-                tasks[index] = this.AddOutdatedFrameworkIfNeeded(targetFramework, project, outdatedFrameworks);
+                tasks[index] = this.AddOutdatedFrameworkIfNeeded(targetFramework, project, outdatedFrameworks, console);
             }
 
             await Task.WhenAll(tasks);
 
-                        if (referencedVersion != null)
-                        {
-                            latestVersion = await _nugetService.ResolvePackageVersions(dependency.Name, referencedVersion, project.Sources, dependency.VersionRange,
-                                VersionLock, Prerelease, targetFramework.Name, project.FilePath, dependency.IsDevelopmentDependency, OlderThanDays);
-                        }
             if (outdatedFrameworks.Count > 0)
                 outdatedProjects.Add(new AnalyzedProject(project.Name, project.FilePath, outdatedFrameworks));
         }
 
-        private async Task AddOutdatedFrameworkIfNeeded(TargetFramework targetFramework, Project project, ConcurrentBag<AnalyzedTargetFramework> outdatedFrameworks)
+        private async Task AddOutdatedFrameworkIfNeeded(TargetFramework targetFramework, Project project, ConcurrentBag<AnalyzedTargetFramework> outdatedFrameworks, IConsole console)
         {
             var outdatedDependencies = new ConcurrentBag<AnalyzedDependency>();
 
             var deps = targetFramework.Dependencies.Where(d => this.IncludeAutoReferences || d.IsAutoReferenced == false);
 
-            if (!string.IsNullOrEmpty(this.FilterInclude))
-                deps = deps.Where(d => d.Name.Contains(this.FilterInclude, StringComparison.InvariantCultureIgnoreCase));
-            if (!string.IsNullOrEmpty(this.FilterExclude))
-                deps = deps.Where(d => !d.Name.Contains(this.FilterExclude, StringComparison.InvariantCultureIgnoreCase));
+            if (FilterInclude.Any())
+                deps = deps.Where(AnyIncludeFilterMatches);
 
-            var dependencies = deps.OrderBy(dependency => dependency.IsTransitive).ThenBy(dependency => dependency.Name).ToList();
+            if (FilterExclude.Any())
+                deps = deps.Where(NoExcludeFilterMatches);
+
+            var dependencies = deps.OrderBy(dependency => dependency.IsTransitive)
+                .ThenBy(dependency => dependency.Name)
+                .ToList();
+
+            console.WriteLine($"Analyzing dependencies for {project.Name} [{targetFramework.Name}] ({dependencies.Count})");
 
             var tasks = new Task[dependencies.Count];
 
@@ -448,15 +449,6 @@ namespace DotNetOutdated
                 outdatedFrameworks.Add(new AnalyzedTargetFramework(targetFramework.Name, outdatedDependencies));
         }
 
-        private bool AnyIncludeFilterMatches(Dependency dep) =>
-            FilterInclude.Any(f => NameContains(dep, f));
-
-        private bool NoExcludeFilterMatches(Dependency dep) =>
-            !FilterExclude.Any(f => NameContains(dep, f));
-
-        private bool NameContains(Dependency dep, string part) =>
-            dep.Name.Contains(part, StringComparison.InvariantCultureIgnoreCase);
-
         private async Task AddOutdatedDependencyIfNeeded(Project project, TargetFramework targetFramework, Dependency dependency, ConcurrentBag<AnalyzedDependency> outdatedDependencies)
         {
             var referencedVersion = dependency.ResolvedVersion;
@@ -465,7 +457,7 @@ namespace DotNetOutdated
             if (referencedVersion != null)
             {
                 latestVersion = await _nugetService.ResolvePackageVersions(dependency.Name, referencedVersion, project.Sources, dependency.VersionRange,
-                                                                           VersionLock, Prerelease, targetFramework.Name, project.FilePath, dependency.IsDevelopmentDependency);
+                    VersionLock, Prerelease, targetFramework.Name, project.FilePath, dependency.IsDevelopmentDependency, OlderThanDays);
             }
 
             if (referencedVersion == null || latestVersion == null || referencedVersion != latestVersion)
