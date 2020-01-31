@@ -15,7 +15,7 @@
 
 When using an IDE such as Visual Studio, it is easy to find out whether newer versions of the NuGet packages used by your project is available, by using the NuGet Package Manager. However, the .NET Core command-line tools do not provide a built-in way for you to report on outdated NuGet packages.
 
-**dotnet-outdated** is a .NET Core Global tool that allows you to quickly report on any outdated NuGet packages in your .NET Core and .NET Standard projects. 
+**dotnet-outdated** is a .NET Core Global tool that allows you to quickly report on any outdated NuGet packages in your .NET Core and .NET Standard projects.
 
 - [Installation](#installation)
 - [Usage](#usage)
@@ -86,9 +86,15 @@ Lastly, you can specify the path to a solution (`.sln`) or project (`.csproj` or
 
 ## Working with secure feeds
 
-**dotnet-outdated** supports secure NuGet feeds, such as [MyGet](https://www.myget.org). It is suggested that you add these to your sources using the [source command of the NuGet CLI](https://docs.microsoft.com/en-us/nuget/tools/cli-ref-sources). For secure feeds, you can either add a pre-authenticated URL or you can specify the username and password for the feed using the `-UserName` and `-Password` options of the `nuget sources` command.
+**dotnet-outdated** supports secure NuGet feeds, such as [MyGet](https://www.myget.org). It is suggested that you add these to your sources using the [source command of the NuGet CLI](https://docs.microsoft.com/en-us/nuget/tools/cli-ref-sources). For secure feeds, you can do one of the following:
+
+- Add a pre-authenticated URL.
+- Specify the username and password for the feed using the `-UserName` and `-Password` options of the `nuget sources` command.
+- Use a credential provider like [the Azure Artifacts credential provider](https://github.com/microsoft/artifacts-credprovider).
 
 **dotnet-outdated** supports computer-level, user-level and project-level configuration files.
+
+Using credential providers requires an environment variable `DOTNET_HOST_PATH` that is set to the path to the `dotnet` executable (e.g., `/usr/local/share/dotnet/dotnet`). Some versions of the .NET Core SDK do this for you at runtime, some do not. You will get an error message explaining this if the process finds it missing.
 
 ### Issues on macOS
 
