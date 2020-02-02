@@ -1,5 +1,9 @@
 # Changelog
 
+## [v2.9.0]
+
+- Improved error reporting and docs when using NuGet credential providers - Thank you [Travis Illig](https://github.com/tillig)
+
 ## [v2.8.0]
 
 - Add a new flag (`-ot`) to only include packages that are older than the specified number of days - Thank you [Boris](https://github.com/bdn-mca)
@@ -96,6 +100,7 @@ Initial release
 
 - A .NET Core global tool to display outdated NuGet packages in a project
 
+[v2.9.0]: https://github.com/jerriep/dotnet-outdated/tree/v2.9.0
 [v2.8.0]: https://github.com/jerriep/dotnet-outdated/tree/v2.8.0
 [v2.7.0]: https://github.com/jerriep/dotnet-outdated/tree/v2.7.0
 [v2.6.0]: https://github.com/jerriep/dotnet-outdated/tree/v2.6.0
