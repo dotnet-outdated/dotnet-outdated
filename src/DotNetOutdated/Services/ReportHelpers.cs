@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Threading.Tasks;
 using CsvHelper;
@@ -64,7 +65,7 @@ namespace DotNetOutdated.Services
         public static string GetCsvReportContent(List<AnalyzedProject> projects)
         {
             using (var sw = new StringWriter())
-            using (var csv = new CsvWriter(sw))
+            using (var csv = new CsvWriter(sw, CultureInfo.CurrentCulture))
             {
                 foreach (var project in projects)
                 {
