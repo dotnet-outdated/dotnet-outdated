@@ -71,7 +71,7 @@ namespace DotNetOutdated
             ShortName = "f", LongName = "fail-on-updates")]
         public bool FailOnUpdates { get; set; } = false;
 
-        [Option(CommandOptionType.MultipleValue, Description = "Specifies to only look at packages where the name contains the provided string. Culture and case insensitive. If provided multiple times, a single match is enough to include a package.", 
+        [Option(CommandOptionType.MultipleValue, Description = "Specifies to only look at packages where the name contains the provided string. Culture and case insensitive. If provided multiple times, a single match is enough to include a package.",
             ShortName = "inc", LongName = "include")]
         public List<string> FilterInclude { get; set; } = new List<string>();
 
@@ -149,7 +149,7 @@ namespace DotNetOutdated
                 console.Write("Discovering projects...");
 
                 DefaultCredentialServiceUtility.SetupDefaultCredentialService(new NuGet.Common.NullLogger(), true);
-                
+
                 string projectPath = _projectDiscoveryService.DiscoverProject(Path);
 
                 if (!console.IsOutputRedirected)
@@ -159,7 +159,7 @@ namespace DotNetOutdated
 
                 // Analyze the projects
                 console.Write("Analyzing project and restoring packages...");
-                
+
                 var projects = _projectAnalysisService.AnalyzeProject(projectPath, Transitive, TransitiveDepth);
 
                 if (!console.IsOutputRedirected)
@@ -210,13 +210,13 @@ namespace DotNetOutdated
             if (Upgrade.HasValue)
             {
                 console.WriteLine();
-            
+
                 var consolidatedPackages = projects.ConsolidatePackages();
 
                 foreach (var package in consolidatedPackages)
                 {
                     bool upgrade = true;
-                    
+
                     if (Upgrade.UpgradeType == UpgradeType.Prompt)
                     {
                         string resolvedVersion = package.ResolvedVersion?.ToString() ?? "";
@@ -241,7 +241,7 @@ namespace DotNetOutdated
                         console.Write(package.Description, Constants.ReporingColors.PackageName);
                         console.Write("...");
                         console.WriteLine();
-                        
+
                         foreach (var project in package.Projects)
                         {
                             var status = _dotNetAddPackageService.AddPackage(project.ProjectFilePath, package.Name, project.Framework.ToString(), package.LatestVersion);
@@ -265,11 +265,11 @@ namespace DotNetOutdated
                 }
             }
         }
-        
+
         private void PrintColorLegend(IConsole console)
         {
             console.WriteLine("Version color legend:");
-            
+
             console.Write("<red>".PadRight(8), Constants.ReporingColors.MajorVersionUpgrade);
             console.WriteLine(": Major version update or pre-release version. Possible breaking changes.");
             console.Write("<yellow>".PadRight(8), Constants.ReporingColors.MinorVersionUpgrade);
@@ -347,6 +347,15 @@ namespace DotNetOutdated
             if (projects.SelectMany(p => p.TargetFrameworks).SelectMany(f => f.Dependencies).Any(d => d.UpgradeSeverity == DependencyUpgradeSeverity.Unknown))
             {
                 console.WriteLine("Errors occurred while analyzing dependencies for some of your projects. Are you sure you can connect to all your configured NuGet servers?", ConsoleColor.Red);
+                if (String.IsNullOrEmpty(Environment.GetEnvironmentVariable("DOTNET_HOST_PATH")))
+                {
+                    // Issue #255: Sometimes the dotnet executable sets this
+                    // variable for you, sometimes it doesn't. If it's not
+                    // present, credential providers will be skipped.
+                    console.WriteLine();
+                    console.WriteLine("Unable to find DOTNET_HOST_PATH environment variable. If you use credential providers for your NuGet sources you need to have this set to the path to the `dotnet` executable.", ConsoleColor.Red);
+                }
+
                 console.WriteLine();
             }
 
@@ -404,7 +413,7 @@ namespace DotNetOutdated
                             ClearCurrentConsoleLine();
                     }
 
-                    if (outdatedDependencies.Count > 0) 
+                    if (outdatedDependencies.Count > 0)
                         outdatedFrameworks.Add(new AnalyzedTargetFramework(targetFramework.Name, outdatedDependencies));
                 }
 
@@ -474,7 +483,7 @@ namespace DotNetOutdated
             console.Write($"[{targetFramework.Name}]", Constants.ReporingColors.TargetFrameworkName);
             console.WriteLine();
         }
-        
+
         public static void ClearCurrentConsoleLine()
         {
             int currentLineCursor = Console.CursorTop;

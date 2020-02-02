@@ -1,0 +1,21 @@
+{
+    "tasks": [
+        {
+            "args": [
+                "build",
+                "${workspaceFolder}/DotNetOutdated.sln",
+                "/property:GenerateFullPaths=true",
+                "/consoleloggerparameters:NoSummary"
+            ],
+            "command": "dotnet",
+            "group": {
+                "isDefault": true,
+                "kind": "build"
+            },
+            "label": "build",
+            "problemMatcher": "$msCompile",
+            "type": "process"
+        }
+    ],
+    "version": "2.0.0"
+}
