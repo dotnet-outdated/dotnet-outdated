@@ -14,11 +14,14 @@ using NuGet.Versioning;
 
 namespace DotNetOutdated.Core.Services
 {
+    using System.Collections.Concurrent;
+
     public class NuGetPackageInfoService : INuGetPackageInfoService, IDisposable
     {
         private IEnumerable<PackageSource> _enabledSources = null;
         private readonly SourceCacheContext _context;
-        private readonly Dictionary<string, PackageMetadataResource> _metadataResources = new Dictionary<string, PackageMetadataResource>();
+        
+        private readonly ConcurrentDictionary<string, Lazy<Task<PackageMetadataResource>>> _metadataResourceRequests = new ConcurrentDictionary<string, Lazy<Task<PackageMetadataResource>>>();
 
         public NuGetPackageInfoService()
         {
@@ -45,24 +48,17 @@ namespace DotNetOutdated.Core.Services
             {
                 string resourceUrl = source.AbsoluteUri;
 
-                var resource = _metadataResources.GetValueOrDefault(resourceUrl);
-                if (resource == null)
-                {
-                    // We try and create the source repository from the enable sources we loaded from config.
-                    // This allows us to inherit the username/password for the source from the config and thus
-                    // enables secure feeds to work properly
-                    var enabledSources = GetEnabledSources(projectFilePath);
-                    var enabledSource = enabledSources?.FirstOrDefault(s => s.SourceUri == source);
-                    var sourceRepository = enabledSource != null ?
-                        new SourceRepository(enabledSource, Repository.Provider.GetCoreV3()) :
-                        Repository.Factory.GetCoreV3(resourceUrl);
+                // We try and create the source repository from the enable sources we loaded from config.
+                // This allows us to inherit the username/password for the source from the config and thus
+                // enables secure feeds to work properly
+                var enabledSources = this.GetEnabledSources(projectFilePath);
+                var enabledSource = enabledSources?.FirstOrDefault(s => s.SourceUri == source);
+                var sourceRepository = enabledSource != null
+                                           ? new SourceRepository(enabledSource, Repository.Provider.GetCoreV3())
+                                           : Repository.Factory.GetCoreV3(resourceUrl);
 
-                    resource = await sourceRepository.GetResourceAsync<PackageMetadataResource>();
-
-                    _metadataResources.Add(resourceUrl, resource);
-                }
-
-                return resource;
+                var resourceRequest = new Lazy<Task<PackageMetadataResource>>(() => sourceRepository.GetResourceAsync<PackageMetadataResource>());
+                return await this._metadataResourceRequests.GetOrAdd(resourceUrl, resourceRequest).Value;
             }
             catch (Exception)
             {
