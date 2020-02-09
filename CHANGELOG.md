@@ -1,5 +1,9 @@
 # Changelog
 
+## [v2.10.0]
+
+- Massive speed improvements - Thank you [Bastian Schmidt](https://github.com/batzen)
+
 ## [v2.9.0]
 
 - Improved error reporting and docs when using NuGet credential providers - Thank you [Travis Illig](https://github.com/tillig)
@@ -100,6 +104,7 @@ Initial release
 
 - A .NET Core global tool to display outdated NuGet packages in a project
 
+[v2.10.0]: https://github.com/jerriep/dotnet-outdated/tree/v2.9.0
 [v2.9.0]: https://github.com/jerriep/dotnet-outdated/tree/v2.9.0
 [v2.8.0]: https://github.com/jerriep/dotnet-outdated/tree/v2.8.0
 [v2.7.0]: https://github.com/jerriep/dotnet-outdated/tree/v2.7.0
