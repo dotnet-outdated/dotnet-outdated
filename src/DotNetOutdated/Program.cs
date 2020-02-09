@@ -373,17 +373,22 @@ namespace DotNetOutdated
         {
             var outdatedProjects = new ConcurrentBag<AnalyzedProject>();
 
-            console.WriteLine("Analyzing dependencies...");
+            console.Write("Analyzing dependencies...");
 
             var tasks = new Task[projects.Count];
 
             for (var index = 0; index < projects.Count; index++)
             {
                 var project = projects[index];
-                tasks[index] = this.AddOutdatedProjectsIfNeeded(project, outdatedProjects, console);
+                tasks[index] = AddOutdatedProjectsIfNeeded(project, outdatedProjects, console);
             }
 
             await Task.WhenAll(tasks);
+            
+            if (!console.IsOutputRedirected)
+                ClearCurrentConsoleLine();
+            else
+                console.WriteLine();
 
             return outdatedProjects.ToList();
         }
@@ -407,7 +412,7 @@ namespace DotNetOutdated
             for (var index = 0; index < project.TargetFrameworks.Count; index++)
             {
                 var targetFramework = project.TargetFrameworks[index];
-                tasks[index] = this.AddOutdatedFrameworkIfNeeded(targetFramework, project, outdatedFrameworks, console);
+                tasks[index] = AddOutdatedFrameworkIfNeeded(targetFramework, project, outdatedFrameworks, console);
             }
 
             await Task.WhenAll(tasks);
@@ -431,8 +436,6 @@ namespace DotNetOutdated
             var dependencies = deps.OrderBy(dependency => dependency.IsTransitive)
                 .ThenBy(dependency => dependency.Name)
                 .ToList();
-
-            console.WriteLine($"Analyzing dependencies for {project.Name} [{targetFramework.Name}] ({dependencies.Count})");
 
             var tasks = new Task[dependencies.Count];
 
