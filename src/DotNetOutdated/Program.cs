@@ -181,7 +181,7 @@ namespace DotNetOutdated
                     ReportOutdatedDependencies(outdatedProjects, console);
 
                     // Upgrade the packages
-                    UpgradePackages(outdatedProjects, console);
+                    var success = UpgradePackages(outdatedProjects, console);
 
                     if (!Upgrade.HasValue)
                     {
@@ -194,6 +194,9 @@ namespace DotNetOutdated
 
                     if (FailOnUpdates)
                         return 2;
+
+                    if (!success)
+                        return 3;
                 }
                 else
                 {
@@ -212,8 +215,10 @@ namespace DotNetOutdated
             }
         }
 
-        private void UpgradePackages(List<AnalyzedProject> projects, IConsole console)
+        private bool UpgradePackages(List<AnalyzedProject> projects, IConsole console)
         {
+            bool success = true;
+
             if (Upgrade.HasValue)
             {
                 console.WriteLine();
@@ -260,6 +265,7 @@ namespace DotNetOutdated
                             }
                             else
                             {
+                                success = false;
                                 console.Write($"An error occurred while upgrading {project.Project}", Constants.ReporingColors.UpgradeFailure);
                                 console.WriteLine();
                                 console.Write(status.Errors, Constants.ReporingColors.UpgradeFailure);
@@ -271,6 +277,8 @@ namespace DotNetOutdated
                     console.WriteLine();
                 }
             }
+
+            return success;
         }
 
         private void PrintColorLegend(IConsole console)
