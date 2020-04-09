@@ -160,7 +160,7 @@ This command will let the developers finish their job and update the packages on
 
 For failing CI builds, a proposed protocol is to have another CI build which will be scheduled weekly to inform developers of new packages, and they will react accordingly.
 
-Also, some companies/users do not feel comfortable jumping directly on the newest versions, as they might contain some bugs, and might want to wait for some time before updating to the newest pacakge.
+Also, some companies/users do not feel comfortable jumping directly on the newest versions, as they might contain some bugs, and might want to wait for some time before updating to the newest package.
 
 ## FAQ
 

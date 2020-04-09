@@ -76,7 +76,7 @@ This is mostly a bug fix release.
 
 - Changed the way in which project dependencies are detected. We now run the `dotnet restore` command and make use of the `project.assets.json` file to determine the dependencies. This ensures parity with what the .NET CLI is doing.
 - Support for F# projects ([#17](https://github.com/jerriep/dotnet-outdated/issues/17)) - Thank you [John Ruble](https://github.com/jrr)
-- Support reporing on transitive dependencies ([#13](https://github.com/jerriep/dotnet-outdated/issues/13)) - Thank you [James McCutcheon](https://github.com/jamesmcc)
+- Support reporting on transitive dependencies ([#13](https://github.com/jerriep/dotnet-outdated/issues/13)) - Thank you [James McCutcheon](https://github.com/jamesmcc)
 - Fixed issue which displayed packages that were unavailable for the TargetFramework ([#20](https://github.com/jerriep/dotnet-outdated/issues/20))
 - Fixed issue with paths that contain spaces ([#23](https://github.com/jerriep/dotnet-outdated/issues/23))
 - Fixed issue which caused unlisted NuGet packages to be shown ([#15](https://github.com/jerriep/dotnet-outdated/issues/15))
