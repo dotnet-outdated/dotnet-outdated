@@ -99,7 +99,7 @@ namespace DotNetOutdated.Core.Services
                         var childDependency = new Dependency(packageDependency.Id, packageDependency.VersionRange, childLibrary?.Version, false, true, false);
                         targetFramework.Dependencies.Add(childDependency);
 
-                        // Process the dependency for this project depency
+                        // Process the dependency for this project dependency
                         if (level < transitiveDepth)
                             AddDependencies(targetFramework, childLibrary, target, level + 1, transitiveDepth);
                     }
