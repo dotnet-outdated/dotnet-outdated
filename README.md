@@ -164,10 +164,6 @@ Also, some companies/users do not feel comfortable jumping directly on the newes
 
 ## FAQ
 
-### Why are the line endings in .csproj files changed to LF when running with `-u`?
-
-This is due to a [bug in MSBuild](https://github.com/Microsoft/msbuild/issues/1401).
-
 ### Why are unrelated changes made to .csproj files when running with `-u`?
 
 `dotnet-outdated` does not make any changes to .csproj files directly. Instead, it runs `dotnet add package` to update packages, so that command is responsible for all changes made. To track issues related to this command, head over to the [.NET CLI repo](https://github.com/dotnet/cli)
