@@ -96,6 +96,10 @@ namespace DotNetOutdated
             ShortName = "ot", LongName = "older-than")]
         public int OlderThanDays { get; set; }
 
+        [Option(CommandOptionType.NoValue, Description = "Add the reference without performing restore preview and compatibility check.",
+            ShortName = "n", LongName = "no-restore")]
+        public bool NoRestore { get; set; } = false;
+
         public static int Main(string[] args)
         {
             using (var services = new ServiceCollection()
@@ -256,7 +260,7 @@ namespace DotNetOutdated
 
                         foreach (var project in package.Projects)
                         {
-                            var status = _dotNetAddPackageService.AddPackage(project.ProjectFilePath, package.Name, project.Framework.ToString(), package.LatestVersion);
+                            var status = _dotNetAddPackageService.AddPackage(project.ProjectFilePath, package.Name, project.Framework.ToString(), package.LatestVersion, NoRestore);
 
                             if (status.IsSuccess)
                             {
