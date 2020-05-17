@@ -1,5 +1,9 @@
 # Changelog
 
+## [v2.11.0]
+
+- Adds `-n|--no-restore` options - Thank you [SeongChan Lee](https://github.com/foriequal0)
+
 ## [v2.10.0]
 
 - Massive speed improvements - Thank you [Bastian Schmidt](https://github.com/batzen)
@@ -104,7 +108,8 @@ Initial release
 
 - A .NET Core global tool to display outdated NuGet packages in a project
 
-[v2.10.0]: https://github.com/jerriep/dotnet-outdated/tree/v2.9.0
+[v2.11.0]: https://github.com/jerriep/dotnet-outdated/tree/v2.11.0
+[v2.10.0]: https://github.com/jerriep/dotnet-outdated/tree/v2.10.0
 [v2.9.0]: https://github.com/jerriep/dotnet-outdated/tree/v2.9.0
 [v2.8.0]: https://github.com/jerriep/dotnet-outdated/tree/v2.8.0
 [v2.7.0]: https://github.com/jerriep/dotnet-outdated/tree/v2.7.0
