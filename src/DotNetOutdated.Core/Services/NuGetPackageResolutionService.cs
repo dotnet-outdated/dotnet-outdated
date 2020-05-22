@@ -35,7 +35,7 @@ namespace DotNetOutdated.Core.Services
             else if (prerelease == PrereleaseReporting.Never)
                 includePrerelease = false;
 
-            string cacheKey = (packageName + "-" + includePrerelease + "-" + targetFrameworkName).ToLowerInvariant();
+            string cacheKey = (packageName + "-" + includePrerelease + "-" + targetFrameworkName + "-" + olderThanDays).ToLowerInvariant();
 
             // Get all the available versions
             var allVersionsRequest = new Lazy<Task<IReadOnlyList<NuGetVersion>>>(() => this._nugetService.GetAllVersions(packageName, sources, includePrerelease, targetFrameworkName, projectFilePath, isDevelopmentDependency, olderThanDays));

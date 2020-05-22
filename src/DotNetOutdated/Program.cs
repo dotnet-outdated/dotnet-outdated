@@ -476,7 +476,23 @@ namespace DotNetOutdated
             }
 
             if (referencedVersion == null || latestVersion == null || referencedVersion != latestVersion)
-                outdatedDependencies.Add(new AnalyzedDependency(dependency, latestVersion));
+            {
+                // special case when there is version installed which is not older than "OlderThan" days makes "latestVersion" to be null
+                if (OlderThanDays > 0 && latestVersion == null)
+                {
+                    NuGetVersion absoluteLatestVersion = await _nugetService.ResolvePackageVersions(dependency.Name, referencedVersion, project.Sources, dependency.VersionRange,
+                        VersionLock, Prerelease, targetFramework.Name, project.FilePath, dependency.IsDevelopmentDependency);
+
+                    if (absoluteLatestVersion == null || referencedVersion > absoluteLatestVersion)
+                    {
+                        outdatedDependencies.Add(new AnalyzedDependency(dependency, latestVersion));
+                    }
+                }
+                else
+                {
+                    outdatedDependencies.Add(new AnalyzedDependency(dependency, latestVersion));
+                }
+            }
         }
 
         private static ConsoleColor GetUpgradeSeverityColor(DependencyUpgradeSeverity? upgradeSeverity)
