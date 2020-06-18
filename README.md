@@ -1,5 +1,14 @@
 # dotnet-outdated
 
+---
+
+**This project is not maintained anymore**. I do not use `dotnet-outdated` myself and do not have the motivation or energy to maintain it anymore. Feel free to fork if you like.
+
+It is unlikely that I will hand over ownership as the tool has full access to the user's file system and I have not control over whether a new owner will abuse the trust users have in `dotnet-outdated` and perform questionable actions with those permissions.
+
+---
+
+
 [![AppVeyor build status][appveyor-badge]](https://ci.appveyor.com/project/jerriep/dotnet-outdated/branch/master)
 
 [appveyor-badge]: https://img.shields.io/appveyor/ci/jerriep/dotnet-outdated/master.svg?label=appveyor&style=flat-square
