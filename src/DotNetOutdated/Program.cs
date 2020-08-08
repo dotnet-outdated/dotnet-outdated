@@ -116,10 +116,7 @@ namespace DotNetOutdated
                     .AddSingleton<INuGetPackageResolutionService, NuGetPackageResolutionService>()
                     .BuildServiceProvider())
             {
-                var app = new CommandLineApplication<Program>
-                {
-                    ThrowOnUnexpectedArgument = false
-                };
+                var app = new CommandLineApplication<Program>();
                 app.Conventions
                     .UseDefaultConventions()
                     .UseConstructorInjection(services);
