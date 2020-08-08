@@ -37,13 +37,13 @@ When using an IDE such as Visual Studio, it is easy to find out whether newer ve
 Download and install the [.NET Core 2.1 SDK](https://www.microsoft.com/net/download) or newer. Once installed, run the following command:
 
 ```bash
-dotnet tool install --global dotnet-outdated
+dotnet tool install --global coderpatros-dotnet-outdated
 ```
 
 If you already have a previous version of **dotnet-outdated** installed, you can upgrade to the latest version using the following command:
 
 ```bash
-dotnet tool update --global dotnet-outdated
+dotnet tool update --global coderpatros-dotnet-outdated
 ```
 
 ## Usage
