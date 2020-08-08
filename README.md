@@ -2,23 +2,15 @@
 
 ---
 
-**This project is not maintained anymore**. I do not use `dotnet-outdated` myself and do not have the motivation or energy to maintain it anymore. Feel free to fork if you like.
+This is a fork of the original `dotnet-outdated` tool created by Jerrie Pelser.
 
-It is unlikely that I will hand over ownership as the tool has full access to the user's file system and I have not control over whether a new owner will abuse the trust users have in `dotnet-outdated` and perform questionable actions with those permissions.
+Special thanks to Jerrie for creating such a high quality tool to fill such a
+significant gap in the .NET Core tooling.
+
+I still use this tool so thought I would start maintaining a fork. Jerrie is in
+no way associated with this fork.
 
 ---
-
-
-[![AppVeyor build status][appveyor-badge]](https://ci.appveyor.com/project/jerriep/dotnet-outdated/branch/master)
-
-[appveyor-badge]: https://img.shields.io/appveyor/ci/jerriep/dotnet-outdated/master.svg?label=appveyor&style=flat-square
-
-[![NuGet][main-nuget-badge]][main-nuget] [![MyGet][main-myget-badge]][main-myget]
-
-[main-nuget]: https://www.nuget.org/packages/dotnet-outdated/
-[main-nuget-badge]: https://img.shields.io/nuget/v/dotnet-outdated.svg?style=flat-square&label=nuget
-[main-myget]: https://www.myget.org/feed/jerriep/package/nuget/dotnet-outdated
-[main-myget-badge]: https://img.shields.io/www.myget/jerriep/vpre/dotnet-outdated.svg?style=flat-square&label=myget
 
 ## Overview
 
