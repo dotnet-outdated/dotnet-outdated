@@ -3,15 +3,15 @@ name: Test
 on: [pull_request]
 
 jobs:
-  build-warnings:
-    name: Build warnings check
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v1
+  # build-warnings:
+  #   name: Build warnings check
+  #   runs-on: ubuntu-latest
+  #   timeout-minutes: 30
+  #   steps:
+  #     - uses: actions/checkout@v1
   
-      - name: Build
-        run: dotnet build /WarnAsError
+  #     - name: Build
+  #       run: dotnet build /WarnAsError
 
   test:
     name: Tests for .net core ${{ matrix.framework }} on ${{ matrix.os }}
