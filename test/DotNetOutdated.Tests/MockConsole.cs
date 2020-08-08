@@ -41,7 +41,10 @@ namespace DotNetOutdated.Tests
         }
         public ConsoleColor BackgroundColor { get; set; }
 
+        // build warning because it is not used
+        #pragma warning disable 67
         public event ConsoleCancelEventHandler CancelKeyPress;
+        #pragma warning restore 67
 
         public void ResetColor()
         {
