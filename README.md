@@ -1,7 +1,5 @@
 # dotnet-outdated
 
----
-
 This is a fork of the original `dotnet-outdated` tool created by Jerrie Pelser.
 
 Special thanks to Jerrie for creating such a high quality tool to fill such a
@@ -9,8 +7,6 @@ significant gap in the .NET Core tooling.
 
 I still use this tool so thought I would start maintaining a fork. Jerrie is in
 no way associated with this fork.
-
----
 
 ## Overview
 
