@@ -18,12 +18,12 @@
 
   <ItemGroup>
     <PackageReference Include="McMaster.Extensions.CommandLineUtils" Version="2.5.1" />
-    <PackageReference Include="NuGet.Configuration" Version="5.5.1" />
-    <PackageReference Include="NuGet.Credentials" Version="5.5.1" />
-    <PackageReference Include="NuGet.ProjectModel" Version="5.5.1" />
-    <PackageReference Include="NuGet.Protocol" Version="5.5.1" />
-    <PackageReference Include="NuGet.Versioning" Version="5.5.1" />
-    <PackageReference Include="System.IO.Abstractions" Version="11.0.6" />
+    <PackageReference Include="NuGet.Configuration" Version="5.6.0" />
+    <PackageReference Include="NuGet.Credentials" Version="5.6.0" />
+    <PackageReference Include="NuGet.ProjectModel" Version="5.6.0" />
+    <PackageReference Include="NuGet.Protocol" Version="5.6.0" />
+    <PackageReference Include="NuGet.Versioning" Version="5.6.0" />
+    <PackageReference Include="System.IO.Abstractions" Version="12.1.1" />
   </ItemGroup>
 
   <ItemGroup>
