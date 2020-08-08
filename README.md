@@ -8,6 +8,10 @@ significant gap in the .NET Core tooling.
 I still use this tool so thought I would start maintaining a fork. Jerrie is in
 no way associated with this fork.
 
+If you already have the original `dotnet-outdated` tool installed you need to
+run `dotnet tool uninstall --global dotnet-outdated` before installing this
+version.
+
 ## Overview
 
 When using an IDE such as Visual Studio, it is easy to find out whether newer versions of the NuGet packages used by your project is available, by using the NuGet Package Manager. However, the .NET Core command-line tools do not provide a built-in way for you to report on outdated NuGet packages.
@@ -30,7 +34,7 @@ When using an IDE such as Visual Studio, it is easy to find out whether newer ve
 
 ## Installation
 
-Download and install the [.NET Core 2.1 SDK](https://www.microsoft.com/net/download) or newer. Once installed, run the following command:
+Download and install the [.NET Core 2.1 or 3.1 SDK](https://www.microsoft.com/net/download). Once installed, run the following command:
 
 ```bash
 dotnet tool install --global coderpatros-dotnet-outdated
