@@ -34,7 +34,7 @@ When using an IDE such as Visual Studio, it is easy to find out whether newer ve
 
 ## Installation
 
-Download and install the [.NET Core 2.1 SDK](https://www.microsoft.com/net/download) or newer. Once installed, run the following command:
+Download and install the [.NET Core 2.1 or 3.1 SDK](https://www.microsoft.com/net/download). Once installed, run the following command:
 
 ```bash
 dotnet tool install --global coderpatros-dotnet-outdated
