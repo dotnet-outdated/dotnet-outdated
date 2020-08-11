@@ -25,5 +25,8 @@ jobs:
     steps:
     - uses: actions/checkout@v1
 
+    - name: Smoke test
+      run: dotnet run --framework netcoreapp${{ matrix.framework }} --project src/DotNetOutdated
+
     - name: Tests
       run: dotnet test --framework netcoreapp${{ matrix.framework }}
