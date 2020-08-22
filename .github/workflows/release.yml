@@ -21,10 +21,10 @@ jobs:
           VERSION=`cat semver.txt`
           OUTPUT=./nupkgs
           echo "##[set-output name=version;]$VERSION"
-          echo "##[set-output name=core_package_name;]CoderPatros.DotNetOutdated.Core.$VERSION.nupkg"
-          echo "##[set-output name=core_package_filename;]$OUTPUT/CoderPatros.DotNetOutdated.Core.$VERSION.nupkg"
-          echo "##[set-output name=tool_package_name;]coderpatros-dotnet-outdated.$VERSION.nupkg"
-          echo "##[set-output name=tool_package_filename;]$OUTPUT/coderpatros-dotnet-outdated.$VERSION.nupkg"
+          echo "##[set-output name=core_package_name;]DotNetOutdatedTool.Core.$VERSION.nupkg"
+          echo "##[set-output name=core_package_filename;]$OUTPUT/DotNetOutdatedTool.Core.$VERSION.nupkg"
+          echo "##[set-output name=tool_package_name;]dotnet-outdated-tool.$VERSION.nupkg"
+          echo "##[set-output name=tool_package_filename;]$OUTPUT/dotnet-outdated-tool.$VERSION.nupkg"
           dotnet build --configuration Release
           dotnet pack --configuration Release --version-suffix $VERSION --output $OUTPUT
 
