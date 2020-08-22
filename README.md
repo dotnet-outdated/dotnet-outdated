@@ -1,24 +1,15 @@
+[![Build Status](https://github.com/dotnet-outdated/dotnet-outdated/workflows/Release/badge.svg)](https://github.com/dotnet-outdated/dotnet-outdated/actions?workflow=Release)
+[![License](https://img.shields.io/badge/license-MIT-brightgreen.svg)](LICENSE)
+[![NuGet Version](https://img.shields.io/nuget/v/dotnet-outdated-tool.svg)](https://www.nuget.org/packages/dotnet-outdated-tool/)
+![Nuget](https://img.shields.io/nuget/dt/dotnet-outdated-tool.svg)
+
 # dotnet-outdated
 
----
+This is a continuation of the original `dotnet-outdated` tool created by Jerrie Pelser.
 
-**This project is not maintained anymore**. I do not use `dotnet-outdated` myself and do not have the motivation or energy to maintain it anymore. Feel free to fork if you like.
-
-It is unlikely that I will hand over ownership as the tool has full access to the user's file system and I have not control over whether a new owner will abuse the trust users have in `dotnet-outdated` and perform questionable actions with those permissions.
-
----
-
-
-[![AppVeyor build status][appveyor-badge]](https://ci.appveyor.com/project/jerriep/dotnet-outdated/branch/master)
-
-[appveyor-badge]: https://img.shields.io/appveyor/ci/jerriep/dotnet-outdated/master.svg?label=appveyor&style=flat-square
-
-[![NuGet][main-nuget-badge]][main-nuget] [![MyGet][main-myget-badge]][main-myget]
-
-[main-nuget]: https://www.nuget.org/packages/dotnet-outdated/
-[main-nuget-badge]: https://img.shields.io/nuget/v/dotnet-outdated.svg?style=flat-square&label=nuget
-[main-myget]: https://www.myget.org/feed/jerriep/package/nuget/dotnet-outdated
-[main-myget-badge]: https://img.shields.io/www.myget/jerriep/vpre/dotnet-outdated.svg?style=flat-square&label=myget
+If you already have the original `dotnet-outdated` tool installed you need to
+run `dotnet tool uninstall --global dotnet-outdated` before installing this
+version.
 
 ## Overview
 
@@ -42,16 +33,16 @@ When using an IDE such as Visual Studio, it is easy to find out whether newer ve
 
 ## Installation
 
-Download and install the [.NET Core 2.1 SDK](https://www.microsoft.com/net/download) or newer. Once installed, run the following command:
+Download and install the [.NET Core 2.1 or 3.1 SDK](https://www.microsoft.com/net/download). Once installed, run the following command:
 
 ```bash
-dotnet tool install --global dotnet-outdated
+dotnet tool install --global dotnet-outdated-tool
 ```
 
 If you already have a previous version of **dotnet-outdated** installed, you can upgrade to the latest version using the following command:
 
 ```bash
-dotnet tool update --global dotnet-outdated
+dotnet tool update --global dotnet-outdated-tool
 ```
 
 ## Usage

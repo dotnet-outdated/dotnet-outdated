@@ -1,0 +1,67 @@
+name: Release
+
+on:
+  workflow_dispatch
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v1
+      
+      # The tests should have already been run during the PR workflow, so this is really just a sanity check
+      - name: Tests
+        run: dotnet test
+
+      - name: Package release
+        id: package_release
+        run: |
+          VERSION=`cat semver.txt`
+          OUTPUT=./nupkgs
+          echo "##[set-output name=version;]$VERSION"
+          echo "##[set-output name=core_package_name;]DotNetOutdatedTool.Core.$VERSION.nupkg"
+          echo "##[set-output name=core_package_filename;]$OUTPUT/DotNetOutdatedTool.Core.$VERSION.nupkg"
+          echo "##[set-output name=tool_package_name;]dotnet-outdated-tool.$VERSION.nupkg"
+          echo "##[set-output name=tool_package_filename;]$OUTPUT/dotnet-outdated-tool.$VERSION.nupkg"
+          dotnet build --configuration Release
+          dotnet pack --configuration Release --version-suffix $VERSION --output $OUTPUT
+
+      - name: Publish package
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          dotnet nuget push --source https://api.nuget.org/v3/index.json --api-key "$NUGET_API_KEY" ${{ steps.package_release.outputs.core_package_filename }}
+          dotnet nuget push --source https://api.nuget.org/v3/index.json --api-key "$NUGET_API_KEY" ${{ steps.package_release.outputs.tool_package_filename }}
+
+      - name: Create github release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          release_name: ${{ steps.package_release.outputs.version }}
+          tag_name: v${{ steps.package_release.outputs.version }}
+          draft: false
+          prerelease: false
+
+      - name: Upload core package to github release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ${{ steps.package_release.outputs.core_package_filename }}
+          asset_name: ${{ steps.package_release.outputs.core_package_name }}
+          asset_content_type: application/zip
+
+      - name: Upload tool package to github release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ${{ steps.package_release.outputs.tool_package_filename }}
+          asset_name: ${{ steps.package_release.outputs.tool_package_name }}
+          asset_content_type: application/zip

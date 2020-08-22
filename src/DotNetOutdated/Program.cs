@@ -103,7 +103,7 @@ namespace DotNetOutdated
         public static int Main(string[] args)
         {
             using (var services = new ServiceCollection()
-                    .AddSingleton<IConsole, PhysicalConsole>()
+                    .AddSingleton<IConsole>(PhysicalConsole.Singleton)
                     .AddSingleton<IReporter>(provider => new ConsoleReporter(provider.GetService<IConsole>()))
                     .AddSingleton<IFileSystem, FileSystem>()
                     .AddSingleton<IProjectDiscoveryService, ProjectDiscoveryService>()
@@ -116,10 +116,7 @@ namespace DotNetOutdated
                     .AddSingleton<INuGetPackageResolutionService, NuGetPackageResolutionService>()
                     .BuildServiceProvider())
             {
-                var app = new CommandLineApplication<Program>
-                {
-                    ThrowOnUnexpectedArgument = false
-                };
+                var app = new CommandLineApplication<Program>();
                 app.Conventions
                     .UseDefaultConventions()
                     .UseConstructorInjection(services);

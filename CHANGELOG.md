@@ -39,13 +39,13 @@
 ## [v2.2.0]
 
 - Add ability to filter packages with the `--include` and `--exclude` option (See [#55](https://github.com/jerriep/dotnet-outdated/issues/55)) - Thank you [Jeppe Ravn Christiansen](https://github.com/jepperc)
-- Add ability to save results to a JSON or CSV file (See [#29](https://github.com/jerriep/dotnet-outdated/issues/29) and [#57](https://github.com/jerriep/dotnet-outdated/issues/57)) - Thank you [Patrick Dwyer](https://github.com/patros)
+- Add ability to save results to a JSON or CSV file (See [#29](https://github.com/jerriep/dotnet-outdated/issues/29) and [#57](https://github.com/jerriep/dotnet-outdated/issues/57)) - Thank you [Patrick Dwyer](https://github.com/coderpatros)
 - Fix some scenarios where current or latest versions for certain packages could not be resolved 
 
 ## [v2.1.0]
 
 - Excludes unsupported projects (See [#58](https://github.com/jerriep/dotnet-outdated/issues/58)) - Thank you [Thomas Levesque](https://github.com/thomaslevesque)
-- Add option to return non-zero exit code when updates are found (See [#94](https://github.com/jerriep/dotnet-outdated/pull/94)) - Thank you [Patrick Dwyer](https://github.com/patros)
+- Add option to return non-zero exit code when updates are found (See [#94](https://github.com/jerriep/dotnet-outdated/pull/94)) - Thank you [Patrick Dwyer](https://github.com/coderpatros)
 - Fixed `NullReferenceException` when unable to determine either the current or latest version of a package (See [#96](https://github.com/jerriep/dotnet-outdated/issues/96))
 
 ## [v2.0.0]
