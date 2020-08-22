@@ -1,5 +1,10 @@
 # Changelog
 
+## [v3.0.0]
+
+- Target .NET Core 2.1 and 3.1 LTS versions
+- Update dependencies
+
 ## [v2.11.0]
 
 - Adds `-n|--no-restore` options - Thank you [SeongChan Lee](https://github.com/foriequal0)
