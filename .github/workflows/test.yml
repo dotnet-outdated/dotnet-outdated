@@ -8,7 +8,7 @@ jobs:
   #   runs-on: ubuntu-latest
   #   timeout-minutes: 30
   #   steps:
-  #     - uses: actions/checkout@v1
+  #     - uses: actions/checkout@v2.3.2
   
   #     - name: Build
   #       run: dotnet build /WarnAsError
@@ -23,7 +23,7 @@ jobs:
     timeout-minutes: 30
     
     steps:
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v2.3.2
 
     - name: Smoke test
       run: |
