@@ -1,3 +1,22 @@
+# This workflow is used for publishing the NuGet package.
+#
+# Before triggering a release the `semver.txt` file should be updated in the
+# relevant branch.
+#
+# When commiting the version change in `semver.txt` the commit message is
+# important as it will be used for the release in GitHub.
+#
+# For an example commit browse to
+# https://github.com/dotnet-outdated/dotnet-outdated/commit/b9953b0ab06ac41206399f7ff7c593fa3201febc.
+# 
+# The resulting release is here
+# https://github.com/dotnet-outdated/dotnet-outdated/releases/tag/v3.0.0.
+#
+# Releases are triggered manually. This can be done by browsing to
+# https://github.com/dotnet-outdated/dotnet-outdated/actions?query=workflow%3ARelease
+# and selecting "Run workflow". If releasing a patch for a previous version
+# make sure the correct branch is selected. It will default to the default
+# branch.
 name: Release
 
 on:
