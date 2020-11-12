@@ -45,7 +45,7 @@ jobs:
           echo "##[set-output name=tool_package_name;]dotnet-outdated-tool.$VERSION.nupkg"
           echo "##[set-output name=tool_package_filename;]$OUTPUT/dotnet-outdated-tool.$VERSION.nupkg"
           dotnet build --configuration Release
-          dotnet pack --configuration Release --version-suffix $VERSION --output $OUTPUT
+          dotnet pack --configuration Release /p:Version=$VERSION --output $OUTPUT
 
       - name: Publish package
         env:
