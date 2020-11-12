@@ -1,6 +1,6 @@
 name: Test
 
-on: [pull_request]
+on: [pull_request, workflow_dispatch]
 
 jobs:
   # build-warnings:
@@ -14,20 +14,35 @@ jobs:
   #       run: dotnet build /WarnAsError
 
   test:
-    name: Tests for .net core ${{ matrix.framework }} on ${{ matrix.os }}
+    name: Tests for framework ${{ matrix.framework }} on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        framework: ['2.1', '3.1']
+        framework: ['netcoreapp2.1', 'netcoreapp3.1', 'net5']
     timeout-minutes: 30
     
     steps:
     - uses: actions/checkout@v2.3.4
 
+    - name: Setup dotnet
+      uses: actions/setup-dotnet@v1.7.2
+      with:
+        dotnet-version: '2.1.x'
+
+    - name: Setup dotnet
+      uses: actions/setup-dotnet@v1.7.2
+      with:
+        dotnet-version: '3.1.x'
+
+    - name: Setup dotnet
+      uses: actions/setup-dotnet@v1.7.2
+      with:
+        dotnet-version: '5.0.x'
+
     - name: Smoke test
       run: |
-        dotnet run --framework netcoreapp${{ matrix.framework }} --project src/DotNetOutdated test-projects/development-dependencies
+        dotnet run --framework ${{ matrix.framework }} --project src/DotNetOutdated test-projects/development-dependencies
 
     - name: Tests
-      run: dotnet test --framework netcoreapp${{ matrix.framework }}
+      run: dotnet test --framework ${{ matrix.framework }}
