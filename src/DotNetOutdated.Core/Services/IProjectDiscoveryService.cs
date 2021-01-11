@@ -1,7 +1,9 @@
-﻿namespace DotNetOutdated.Core.Services
+﻿using System.Collections.Generic;
+
+namespace DotNetOutdated.Core.Services
 {
     public interface IProjectDiscoveryService
     {
-        string DiscoverProject(string path);
+        IList<string> DiscoverProjects(string path, bool recursive = false);
     }
 }

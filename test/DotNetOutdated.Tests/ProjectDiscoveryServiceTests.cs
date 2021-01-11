@@ -3,6 +3,7 @@ using DotNetOutdated.Core.Resources;
 using DotNetOutdated.Core.Services;
 using System.Collections.Generic;
 using System.IO.Abstractions.TestingHelpers;
+using System.Linq;
 using Xunit;
 using XFS = System.IO.Abstractions.TestingHelpers.MockUnixSupport;
 
@@ -17,6 +18,7 @@ namespace DotNetOutdated.Tests
         private readonly string _project1 = XFS.Path(@"c:\path\project1.csproj");
         private readonly string _project2 = XFS.Path(@"c:\path\project2.csproj");
         private readonly string _project3 = XFS.Path(@"c:\path\project3.fsproj");
+        private readonly string _project4 = XFS.Path(@"c:\path\sub\project4.csproj");
         private readonly string _nonProjectFile = XFS.Path(@"c:\path\file.cs");
 
         [Fact]
@@ -30,7 +32,7 @@ namespace DotNetOutdated.Tests
             var projectDiscoveryService = new ProjectDiscoveryService(fileSystem);
             
             // Act
-            string project = projectDiscoveryService.DiscoverProject(_path);
+            string project = projectDiscoveryService.DiscoverProjects(_path).Single();
             
             // Assert
             Assert.Equal(_solution1, project);
@@ -50,7 +52,7 @@ namespace DotNetOutdated.Tests
             // Act
             
             // Assert
-            var exception = Assert.Throws<CommandValidationException>(() => projectDiscoveryService.DiscoverProject(_path));
+            var exception = Assert.Throws<CommandValidationException>(() => projectDiscoveryService.DiscoverProjects(_path));
             Assert.Equal(string.Format(ValidationErrorMessages.DirectoryContainsMultipleSolutions, _path), exception.Message);
         }
         
@@ -65,7 +67,7 @@ namespace DotNetOutdated.Tests
             var projectDiscoveryService = new ProjectDiscoveryService(fileSystem);
             
             // Act
-            string project = projectDiscoveryService.DiscoverProject(_path);
+            string project = projectDiscoveryService.DiscoverProjects(_path).Single();
             
             // Assert
             Assert.Equal(_project1, project);
@@ -82,7 +84,7 @@ namespace DotNetOutdated.Tests
             var projectDiscoveryService = new ProjectDiscoveryService(fileSystem);
             
             // Act
-            string project = projectDiscoveryService.DiscoverProject(_path);
+            string project = projectDiscoveryService.DiscoverProjects(_path).Single();
             
             // Assert
             Assert.Equal(_project3, project);
@@ -102,8 +104,27 @@ namespace DotNetOutdated.Tests
             // Act
             
             // Assert
-            var exception = Assert.Throws<CommandValidationException>(() => projectDiscoveryService.DiscoverProject(_path));
+            var exception = Assert.Throws<CommandValidationException>(() => projectDiscoveryService.DiscoverProjects(_path));
             Assert.Equal(string.Format(ValidationErrorMessages.DirectoryContainsMultipleProjects, _path), exception.Message);
+        }
+
+        [Fact]
+        public void MultipleProjectsRecursive_ReturnsProjects()
+        {
+            // Arrange
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { _project1, MockFileData.NullObject},
+                { _project3, MockFileData.NullObject},
+                { _project4, MockFileData.NullObject}
+            }, _path);
+            var projectDiscoveryService = new ProjectDiscoveryService(fileSystem);
+            
+            // Act
+            
+            // Assert
+            var projects = projectDiscoveryService.DiscoverProjects(_path, true);
+            Assert.Equal(3, projects.Count);
         }
 
         [Fact]
@@ -116,7 +137,7 @@ namespace DotNetOutdated.Tests
             // Act
             
             // Assert
-            var exception = Assert.Throws<CommandValidationException>(() => projectDiscoveryService.DiscoverProject(_path));
+            var exception = Assert.Throws<CommandValidationException>(() => projectDiscoveryService.DiscoverProjects(_path));
             Assert.Equal(string.Format(ValidationErrorMessages.DirectoryDoesNotContainSolutionsOrProjects, _path), exception.Message);
         }
         
@@ -130,7 +151,7 @@ namespace DotNetOutdated.Tests
             // Act
             
             // Assert
-            var exception = Assert.Throws<CommandValidationException>(() => projectDiscoveryService.DiscoverProject(_path));
+            var exception = Assert.Throws<CommandValidationException>(() => projectDiscoveryService.DiscoverProjects(_path));
             Assert.Equal(string.Format(ValidationErrorMessages.DirectoryOrFileDoesNotExist, _path), exception.Message);
         }
         
@@ -148,7 +169,7 @@ namespace DotNetOutdated.Tests
             // Act
             
             // Assert
-            var exception = Assert.Throws<CommandValidationException>(() => projectDiscoveryService.DiscoverProject(_nonProjectFile));
+            var exception = Assert.Throws<CommandValidationException>(() => projectDiscoveryService.DiscoverProjects(_nonProjectFile));
             Assert.Equal(string.Format(ValidationErrorMessages.FileNotAValidSolutionOrProject, _nonProjectFile), exception.Message);
         }
     }

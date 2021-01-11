@@ -100,6 +100,10 @@ namespace DotNetOutdated
             ShortName = "n", LongName = "no-restore")]
         public bool NoRestore { get; set; } = false;
 
+        [Option(CommandOptionType.NoValue, Description = "Recursively search for all projects within the provided directory.",
+            ShortName = "r", LongName = "recursive")]
+        public bool Recursive { get; set; } = false;
+
         public static int Main(string[] args)
         {
             using (var services = new ServiceCollection()
@@ -156,7 +160,7 @@ namespace DotNetOutdated
 
                 DefaultCredentialServiceUtility.SetupDefaultCredentialService(new NuGet.Common.NullLogger(), true);
 
-                string projectPath = _projectDiscoveryService.DiscoverProject(Path);
+                var projectPaths = _projectDiscoveryService.DiscoverProjects(Path, Recursive);
 
                 if (!console.IsOutputRedirected)
                     ClearCurrentConsoleLine();
@@ -166,7 +170,7 @@ namespace DotNetOutdated
                 // Analyze the projects
                 console.Write("Analyzing project(s)...");
                 
-                var projects = _projectAnalysisService.AnalyzeProject(projectPath, false, Transitive, TransitiveDepth);
+                var projects = projectPaths.SelectMany(path => _projectAnalysisService.AnalyzeProject(path, false, Transitive, TransitiveDepth)).ToList();
 
                 if (!console.IsOutputRedirected)
                     ClearCurrentConsoleLine();

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.IO.Abstractions;
 using System.Linq;
@@ -15,7 +16,7 @@ namespace DotNetOutdated.Core.Services
             _fileSystem = fileSystem;
         }
         
-        public string DiscoverProject(string path)
+        public IList<string> DiscoverProjects(string path, bool recursive = false)
         {
             if (!(_fileSystem.File.Exists(path) || _fileSystem.Directory.Exists(path)))
                 throw new CommandValidationException(string.Format(Resources.ValidationErrorMessages.DirectoryOrFileDoesNotExist, path));
@@ -25,10 +26,23 @@ namespace DotNetOutdated.Core.Services
             // If a directory was passed in, search for a .sln or .csproj file
             if (fileAttributes.HasFlag(FileAttributes.Directory))
             {
+                // If we are in recursive mode, find all individual projects recursively
+                if (recursive)
+                {
+                    var recursiveProjectFiles = _fileSystem.Directory.GetFiles(path, "*.csproj", SearchOption.AllDirectories)
+                        .Concat(_fileSystem.Directory.GetFiles(path, "*.fsproj", SearchOption.AllDirectories)).ToArray();
+
+                    if (recursiveProjectFiles.Length > 0)
+                        return recursiveProjectFiles;
+
+                    // At this point the path contains no solutions or projects, so throw an exception
+                    throw new CommandValidationException(string.Format(Resources.ValidationErrorMessages.DirectoryDoesNotContainSolutionsOrProjects, path));
+                }
+
                 // Search for solution(s)
                 var solutionFiles = _fileSystem.Directory.GetFiles(path, "*.sln");
                 if (solutionFiles.Length == 1)
-                    return _fileSystem.Path.GetFullPath(solutionFiles[0]);
+                    return new[] {_fileSystem.Path.GetFullPath(solutionFiles[0])};
                 
                 if (solutionFiles.Length > 1)
                     throw new CommandValidationException(string.Format(Resources.ValidationErrorMessages.DirectoryContainsMultipleSolutions, path));
@@ -36,7 +50,7 @@ namespace DotNetOutdated.Core.Services
                 // We did not find any solutions, so try and find individual projects
                 var projectFiles = _fileSystem.Directory.GetFiles(path, "*.csproj").Concat(_fileSystem.Directory.GetFiles(path, "*.fsproj")).ToArray();
                 if (projectFiles.Length == 1)
-                    return _fileSystem.Path.GetFullPath(projectFiles[0]);
+                    return new[] {_fileSystem.Path.GetFullPath(projectFiles[0])};
                 
                 if (projectFiles.Length > 1)
                     throw new CommandValidationException(string.Format(Resources.ValidationErrorMessages.DirectoryContainsMultipleProjects, path));
@@ -49,7 +63,7 @@ namespace DotNetOutdated.Core.Services
             if ((string.Compare(_fileSystem.Path.GetExtension(path), ".sln", StringComparison.OrdinalIgnoreCase) == 0) ||
                 (string.Compare(_fileSystem.Path.GetExtension(path), ".csproj", StringComparison.OrdinalIgnoreCase) == 0) ||
                 (string.Compare(_fileSystem.Path.GetExtension(path), ".fsproj", StringComparison.OrdinalIgnoreCase) == 0))
-                return _fileSystem.Path.GetFullPath(path);
+                return new[] { _fileSystem.Path.GetFullPath(path)};
 
             // At this point, we know the file passed in is not a valid project or solution
             throw new CommandValidationException(string.Format(Resources.ValidationErrorMessages.FileNotAValidSolutionOrProject, path));
