@@ -8,9 +8,10 @@
             "cwd": "${workspaceFolder}/src/DotNetOutdated",
             "name": ".NET Core Launch (console)",
             "preLaunchTask": "build",
-            "program": "${workspaceFolder}/.build/bin/DotNetOutdated/Debug/netcoreapp3.0/dotnet-outdated.dll",
+            "program": "${workspaceFolder}/src/DotNetOutdated/bin/Debug/net5.0/dotnet-outdated.dll",
             "request": "launch",
             "stopAtEntry": false,
+            "requireExactSource" : false,
             "type": "coreclr"
         },
         {

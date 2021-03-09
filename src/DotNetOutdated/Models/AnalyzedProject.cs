@@ -38,10 +38,14 @@ namespace DotNetOutdated.Models
         [JsonConverter(typeof(ToStringJsonConverter))]
         public NuGetFramework Name { get; set; }
 
-        public AnalyzedTargetFramework(NuGetFramework name, IEnumerable<AnalyzedDependency> dependencies)
+        [JsonProperty(Order = 2)]
+        public double DependencyDrift { get; }
+
+        public AnalyzedTargetFramework(NuGetFramework name, IEnumerable<AnalyzedDependency> dependencies, double dependencyDrift)
         {
             Name = name;
             Dependencies = new List<AnalyzedDependency>(dependencies);
+            DependencyDrift = dependencyDrift;
         }
     }
 

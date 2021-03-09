@@ -457,8 +457,11 @@ namespace DotNetOutdated
 
             await Task.WhenAll(tasks);
 
-            if (outdatedDependencies.Count > 0)
-                outdatedFrameworks.Add(new AnalyzedTargetFramework(targetFramework.Name, outdatedDependencies));
+            if (outdatedDependencies.Count > 0) 
+            {
+                double drift = computeDependencyDrift(deps.Count(), outdatedDependencies.Count);
+                outdatedFrameworks.Add(new AnalyzedTargetFramework(targetFramework.Name, outdatedDependencies, drift));
+            }
         }
 
         private async Task AddOutdatedDependencyIfNeeded(Project project, TargetFramework targetFramework, Dependency dependency, ConcurrentBag<AnalyzedDependency> outdatedDependencies)
@@ -492,6 +495,21 @@ namespace DotNetOutdated
             }
         }
 
+        ///
+        /// <summary>
+        ///  A simple linear <para>drift function</para>,
+        ///  computes a value between 0 (no drift) and 1 (everything drifted).
+        /// </summary>
+        /// <returns>a value between 0..1</returns>
+        public double computeDependencyDrift(double allDependenciesCount, double outDatedDependenciesCount) 
+        {
+            if (allDependenciesCount > 0)
+            {
+                return (outDatedDependenciesCount / allDependenciesCount);
+            }
+            return 0.0;
+        }
+    
         private static ConsoleColor GetUpgradeSeverityColor(DependencyUpgradeSeverity? upgradeSeverity)
         {
             switch (upgradeSeverity)
@@ -540,6 +558,7 @@ namespace DotNetOutdated
         {
             console.WriteIndent();
             console.Write($"[{targetFramework.Name}]", Constants.ReporingColors.TargetFrameworkName);
+            console.Write($" (dependency drift {targetFramework.DependencyDrift})");
             console.WriteLine();
         }
 

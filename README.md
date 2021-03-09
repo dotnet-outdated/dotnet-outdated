@@ -162,6 +162,11 @@ For failing CI builds, a proposed protocol is to have another CI build which wil
 
 Also, some companies/users do not feel comfortable jumping directly on the newest versions, as they might contain some bugs, and might want to wait for some time before updating to the newest package.
 
+## Dependency Drift
+
+One of the major characteristics of an application is the freshness of its dependencies to other libraries, APIs or environmental components that a Dependency Drift function tracks to flag the out-of-date dependencies that require updating.
+Our function computes a value between 0 (no drift) and 1 (everything is outdated) and can be used in CI environments as quality metric. 
+
 ## FAQ
 
 ### Why are unrelated changes made to .csproj files when running with `-u`?
