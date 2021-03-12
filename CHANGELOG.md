@@ -1,5 +1,26 @@
 # Changelog
 
+## [v3.2.0]
+
+- Adds `-r|--recursive` options - Thank you [David Dahlen](https://github.com/davidda)
+- Adds support for solution filter files (.slnf) - Thank you [Nick Devereaux](https://github.com/nickdevereaux)
+
+## [v3.1.1]
+
+- Dependency maintenance release
+
+## [v3.1.0]
+
+- Add support for .NET 5
+
+## [v3.0.2]
+
+- Dependency maintenance release
+
+## [v3.0.1]
+
+- Add additional output when project dependency graph parsing fails
+
 ## [v3.0.0]
 
 - Target .NET Core 2.1 and 3.1 LTS versions
@@ -113,6 +134,12 @@ Initial release
 
 - A .NET Core global tool to display outdated NuGet packages in a project
 
+[v3.2.0]: https://github.com/dotnet-outdated/dotnet-outdated/releases/tag/v3.2.0
+[v3.1.1]: https://github.com/dotnet-outdated/dotnet-outdated/releases/tag/v3.1.1
+[v3.1.0]: https://github.com/dotnet-outdated/dotnet-outdated/releases/tag/v3.1.0
+[v3.0.2]: https://github.com/dotnet-outdated/dotnet-outdated/releases/tag/v3.0.2
+[v3.0.1]: https://github.com/dotnet-outdated/dotnet-outdated/releases/tag/v3.0.1
+[v3.0.0]: https://github.com/dotnet-outdated/dotnet-outdated/releases/tag/v3.0.0
 [v2.11.0]: https://github.com/jerriep/dotnet-outdated/tree/v2.11.0
 [v2.10.0]: https://github.com/jerriep/dotnet-outdated/tree/v2.10.0
 [v2.9.0]: https://github.com/jerriep/dotnet-outdated/tree/v2.9.0
