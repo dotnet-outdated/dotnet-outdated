@@ -62,7 +62,8 @@ namespace DotNetOutdated.Core.Services
             // If a .sln or .csproj file was passed, just return that
             if ((string.Compare(_fileSystem.Path.GetExtension(path), ".sln", StringComparison.OrdinalIgnoreCase) == 0) ||
                 (string.Compare(_fileSystem.Path.GetExtension(path), ".csproj", StringComparison.OrdinalIgnoreCase) == 0) ||
-                (string.Compare(_fileSystem.Path.GetExtension(path), ".fsproj", StringComparison.OrdinalIgnoreCase) == 0))
+                (string.Compare(_fileSystem.Path.GetExtension(path), ".fsproj", StringComparison.OrdinalIgnoreCase) == 0) ||
+                (string.Compare(_fileSystem.Path.GetExtension(path), ".slnf", StringComparison.OrdinalIgnoreCase) == 0))
                 return new[] { _fileSystem.Path.GetFullPath(path)};
 
             // At this point, we know the file passed in is not a valid project or solution

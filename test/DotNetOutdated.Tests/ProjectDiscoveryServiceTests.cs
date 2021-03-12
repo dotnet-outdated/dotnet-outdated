@@ -15,6 +15,7 @@ namespace DotNetOutdated.Tests
         private readonly string _someOtherPath = XFS.Path(@"c:\another_path");
         private readonly string _solution1 = XFS.Path(@"c:\path\solution1.sln");
         private readonly string _solution2 = XFS.Path(@"c:\path\solution2.sln");
+        private readonly string _solutionFilter1 = XFS.Path(@"c:\path\solution1.slnf");
         private readonly string _project1 = XFS.Path(@"c:\path\project1.csproj");
         private readonly string _project2 = XFS.Path(@"c:\path\project2.csproj");
         private readonly string _project3 = XFS.Path(@"c:\path\project3.fsproj");
@@ -171,6 +172,24 @@ namespace DotNetOutdated.Tests
             // Assert
             var exception = Assert.Throws<CommandValidationException>(() => projectDiscoveryService.DiscoverProjects(_nonProjectFile));
             Assert.Equal(string.Format(ValidationErrorMessages.FileNotAValidSolutionOrProject, _nonProjectFile), exception.Message);
+        }
+
+        [Fact]
+        public void SingleSolutionFilter_ReturnsSolution()
+        {
+            // Arrange
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { _solutionFilter1, MockFileData.NullObject}
+            }, _path);
+            var projectDiscoveryService = new ProjectDiscoveryService(fileSystem);
+
+            // Act
+            var projects = projectDiscoveryService.DiscoverProjects(_path);
+
+            // Assert
+            Assert.Single(projects);
+            Assert.Equal(_solutionFilter1, projects.First());
         }
     }
 }
