@@ -23,7 +23,7 @@
     <PackageReference Include="NuGet.ProjectModel" Version="5.9.0" />
     <PackageReference Include="NuGet.Protocol" Version="5.9.0" />
     <PackageReference Include="NuGet.Versioning" Version="5.9.0" />
-    <PackageReference Include="System.IO.Abstractions" Version="13.2.25" />
+    <PackageReference Include="System.IO.Abstractions" Version="13.2.28" />
   </ItemGroup>
 
   <ItemGroup>
