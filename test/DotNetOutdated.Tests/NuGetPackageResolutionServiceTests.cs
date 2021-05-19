@@ -27,7 +27,12 @@ namespace DotNetOutdated.Tests
                 new NuGetVersion("1.4.0-pre"),
                 new NuGetVersion("2.0.0"),
                 new NuGetVersion("2.1.0"),
-                new NuGetVersion("2.2.0-pre")
+                new NuGetVersion("2.2.0-pre.1"),
+                new NuGetVersion("2.2.0-pre.2"),
+                new NuGetVersion("3.0.0-pre.1"),
+                new NuGetVersion("3.0.0-pre.2"),
+                new NuGetVersion("3.1.0-pre.1"),
+                new NuGetVersion("4.0.0-pre.1")
             };
             
             var nuGetPackageInfoService = new Mock<INuGetPackageInfoService>();
@@ -35,15 +40,22 @@ namespace DotNetOutdated.Tests
                 .ReturnsAsync(availableVersions);
             
             _nuGetPackageResolutionService = new NuGetPackageResolutionService(nuGetPackageInfoService.Object);
-            }
+        }
 
         [Theory]
         [InlineData("1.2.0", VersionLock.None, PrereleaseReporting.Auto, "2.1.0")]
-        [InlineData("1.2.0", VersionLock.None, PrereleaseReporting.Always, "2.2.0-pre")]
-        [InlineData("1.3.0-pre", VersionLock.None, PrereleaseReporting.Auto, "2.2.0-pre")]
+        [InlineData("1.2.0", VersionLock.None, PrereleaseReporting.Always, "4.0.0-pre.1")]
+        [InlineData("1.3.0-pre", VersionLock.None, PrereleaseReporting.Auto, "4.0.0-pre.1")]
         [InlineData("1.3.0-pre", VersionLock.None, PrereleaseReporting.Never, "2.1.0")]
         [InlineData("1.2.0", VersionLock.Major, PrereleaseReporting.Auto, "1.3.0")]
         [InlineData("1.2.0", VersionLock.Minor, PrereleaseReporting.Auto, "1.2.2")]
+        [InlineData("3.0.0-pre.1", VersionLock.None, PrereleaseReporting.Never, "3.0.0-pre.1")]
+        [InlineData("3.0.0-pre.1", VersionLock.None, PrereleaseReporting.Always, "4.0.0-pre.1")]
+        [InlineData("3.0.0-pre.1", VersionLock.None, PrereleaseReporting.Auto, "4.0.0-pre.1")]
+        [InlineData("3.0.0-pre.1", VersionLock.Minor, PrereleaseReporting.Auto, "3.0.0-pre.2")]
+        [InlineData("3.0.0-pre.1", VersionLock.Minor, PrereleaseReporting.Always, "3.0.0-pre.2")]
+        [InlineData("3.0.0-pre.1", VersionLock.Major, PrereleaseReporting.Auto, "3.1.0-pre.1")]
+        [InlineData("3.0.0-pre.1", VersionLock.Major, PrereleaseReporting.Always, "3.1.0-pre.1")]
         public async Task ResolvesVersion_Correctly(string current, VersionLock versionLock, PrereleaseReporting prerelease, string latest)
         {
             // Arrange

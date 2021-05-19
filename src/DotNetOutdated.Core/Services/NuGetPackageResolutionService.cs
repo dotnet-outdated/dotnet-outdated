@@ -7,6 +7,7 @@ using NuGet.Versioning;
 namespace DotNetOutdated.Core.Services
 {
     using System.Collections.Concurrent;
+    using System.Linq;
 
     public class NuGetPackageResolutionService : INuGetPackageResolutionService
     {
@@ -44,12 +45,16 @@ namespace DotNetOutdated.Core.Services
             // Determine the floating behaviour
             var floatingBehaviour = includePrerelease ? NuGetVersionFloatBehavior.AbsoluteLatest : NuGetVersionFloatBehavior.Major;
             if (versionLock == VersionLock.Major)
-                floatingBehaviour = NuGetVersionFloatBehavior.Minor;
+                floatingBehaviour = includePrerelease ? NuGetVersionFloatBehavior.PrereleaseMinor : NuGetVersionFloatBehavior.Minor;
             if (versionLock == VersionLock.Minor)
-                floatingBehaviour = NuGetVersionFloatBehavior.Patch;
+                floatingBehaviour = includePrerelease ? NuGetVersionFloatBehavior.PrereleasePatch : NuGetVersionFloatBehavior.Patch;
+
+            string releasePrefix = null;
+            if (referencedVersion.IsPrerelease)
+                releasePrefix = referencedVersion.ReleaseLabels.First(); // TODO Not sure exactly what to do for this bit
 
             // Create a new version range for comparison
-            var latestVersionRange = new VersionRange(currentVersionRange, new FloatRange(floatingBehaviour, referencedVersion));
+            var latestVersionRange = new VersionRange(currentVersionRange, new FloatRange(floatingBehaviour, referencedVersion, releasePrefix));
 
             // Use new version range to determine latest version
             NuGetVersion latestVersion = latestVersionRange.FindBestMatch(allVersions);
