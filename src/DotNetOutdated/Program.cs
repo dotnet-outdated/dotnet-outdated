@@ -478,6 +478,12 @@ namespace DotNetOutdated
 
             if (referencedVersion == null || latestVersion == null || referencedVersion != latestVersion)
             {
+                if (dependency.VersionRange.HasLowerAndUpperBounds)
+                {
+                    // do nothing, only log somewhere?
+                    return;
+                }
+                
                 // special case when there is version installed which is not older than "OlderThan" days makes "latestVersion" to be null
                 if (OlderThanDays > 0 && latestVersion == null)
                 {
