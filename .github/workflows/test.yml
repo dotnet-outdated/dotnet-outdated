@@ -9,7 +9,7 @@ jobs:
   #   timeout-minutes: 30
   #   steps:
   #     - uses: actions/checkout@v2.3.5
-  
+
   #     - name: Build
   #       run: dotnet build /WarnAsError
 
@@ -19,9 +19,9 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        framework: ['netcoreapp2.1', 'netcoreapp3.1', 'net5.0']
+        framework: ['netcoreapp2.1', 'netcoreapp3.1', 'net5.0', 'net6.0']
     timeout-minutes: 30
-    
+
     steps:
     - uses: actions/checkout@v2.3.5
 
@@ -39,6 +39,11 @@ jobs:
       uses: actions/setup-dotnet@v1.8.2
       with:
         dotnet-version: '5.0.x'
+
+    - name: Setup dotnet
+      uses: actions/setup-dotnet@v1.8.2
+      with:
+        dotnet-version: '6.0.x'
 
     - name: Smoke test
       run: |
