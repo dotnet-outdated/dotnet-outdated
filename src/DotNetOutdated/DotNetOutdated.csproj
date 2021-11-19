@@ -19,7 +19,7 @@
     <RepositoryUrl>https://github.com/dotnet-outdated/dotnet-outdated.git</RepositoryUrl>
     <PackAsTool>true</PackAsTool>
   </PropertyGroup>
-
+  
   <ItemGroup>
     <PackageReference Include="CsvHelper" Version="27.1.1" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="5.0.2" />
