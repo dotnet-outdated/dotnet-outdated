@@ -19,16 +19,11 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        framework: ['netcoreapp2.1', 'netcoreapp3.1', 'net5.0', 'net6.0']
+        framework: ['netcoreapp3.1', 'net5.0', 'net6.0']
     timeout-minutes: 30
     
     steps:
     - uses: actions/checkout@v2.3.5
-
-    - name: Setup dotnet
-      uses: actions/setup-dotnet@v1.8.2
-      with:
-        dotnet-version: '2.1.x'
 
     - name: Setup dotnet
       uses: actions/setup-dotnet@v1.8.2
