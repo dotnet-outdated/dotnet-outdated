@@ -20,7 +20,7 @@ namespace DotNetOutdated.Core.Services
             return AddPackage(projectPath, packageName, frameworkName, version, false);
         }
 
-        public RunStatus AddPackage(string projectPath, string packageName, string frameworkName, NuGetVersion version, bool noRestore)
+        public RunStatus AddPackage(string projectPath, string packageName, string frameworkName, NuGetVersion version, bool noRestore, bool ignoreFailedSource=false)
         {
             string projectName = _fileSystem.Path.GetFileName(projectPath);
             
@@ -28,6 +28,10 @@ namespace DotNetOutdated.Core.Services
             if (noRestore)
             {
                 arguments.Add("--no-restore");
+            }
+            if (ignoreFailedSource)
+            {
+                arguments.Add("--ignore-failed-sources");
             }
 
             return _dotNetRunner.Run(_fileSystem.Path.GetDirectoryName(projectPath), arguments.ToArray());

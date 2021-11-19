@@ -6,6 +6,6 @@ namespace DotNetOutdated.Core.Services
     {
         RunStatus AddPackage(string projectPath, string packageName, string frameworkName, NuGetVersion version);
         
-        RunStatus AddPackage(string projectPath, string packageName, string frameworkName, NuGetVersion version, bool noRestore);
+        RunStatus AddPackage(string projectPath, string packageName, string frameworkName, NuGetVersion version, bool noRestore, bool ignoreFailedSources);
     }
 }

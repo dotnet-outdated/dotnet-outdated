@@ -12,6 +12,6 @@ namespace DotNetOutdated.Core.Services
             bool isDevelopmentDependency);
 
         Task<IReadOnlyList<NuGetVersion>> GetAllVersions(string package, IEnumerable<Uri> sources, bool includePrerelease, NuGetFramework targetFramework, string projectFilePath,
-            bool isDevelopmentDependency, int olderThanDays);
+            bool isDevelopmentDependency, int olderThanDays, bool ignoreFailedSources);
     }
 }

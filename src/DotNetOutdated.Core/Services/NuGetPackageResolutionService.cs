@@ -27,7 +27,7 @@ namespace DotNetOutdated.Core.Services
         }
 
         public async Task<NuGetVersion> ResolvePackageVersions(string packageName, NuGetVersion referencedVersion, IEnumerable<Uri> sources, VersionRange currentVersionRange,
-            VersionLock versionLock, PrereleaseReporting prerelease, NuGetFramework targetFrameworkName, string projectFilePath, bool isDevelopmentDependency, int olderThanDays)
+            VersionLock versionLock, PrereleaseReporting prerelease, NuGetFramework targetFrameworkName, string projectFilePath, bool isDevelopmentDependency, int olderThanDays, bool ignoreFailedSources = false)
         {
             // Determine whether we are interested in pre-releases
             bool includePrerelease = referencedVersion.IsPrerelease;
@@ -39,7 +39,7 @@ namespace DotNetOutdated.Core.Services
             string cacheKey = (packageName + "-" + includePrerelease + "-" + targetFrameworkName + "-" + olderThanDays).ToLowerInvariant();
 
             // Get all the available versions
-            var allVersionsRequest = new Lazy<Task<IReadOnlyList<NuGetVersion>>>(() => this._nugetService.GetAllVersions(packageName, sources, includePrerelease, targetFrameworkName, projectFilePath, isDevelopmentDependency, olderThanDays));
+            var allVersionsRequest = new Lazy<Task<IReadOnlyList<NuGetVersion>>>(() => this._nugetService.GetAllVersions(packageName, sources, includePrerelease, targetFrameworkName, projectFilePath, isDevelopmentDependency, olderThanDays, ignoreFailedSources));
             var allVersions = await this._cache.GetOrAdd(cacheKey, allVersionsRequest).Value;
 
             // Determine the floating behaviour

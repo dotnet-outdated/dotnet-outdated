@@ -15,6 +15,7 @@ using NuGet.Versioning;
 namespace DotNetOutdated.Core.Services
 {
     using System.Collections.Concurrent;
+    using System.Diagnostics;
 
     public class NuGetPackageInfoService : INuGetPackageInfoService, IDisposable
     {
@@ -73,7 +74,7 @@ namespace DotNetOutdated.Core.Services
         }
 
         public async Task<IReadOnlyList<NuGetVersion>> GetAllVersions(string package, IEnumerable<Uri> sources, bool includePrerelease, NuGetFramework targetFramework,
-            string projectFilePath, bool isDevelopmentDependency, int olderThanDays)
+            string projectFilePath, bool isDevelopmentDependency, int olderThanDays, bool ignoreFailedSources = false)
         {
             var allVersions = new List<NuGetVersion>();
             foreach (var source in sources)
@@ -127,6 +128,15 @@ namespace DotNetOutdated.Core.Services
                 catch(HttpRequestException)
                 {
                     // Suppress HTTP errors when connecting to NuGet sources
+                }
+                catch (Exception ex)
+                {
+                    if (!ignoreFailedSources)
+                    {
+                        continue;
+                    }
+                    // if the inner exception is NOT HttpRequestException, throw it
+                    if (ex.InnerException != null && !(ex.InnerException is HttpRequestException)) throw ex;
                 }
             }
 
