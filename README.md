@@ -17,11 +17,14 @@ When using an IDE such as Visual Studio, it is easy to find out whether newer ve
 
 **dotnet-outdated** is a .NET Core Global tool that allows you to quickly report on any outdated NuGet packages in your .NET Core and .NET Standard projects.
 
+- [dotnet-outdated](#dotnet-outdated)
+  - [Overview](#overview)
   - [Installation](#installation)
   - [Usage](#usage)
   - [Specifying the path](#specifying-the-path)
-- [Upgrading Packages](#upgrading-packages)
+  - [Upgrading packages](#upgrading-packages)
   - [Working with secure feeds](#working-with-secure-feeds)
+    - [Issues on macOS](#issues-on-macos)
   - [Handling pre-release versions](#handling-pre-release-versions)
   - [Locking to the current major or minor release](#locking-to-the-current-major-or-minor-release)
   - [Reporting on transitive dependencies](#reporting-on-transitive-dependencies)
@@ -29,7 +32,10 @@ When using an IDE such as Visual Studio, it is easy to find out whether newer ve
   - [Auto-references](#auto-references)
   - [Saving results to a file](#saving-results-to-a-file)
   - [Including and excluding packages](#including-and-excluding-packages)
+  - [Only listing new version of packages older than a specified the number of days](#only-listing-new-version-of-packages-older-than-a-specified-the-number-of-days)
   - [FAQ](#faq)
+    - [Why are unrelated changes made to .csproj files when running with `-u`?](#why-are-unrelated-changes-made-to-csproj-files-when-running-with--u)
+    - [Why I am getting an error about required library hostfxr.dll/libhostfxr.so/libhostfxr.dylib not found?](#why-i-am-getting-an-error-about-required-library-hostfxrdlllibhostfxrsolibhostfxrdylib-not-found)
 
 ## Installation
 
