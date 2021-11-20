@@ -31,8 +31,19 @@ namespace DotNetOutdated.Core.Services
 
             if (runStatus.IsSuccess)
             {
-                var dependencyGraphText = _fileSystem.File.ReadAllText(dgOutput);
-                return new DependencyGraphSpec(JsonConvert.DeserializeObject<JObject>(dependencyGraphText));
+                /*
+                    TempDirectory is a hacky workaround for DependencyGraphSpec(JObject)
+                    being deprecated. Unfortunately it looks like the only alternative
+                    is to load the file locally. Which is ok normally, but complicates
+                    testing.
+                */
+                using (var tempDirectory = new TempDirectory())
+                {
+                    var dependencyGraphFilename = System.IO.Path.Combine(tempDirectory.DirectoryPath, "DependencyGraph.json");
+                    var dependencyGraphText = _fileSystem.File.ReadAllText(dgOutput);
+                    System.IO.File.WriteAllText(dependencyGraphFilename, dependencyGraphText);
+                    return DependencyGraphSpec.Load(dependencyGraphFilename);
+                }
             }
 
             throw new CommandValidationException($"Unable to process the project `{projectPath}. Are you sure this is a valid .NET Core or .NET Standard project type?" +
