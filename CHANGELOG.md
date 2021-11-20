@@ -1,5 +1,13 @@
 # Changelog
 
+## [v4.0.0]
+
+- Add support for .NET 6 and drop support for .NET Core 2.1 - Thank you [John Smith](https://github.com/solrevdev)
+
+## [v3.2.1]
+
+- Fix incorrect floating version behaviour - Thank you [Martin Costello](https://github.com/martincostello)
+
 ## [v3.2.0]
 
 - Adds `-r|--recursive` options - Thank you [David Dahlen](https://github.com/davidda)
