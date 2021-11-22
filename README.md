@@ -68,6 +68,7 @@ Options:
   -o|--output <OUTPUT_FILENAME>              Specifies the filename for a generated report. (Use the -of|--output-format option to specify the format. JSON by default.)
   -of|--output-format <OUTPUT_FILE_FORMAT>   Specifies the output format for the generated report. Possible values: json (default) or csv.
   -ot|--older-than <NUMBER_OF_DAYS>          Only include package versions that are older than the specified number of days.
+  --ignore-failed-sources                    Treat package source failures as warnings.
 ```
 
 ![Screenshot of dotnet-outdated](screenshot.png)

@@ -104,6 +104,9 @@ namespace DotNetOutdated
             ShortName = "r", LongName = "recursive")]
         public bool Recursive { get; set; } = false;
 
+        [Option(CommandOptionType.NoValue, Description = "Treat package source failures as warnings.", ShortName ="ifs", LongName = "ignore-failed-sources")]
+        public bool IgnoreFailedSources { get; set; } = false;
+
         public static int Main(string[] args)
         {
             using (var services = new ServiceCollection()
@@ -261,7 +264,7 @@ namespace DotNetOutdated
 
                         foreach (var project in package.Projects)
                         {
-                            var status = _dotNetAddPackageService.AddPackage(project.ProjectFilePath, package.Name, project.Framework.ToString(), package.LatestVersion, NoRestore);
+                            var status = _dotNetAddPackageService.AddPackage(project.ProjectFilePath, package.Name, project.Framework.ToString(), package.LatestVersion, NoRestore, IgnoreFailedSources);
 
                             if (status.IsSuccess)
                             {
@@ -473,7 +476,7 @@ namespace DotNetOutdated
             if (referencedVersion != null)
             {
                 latestVersion = await _nugetService.ResolvePackageVersions(dependency.Name, referencedVersion, project.Sources, dependency.VersionRange,
-                    VersionLock, Prerelease, targetFramework.Name, project.FilePath, dependency.IsDevelopmentDependency, OlderThanDays);
+                    VersionLock, Prerelease, targetFramework.Name, project.FilePath, dependency.IsDevelopmentDependency, OlderThanDays, IgnoreFailedSources);
             }
 
             if (referencedVersion == null || latestVersion == null || referencedVersion != latestVersion)

@@ -36,7 +36,7 @@ namespace DotNetOutdated.Tests
             };
             
             var nuGetPackageInfoService = new Mock<INuGetPackageInfoService>();
-            nuGetPackageInfoService.Setup(service => service.GetAllVersions(packageName, It.IsAny<List<Uri>>(), It.IsAny<bool>(), It.IsAny<NuGetFramework>(), It.IsAny<string>(), It.IsAny<bool>(), 0))
+            nuGetPackageInfoService.Setup(service => service.GetAllVersions(packageName, It.IsAny<List<Uri>>(), It.IsAny<bool>(), It.IsAny<NuGetFramework>(), It.IsAny<string>(), It.IsAny<bool>(), 0, It.IsAny<bool>()))
                 .ReturnsAsync(availableVersions);
             
             _nuGetPackageResolutionService = new NuGetPackageResolutionService(nuGetPackageInfoService.Object);
