@@ -1,5 +1,9 @@
 # Changelog
 
+## [v4.1.0]
+
+- Add `--ignore-failed-sources` option to treat package source failures as warnings. - Thank you [Tim Heuer](https://github.com/timheuer)
+
 ## [v4.0.0]
 
 - Add support for .NET 6 and drop support for .NET Core 2.1 - Thank you [John Smith](https://github.com/solrevdev)
@@ -142,6 +146,9 @@ Initial release
 
 - A .NET Core global tool to display outdated NuGet packages in a project
 
+[v4.1.0]: https://github.com/dotnet-outdated/dotnet-outdated/releases/tag/v4.1.0
+[v4.0.0]: https://github.com/dotnet-outdated/dotnet-outdated/releases/tag/v4.0.0
+[v3.2.1]: https://github.com/dotnet-outdated/dotnet-outdated/releases/tag/v3.2.1
 [v3.2.0]: https://github.com/dotnet-outdated/dotnet-outdated/releases/tag/v3.2.0
 [v3.1.1]: https://github.com/dotnet-outdated/dotnet-outdated/releases/tag/v3.1.1
 [v3.1.0]: https://github.com/dotnet-outdated/dotnet-outdated/releases/tag/v3.1.0
