@@ -46,13 +46,15 @@ namespace DotNetOutdated.Core.Models
 
         public bool IsTransitive { get; }
 
+        public bool IsDownloadDependency { get; }
+
         public string Name { get; }
 
         public NuGetVersion ResolvedVersion { get; }
 
         public VersionRange VersionRange { get; }
 
-        public Dependency(string name, VersionRange versionRange, NuGetVersion resolvedVersion, bool isAutoReferenced, bool isTransitive, bool isDevelopmentDependency)
+        public Dependency(string name, VersionRange versionRange, NuGetVersion resolvedVersion, bool isAutoReferenced, bool isTransitive, bool isDevelopmentDependency, bool isDownloadDependency = false)
         {
             Name = name;
             VersionRange = versionRange;
@@ -60,6 +62,7 @@ namespace DotNetOutdated.Core.Models
             IsAutoReferenced = isAutoReferenced;
             IsTransitive = isTransitive;
             IsDevelopmentDependency = isDevelopmentDependency;
+            IsDownloadDependency = isDownloadDependency;
         }
     }
 }
