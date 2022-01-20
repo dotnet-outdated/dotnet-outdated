@@ -9,7 +9,7 @@
     <PackageReference Include="xunit.runner.visualstudio" Version="2.4.0" />
     <PackageReference Include="StyleCop.Analyzers" Version="1.0.0" />
     <PackageReference Include="Microsoft.CodeQuality.Analyzers" Version="2.6.0" />
-    <PackageDownload Include="Microsoft.Extensions.DependencyInjection" Version="[5.0.2]" />
+    <PackageDownload Include="GitVersion.Tool" Version="[5.8.0]" />
   </ItemGroup>
 
 

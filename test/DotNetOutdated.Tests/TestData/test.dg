@@ -99,8 +99,8 @@
           "warn": true,
           "downloadDependencies": [
             {
-              "name": "Microsoft.Extensions.DependencyInjection",
-              "version": "[5.0.2, 5.0.2]"
+              "name": "GitVersion.Tool",
+              "version": "[5.8.0, 5.8.0]"
             }
           ]
         }

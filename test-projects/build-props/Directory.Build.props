@@ -7,7 +7,7 @@
  
   <ItemGroup>
     <PackageReference Include="Newtonsoft.Json" Version="11.0.1" />
-    <PackageDownload Include="Microsoft.Extensions.DependencyInjection" Version="[5.0.2]" />
+    <PackageDownload Include="GitVersion.Tool" Version="[5.8.0]" />
   </ItemGroup>
 
 </Project>

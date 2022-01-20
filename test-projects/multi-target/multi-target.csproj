@@ -6,10 +6,10 @@
   </PropertyGroup>
   <ItemGroup Condition=" '$(TargetFramework)' == 'netstandard1.6' ">
     <PackageReference Include="Microsoft.AspNetCore.Http.Extensions" Version="1.0.4" />
-    <PackageDownload Include="Microsoft.Extensions.DependencyInjection" Version="[1.0.2]" />
+    <PackageDownload Include="GitVersion.Tool" Version="[5.8.0]" />
   </ItemGroup>
   <ItemGroup Condition=" '$(TargetFramework)' == 'netstandard2.0' ">
     <PackageReference Include="Microsoft.AspNetCore.Http.Extensions" Version="2.0.2" />
-    <PackageDownload Include="Microsoft.Extensions.DependencyInjection" Version="[5.0.2]" />
+    <PackageDownload Include="GitVersion.Tool" Version="[5.8.0]" />
   </ItemGroup>
 </Project>
