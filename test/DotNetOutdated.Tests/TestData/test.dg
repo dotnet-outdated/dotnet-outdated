@@ -96,7 +96,13 @@
             "net461"
           ],
           "assetTargetFallback": true,
-          "warn": true
+          "warn": true,
+          "downloadDependencies": [
+            {
+              "name": "GitVersion.Tool",
+              "version": "[5.8.0, 5.8.0]"
+            }
+          ]
         }
       }
     },

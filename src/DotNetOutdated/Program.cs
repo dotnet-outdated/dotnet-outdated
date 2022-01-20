@@ -36,7 +36,7 @@ namespace DotNetOutdated
         private readonly INuGetPackageResolutionService _nugetService;
         private readonly IProjectAnalysisService _projectAnalysisService;
         private readonly IProjectDiscoveryService _projectDiscoveryService;
-        private readonly IDotNetAddPackageService _dotNetAddPackageService;
+        private readonly IEnumerable<IDotNetAddPackageService> _dotNetAddPackageServices;
 
         [Option(CommandOptionType.NoValue, Description = "Specifies whether to include auto-referenced packages.",
             LongName = "include-auto-references")]
@@ -119,6 +119,7 @@ namespace DotNetOutdated
                     .AddSingleton<IDependencyGraphService, DependencyGraphService>()
                     .AddSingleton<IDotNetRestoreService, DotNetRestoreService>()
                     .AddSingleton<IDotNetAddPackageService, DotNetAddPackageService>()
+                    .AddSingleton<IDotNetAddPackageService, DotNetAddPackageDownloadService>()
                     .AddSingleton<INuGetPackageInfoService, NuGetPackageInfoService>()
                     .AddSingleton<INuGetPackageResolutionService, NuGetPackageResolutionService>()
                     .BuildServiceProvider())
@@ -138,14 +139,14 @@ namespace DotNetOutdated
             .InformationalVersion;
 
         public Program(IFileSystem fileSystem, IReporter reporter, INuGetPackageResolutionService nugetService, IProjectAnalysisService projectAnalysisService,
-            IProjectDiscoveryService projectDiscoveryService, IDotNetAddPackageService dotNetAddPackageService)
+            IProjectDiscoveryService projectDiscoveryService, IEnumerable<IDotNetAddPackageService> dotNetAddPackageServices)
         {
             _fileSystem = fileSystem;
             _reporter = reporter;
             _nugetService = nugetService;
             _projectAnalysisService = projectAnalysisService;
             _projectDiscoveryService = projectDiscoveryService;
-            _dotNetAddPackageService = dotNetAddPackageService;
+            _dotNetAddPackageServices = dotNetAddPackageServices;
         }
 
         public async Task<int> OnExecute(CommandLineApplication app, IConsole console)
@@ -262,9 +263,11 @@ namespace DotNetOutdated
                         console.Write("...");
                         console.WriteLine();
 
+                        var dotNetAddPackageService = package.IsDownloadDependency ? _dotNetAddPackageServices.Last() : _dotNetAddPackageServices.First();
+
                         foreach (var project in package.Projects)
                         {
-                            var status = _dotNetAddPackageService.AddPackage(project.ProjectFilePath, package.Name, project.Framework.ToString(), package.LatestVersion, NoRestore, IgnoreFailedSources);
+                            var status = dotNetAddPackageService.AddPackage(project.ProjectFilePath, package.Name, project.Framework.ToString(), package.LatestVersion, NoRestore, IgnoreFailedSources);
 
                             if (status.IsSuccess)
                             {

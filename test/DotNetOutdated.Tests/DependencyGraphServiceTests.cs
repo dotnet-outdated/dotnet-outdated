@@ -42,6 +42,7 @@ namespace DotNetOutdated.Tests
             // Assert
             Assert.NotNull(dependencyGraph);
             Assert.Equal(3, dependencyGraph.Projects.Count);
+            Assert.Equal(1, dependencyGraph.Projects[0].TargetFrameworks[0].DownloadDependencies.Count);
 
             dotNetRunner.Verify(runner => runner.Run(XFS.Path(@"c:\"), It.Is<string[]>(a => a[0] == "msbuild" && a[1] == '\"' + _path + '\"')));
         }

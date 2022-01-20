@@ -7,6 +7,7 @@ using NuGet.Common;
 using NuGet.Packaging.Core;
 using NuGet.ProjectModel;
 using NuGet.Protocol;
+using NuGet.Versioning;
 
 namespace DotNetOutdated.Core.Services
 {
@@ -77,6 +78,13 @@ namespace DotNetOutdated.Core.Services
                             // Process transitive dependencies for the library
                             if (includeTransitiveDependencies)
                                 AddDependencies(targetFramework, projectLibrary, target, 1, transitiveDepth);
+                        }
+
+                        foreach (var downloadDependancy in targetFrameworkInformation.DownloadDependencies)
+                        {
+                            var dependency = new Dependency(downloadDependancy.Name, new VersionRange(downloadDependancy.VersionRange.MinVersion), downloadDependancy.VersionRange.MinVersion,
+                                false, false, true, true);
+                            targetFramework.Dependencies.Add(dependency);
                         }
                     }
                 }
