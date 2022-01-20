@@ -96,7 +96,13 @@
             "net461"
           ],
           "assetTargetFallback": true,
-          "warn": true
+          "warn": true,
+          "downloadDependencies": [
+            {
+              "name": "Microsoft.Extensions.DependencyInjection",
+              "version": "[5.0.2, 5.0.2]"
+            }
+          ]
         }
       }
     },
