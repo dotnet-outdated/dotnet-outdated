@@ -24,6 +24,7 @@ namespace DotNetOutdated
 {
     using System.Collections.Concurrent;
     using System.Diagnostics;
+    using System.IO;
 
     [Command(
         Name = "dotnet outdated",
@@ -36,7 +37,7 @@ namespace DotNetOutdated
         private readonly INuGetPackageResolutionService _nugetService;
         private readonly IProjectAnalysisService _projectAnalysisService;
         private readonly IProjectDiscoveryService _projectDiscoveryService;
-        private readonly IDotNetAddPackageService _dotNetAddPackageService;
+        private readonly IDotNetPackageService _dotNetPackageService;
 
         [Option(CommandOptionType.NoValue, Description = "Specifies whether to include auto-referenced packages.",
             LongName = "include-auto-references")]
@@ -118,7 +119,7 @@ namespace DotNetOutdated
                     .AddSingleton<IDotNetRunner, DotNetRunner>()
                     .AddSingleton<IDependencyGraphService, DependencyGraphService>()
                     .AddSingleton<IDotNetRestoreService, DotNetRestoreService>()
-                    .AddSingleton<IDotNetAddPackageService, DotNetAddPackageService>()
+                    .AddSingleton<IDotNetPackageService, DotNetPackageService>()
                     .AddSingleton<INuGetPackageInfoService, NuGetPackageInfoService>()
                     .AddSingleton<INuGetPackageResolutionService, NuGetPackageResolutionService>()
                     .BuildServiceProvider())
@@ -138,14 +139,14 @@ namespace DotNetOutdated
             .InformationalVersion;
 
         public Program(IFileSystem fileSystem, IReporter reporter, INuGetPackageResolutionService nugetService, IProjectAnalysisService projectAnalysisService,
-            IProjectDiscoveryService projectDiscoveryService, IDotNetAddPackageService dotNetAddPackageService)
+            IProjectDiscoveryService projectDiscoveryService, IDotNetPackageService dotNetPackageService)
         {
             _fileSystem = fileSystem;
             _reporter = reporter;
             _nugetService = nugetService;
             _projectAnalysisService = projectAnalysisService;
             _projectDiscoveryService = projectDiscoveryService;
-            _dotNetAddPackageService = dotNetAddPackageService;
+            _dotNetPackageService = dotNetPackageService;
         }
 
         public async Task<int> OnExecute(CommandLineApplication app, IConsole console)
@@ -264,7 +265,17 @@ namespace DotNetOutdated
 
                         foreach (var project in package.Projects)
                         {
-                            var status = _dotNetAddPackageService.AddPackage(project.ProjectFilePath, package.Name, project.Framework.ToString(), package.LatestVersion, NoRestore, IgnoreFailedSources);
+                            RunStatus status = null;
+                            if (!File.ReadLines(project.ProjectFilePath).Take(2).Contains("<Project Sdk=\"Microsoft.NET.Sdk\">"))
+                            {
+                                console.WriteLine("Project format not SDK style, removing package before upgrade.");
+                                status = _dotNetPackageService.RemovePackage(project.ProjectFilePath, package.Name);
+                            }
+
+                            if (status?.IsSuccess != false)
+                            {
+                                status = _dotNetPackageService.AddPackage(project.ProjectFilePath, package.Name, project.Framework.ToString(), package.LatestVersion, NoRestore, IgnoreFailedSources);
+                            }
 
                             if (status.IsSuccess)
                             {
