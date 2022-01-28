@@ -86,7 +86,7 @@ namespace DotNetOutdated.Tests
 
         private AnalyzedDependency CreateAnalyzedDependency(NuGetVersion resolvedVersion, NuGetVersion latestVersion)
         {
-            return new AnalyzedDependency(new Dependency("Does not matter", VersionRange.All, resolvedVersion, false, false, false), latestVersion);
+            return new AnalyzedDependency(new Dependency("Does not matter", VersionRange.All, resolvedVersion, false, false, false, false), latestVersion);
         }
     }
 }
