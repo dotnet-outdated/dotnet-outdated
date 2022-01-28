@@ -47,7 +47,6 @@ namespace DotNetOutdated.Core.Services
                         if (newFileContent != fileContent)
                         {
                             _fileSystem.File.WriteAllText(cpvmFile.FullName, newFileContent);
-
                         }
 
                         foundCPVMFile = true;
