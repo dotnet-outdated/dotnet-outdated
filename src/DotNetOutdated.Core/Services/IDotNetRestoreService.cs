@@ -2,6 +2,6 @@
 {
     public interface IDotNetRestoreService
     {
-        RunStatus Restore(string projectPath);
+        RunStatus Restore(string projectPath, int timeout);
     }
 }
