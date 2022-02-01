@@ -108,6 +108,10 @@ namespace DotNetOutdated
         [Option(CommandOptionType.NoValue, Description = "Treat package source failures as warnings.", ShortName ="ifs", LongName = "ignore-failed-sources")]
         public bool IgnoreFailedSources { get; set; } = false;
 
+        [Option(CommandOptionType.SingleValue, Description = "Specifies how many seconds can each operation run for. " +
+            "By default 30 seconds.", ShortName = "tmo", LongName = "timeout")]
+        public int Timeout { get; set; } = 30;
+
         public static int Main(string[] args)
         {
             using (var services = new ServiceCollection()
@@ -176,7 +180,7 @@ namespace DotNetOutdated
                 // Analyze the projects
                 console.Write("Analyzing project(s)...");
                 
-                var projects = projectPaths.SelectMany(path => _projectAnalysisService.AnalyzeProject(path, false, Transitive, TransitiveDepth)).ToList();
+                var projects = projectPaths.SelectMany(path => _projectAnalysisService.AnalyzeProject(path, false, Transitive, TransitiveDepth, Timeout)).ToList();
 
                 if (!console.IsOutputRedirected)
                     ClearCurrentConsoleLine();
@@ -268,8 +272,8 @@ namespace DotNetOutdated
                         foreach (var project in package.Projects)
                         {
                             RunStatus status = package.IsVersionCentrallyManaged
-                                ? _centralPackageVersionManagementService.AddPackage(project.ProjectFilePath, package.Name, package.LatestVersion, NoRestore)
-                                : _dotNetAddPackageService.AddPackage(project.ProjectFilePath, package.Name, project.Framework.ToString(), package.LatestVersion, NoRestore, IgnoreFailedSources);
+                                ? _centralPackageVersionManagementService.AddPackage(project.ProjectFilePath, package.Name, package.LatestVersion, NoRestore, Timeout)
+                                : _dotNetAddPackageService.AddPackage(project.ProjectFilePath, package.Name, project.Framework.ToString(), package.LatestVersion, NoRestore, Timeout, IgnoreFailedSources);
 
                             if (status.IsSuccess)
                             {

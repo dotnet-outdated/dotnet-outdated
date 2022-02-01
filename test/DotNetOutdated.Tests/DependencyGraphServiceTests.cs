@@ -23,9 +23,9 @@ namespace DotNetOutdated.Tests
 
             // Arrange
             var dotNetRunner = new Mock<IDotNetRunner>();
-            dotNetRunner.Setup(runner => runner.Run(It.IsAny<string>(), It.IsAny<string[]>()))
+            dotNetRunner.Setup(runner => runner.Run(It.IsAny<string>(), It.IsAny<string[]>(), It.IsAny<int>()))
                 .Returns(new RunStatus(string.Empty, string.Empty, 0))
-                .Callback((string directory, string[] arguments) =>
+                .Callback((string directory, string[] arguments, int timeout) =>
                 {
                     // Grab the temp filename that was passed...
                     string tempFileName = arguments[3].Replace("/p:RestoreGraphOutputPath=", string.Empty).Trim('"');
@@ -37,13 +37,13 @@ namespace DotNetOutdated.Tests
             var graphService = new DependencyGraphService(dotNetRunner.Object, mockFileSystem);
             
             // Act
-            var dependencyGraph = graphService.GenerateDependencyGraph(_path);
+            var dependencyGraph = graphService.GenerateDependencyGraph(_path, -1);
 
             // Assert
             Assert.NotNull(dependencyGraph);
             Assert.Equal(3, dependencyGraph.Projects.Count);
 
-            dotNetRunner.Verify(runner => runner.Run(XFS.Path(@"c:\"), It.Is<string[]>(a => a[0] == "msbuild" && a[1] == '\"' + _path + '\"')));
+            dotNetRunner.Verify(runner => runner.Run(XFS.Path(@"c:\"), It.Is<string[]>(a => a[0] == "msbuild" && a[1] == '\"' + _path + '\"'), It.IsAny<int>()));
         }
         
         [Fact]
@@ -53,13 +53,13 @@ namespace DotNetOutdated.Tests
 
             // Arrange
             var dotNetRunner = new Mock<IDotNetRunner>();
-            dotNetRunner.Setup(runner => runner.Run(It.IsAny<string>(), It.IsAny<string[]>()))
+            dotNetRunner.Setup(runner => runner.Run(It.IsAny<string>(), It.IsAny<string[]>(), It.IsAny<int>()))
                 .Returns(new RunStatus(string.Empty, string.Empty, 1));
             
             var graphService = new DependencyGraphService(dotNetRunner.Object, mockFileSystem);
-            
+
             // Assert
-            Assert.Throws<CommandValidationException>(() => graphService.GenerateDependencyGraph(_path));
+            Assert.Throws<CommandValidationException>(() => graphService.GenerateDependencyGraph(_path, -1));
         }
 
         [Fact]
@@ -70,27 +70,27 @@ namespace DotNetOutdated.Tests
             // Arrange
             var dotNetRunner = new Mock<IDotNetRunner>();
 
-            dotNetRunner.Setup(runner => runner.Run(It.IsAny<string>(), It.Is<string[]>(a => a[0] == "msbuild" && a[2] == "/t:Restore,GenerateRestoreGraphFile")))
+            dotNetRunner.Setup(runner => runner.Run(It.IsAny<string>(), It.Is<string[]>(a => a[0] == "msbuild" && a[2] == "/t:Restore,GenerateRestoreGraphFile"), It.IsAny<int>()))
                 .Returns(new RunStatus(string.Empty, string.Empty, 0))
-                .Callback((string directory, string[] arguments) =>
+                .Callback((string directory, string[] arguments, int timeout) =>
                 {
                     // Grab the temp filename that was passed...
                     string tempFileName = arguments[3].Replace("/p:RestoreGraphOutputPath=", string.Empty).Trim('"');
 
                     // ... and stuff it with our dummy dependency graph
                     mockFileSystem.AddFileFromEmbeddedResource(tempFileName, GetType().Assembly, "DotNetOutdated.Tests.TestData.empty.dg");
-                });;
+                });
 
             var graphService = new DependencyGraphService(dotNetRunner.Object, mockFileSystem);
 
             // Act
-            var dependencyGraph = graphService.GenerateDependencyGraph(_solutionPath);
+            var dependencyGraph = graphService.GenerateDependencyGraph(_solutionPath, -1);
 
             // Assert
             Assert.NotNull(dependencyGraph);
             Assert.Equal(0, dependencyGraph.Projects.Count);
 
-            dotNetRunner.Verify(runner => runner.Run(_path, It.Is<string[]>(a => a[0] == "msbuild" && a[1] == '\"' + _solutionPath + '\"' && a[2] == "/t:Restore,GenerateRestoreGraphFile")));
+            dotNetRunner.Verify(runner => runner.Run(_path, It.Is<string[]>(a => a[0] == "msbuild" && a[1] == '\"' + _solutionPath + '\"' && a[2] == "/t:Restore,GenerateRestoreGraphFile"), It.IsAny<int>()));
         }
     }
 }

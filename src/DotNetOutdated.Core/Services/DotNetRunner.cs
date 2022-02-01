@@ -1,4 +1,5 @@
 ﻿using McMaster.Extensions.CommandLineUtils;
+using System;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
@@ -11,7 +12,7 @@ namespace DotNetOutdated.Core.Services
     /// </remarks>
     public class DotNetRunner : IDotNetRunner
     {
-        public RunStatus Run(string workingDirectory, string[] arguments)
+        public RunStatus Run(string workingDirectory, string[] arguments, int timeout)
         {
             var psi = new ProcessStartInfo(DotNetExe.FullPathOrDefault(), string.Join(" ", arguments))
             {
@@ -21,7 +22,7 @@ namespace DotNetOutdated.Core.Services
                 RedirectStandardOutput = true,
                 RedirectStandardError = true
             };
-            
+
             var p = new Process();
             try
             {
@@ -33,7 +34,7 @@ namespace DotNetOutdated.Core.Services
                 var outputTask = ConsumeStreamReaderAsync(p.StandardOutput, output);
                 var errorTask = ConsumeStreamReaderAsync(p.StandardError, errors);
 
-                var processExited = p.WaitForExit(20000);
+                var processExited = p.WaitForExit((int)TimeSpan.FromSeconds(timeout).TotalMilliseconds);
 
                 if (processExited == false)
                 {

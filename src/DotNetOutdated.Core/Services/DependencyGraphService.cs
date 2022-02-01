@@ -21,13 +21,13 @@ namespace DotNetOutdated.Core.Services
             _fileSystem = fileSystem;
         }
         
-        public DependencyGraphSpec GenerateDependencyGraph(string projectPath)
+        public DependencyGraphSpec GenerateDependencyGraph(string projectPath, int timeout)
         {
             var dgOutput = _fileSystem.Path.Combine(_fileSystem.Path.GetTempPath(), _fileSystem.Path.GetTempFileName());
                 
             string[] arguments = {"msbuild", $"\"{projectPath}\"", "/t:Restore,GenerateRestoreGraphFile", $"/p:RestoreGraphOutputPath=\"{dgOutput}\""};
 
-            var runStatus = _dotNetRunner.Run(_fileSystem.Path.GetDirectoryName(projectPath), arguments);
+            var runStatus = _dotNetRunner.Run(_fileSystem.Path.GetDirectoryName(projectPath), arguments, timeout);
 
             if (runStatus.IsSuccess)
             {

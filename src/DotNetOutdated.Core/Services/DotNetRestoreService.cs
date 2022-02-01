@@ -13,11 +13,11 @@ namespace DotNetOutdated.Core.Services
             _fileSystem = fileSystem;
         }
         
-        public RunStatus Restore(string projectPath)
+        public RunStatus Restore(string projectPath, int timeout)
         {
             string[] arguments = new[] {"restore", $"\"{projectPath}\""};
 
-            return _dotNetRunner.Run(_fileSystem.Path.GetDirectoryName(projectPath), arguments);
+            return _dotNetRunner.Run(_fileSystem.Path.GetDirectoryName(projectPath), arguments, timeout);
         }
     }
 }
