@@ -126,6 +126,10 @@ namespace DotNetOutdated
          ShortName = "rt", LongName = "runtime")]
       public string Runtime { get; set; } = string.Empty;
       
+        [Option(CommandOptionType.SingleValue, Description = "Specifies how many seconds can each operation run for. " +
+            "By default 30 seconds.", ShortName = "tmo", LongName = "timeout")]
+        public int Timeout { get; set; } = 30;
+
         public static int Main(string[] args)
       {
          using var services = new ServiceCollection()
@@ -191,7 +195,7 @@ namespace DotNetOutdated
             // Analyze the projects
             console.WriteLine("Analyzing project(s)...");
 
-            var projectLists = await Task.WhenAll(projectPaths.Select(path => _projectAnalysisService.AnalyzeProjectAsync(path, false, Transitive, TransitiveDepth, Runtime)));
+            var projectLists = await Task.WhenAll(projectPaths.Select(path => _projectAnalysisService.AnalyzeProjectAsync(path, false, Transitive, TransitiveDepth, Runtime, Timeout)));
             var projects = projectLists.SelectMany(p => p).ToList();
 
             // Analyze the dependencies
@@ -288,8 +292,8 @@ namespace DotNetOutdated
 
                   if (status is null || status.IsSuccess)
                      status = package.IsVersionCentrallyManaged
-                        ? _centralPackageVersionManagementService.AddPackage(project.ProjectFilePath, package.Name, package.LatestVersion, NoRestore)
-                        : _dotNetPackageService.AddPackage(project.ProjectFilePath, package.Name, project.Framework.ToString(), package.LatestVersion, NoRestore, IgnoreFailedSources);
+                        ? _centralPackageVersionManagementService.AddPackage(project.ProjectFilePath, package.Name, package.LatestVersion, NoRestore, Timeout)
+                        : _dotNetPackageService.AddPackage(project.ProjectFilePath, package.Name, project.Framework.ToString(), package.LatestVersion, NoRestore, IgnoreFailedSources, Timeout);
 
                   if (status.IsSuccess)
                   {

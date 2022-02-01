@@ -14,7 +14,7 @@ namespace DotNetOutdated.Core.Services
     /// </remarks>
     public class DotNetRunner : IDotNetRunner
     {
-        public RunStatus Run(string workingDirectory, string[] arguments)
+        public RunStatus Run(string workingDirectory, string[] arguments, int timeout)
         {
             var psi = new ProcessStartInfo("dotnet", string.Join(" ", arguments))
             {
@@ -37,18 +37,21 @@ namespace DotNetOutdated.Core.Services
                 var outputTask = ConsumeStreamReaderAsync(p.StandardOutput, timeSinceLastOutput, output);
                 var errorTask = ConsumeStreamReaderAsync(p.StandardError, timeSinceLastOutput, errors);
                 bool processExited = false;
-                const int Timeout = 20000;
 
-                while (true) {
-                    if (p.HasExited) {
+                while (true)
+                {
+                    if (p.HasExited)
+                    {
                         processExited = true;
                         break;
                     }
 
                     // If output has not been received for a while, then
                     // assume that the process has hung and stop waiting.
-                    lock(timeSinceLastOutput) {
-                        if (timeSinceLastOutput.ElapsedMilliseconds > Timeout) {
+                    lock (timeSinceLastOutput)
+                    {
+                        if (timeSinceLastOutput.ElapsedMilliseconds > timeout)
+                        {
                             break;
                         }
                     }
@@ -80,7 +83,8 @@ namespace DotNetOutdated.Core.Services
             string line;
             while ((line = await reader.ReadLineAsync().ConfigureAwait(false)) != null)
             {
-                lock (timeSinceLastOutput) {
+                lock (timeSinceLastOutput)
+                {
                     timeSinceLastOutput.Restart();
                 }
 

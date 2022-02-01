@@ -24,9 +24,9 @@ namespace DotNetOutdated.Core.Services
             _fileSystem = fileSystem;
         }
 
-        public async Task<List<Project>> AnalyzeProjectAsync(string projectPath, bool runRestore, bool includeTransitiveDependencies, int transitiveDepth,  string runtime)
+        public async Task<List<Project>> AnalyzeProjectAsync(string projectPath, bool runRestore, bool includeTransitiveDependencies, int transitiveDepth,  string runtime, int timeout)
         {
-            var dependencyGraph = await _dependencyGraphService.GenerateDependencyGraphAsync(projectPath, runtime);
+            var dependencyGraph = await _dependencyGraphService.GenerateDependencyGraphAsync(projectPath, runtime, timeout);
             if (dependencyGraph == null)
                 return null;
 
@@ -36,7 +36,7 @@ namespace DotNetOutdated.Core.Services
                 // Restore the packages
                 if (runRestore)
                 {
-                    _dotNetRestoreService.Restore(packageSpec.FilePath);
+                    _dotNetRestoreService.Restore(packageSpec.FilePath, timeout);
                 }
 
                 // Load the lock file
