@@ -42,14 +42,17 @@ namespace DotNetOutdated.Core.Services
                             fileContent = reader.ReadToEnd();
                         }
 
-                        string newFileContent = Regex.Replace(fileContent, $"(<PackageVersion\\s*Include=\"{packageName}\"\\s*Version=\")([^\"]*)(\".*\\/>)", m => $"{m.Groups[1].Captures[0].Value}{version}{m.Groups[3].Captures[0].Value}");
-
-                        if (newFileContent != fileContent)
+                        if (fileContent.IndexOf($"\"{packageName}\"", StringComparison.OrdinalIgnoreCase) != -1)
                         {
-                            _fileSystem.File.WriteAllText(cpvmFile.FullName, newFileContent);
-                        }
+                            string newFileContent = Regex.Replace(fileContent, $"(<PackageVersion\\s*Include=\"{packageName}\"\\s*Version=\")([^\"]*)(\".*\\/>)", m => $"{m.Groups[1].Captures[0].Value}{version}{m.Groups[3].Captures[0].Value}");
 
-                        foundCPVMFile = true;
+                            if (newFileContent != fileContent)
+                            {
+                                _fileSystem.File.WriteAllText(cpvmFile.FullName, newFileContent);
+                            }
+
+                            foundCPVMFile = true;
+                        }
                     }
 
                     if (!foundCPVMFile)
