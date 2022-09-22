@@ -32,10 +32,12 @@ namespace DotNetOutdated
                 return title;
             }
         }
-        
+
         public bool IsAutoReferenced { get; set; }
 
         public bool IsTransitive { get; set; }
+
+        public bool IsVersionCentrallyManaged { get; set; }
 
         public NuGetVersion LatestVersion { get; set; }
 

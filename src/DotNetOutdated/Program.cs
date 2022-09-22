@@ -37,6 +37,7 @@ namespace DotNetOutdated
         private readonly IProjectAnalysisService _projectAnalysisService;
         private readonly IProjectDiscoveryService _projectDiscoveryService;
         private readonly IDotNetAddPackageService _dotNetAddPackageService;
+        private readonly ICentralPackageVersionManagementService _centralPackageVersionManagementService;
 
         [Option(CommandOptionType.NoValue, Description = "Specifies whether to include auto-referenced packages.",
             LongName = "include-auto-references")]
@@ -121,6 +122,7 @@ namespace DotNetOutdated
                     .AddSingleton<IDotNetAddPackageService, DotNetAddPackageService>()
                     .AddSingleton<INuGetPackageInfoService, NuGetPackageInfoService>()
                     .AddSingleton<INuGetPackageResolutionService, NuGetPackageResolutionService>()
+                    .AddSingleton<ICentralPackageVersionManagementService, CentralPackageVersionManagementService>()
                     .BuildServiceProvider())
             {
                 var app = new CommandLineApplication<Program>();
@@ -138,7 +140,7 @@ namespace DotNetOutdated
             .InformationalVersion;
 
         public Program(IFileSystem fileSystem, IReporter reporter, INuGetPackageResolutionService nugetService, IProjectAnalysisService projectAnalysisService,
-            IProjectDiscoveryService projectDiscoveryService, IDotNetAddPackageService dotNetAddPackageService)
+            IProjectDiscoveryService projectDiscoveryService, IDotNetAddPackageService dotNetAddPackageService, ICentralPackageVersionManagementService centralPackageVersionManagementService)
         {
             _fileSystem = fileSystem;
             _reporter = reporter;
@@ -146,6 +148,7 @@ namespace DotNetOutdated
             _projectAnalysisService = projectAnalysisService;
             _projectDiscoveryService = projectDiscoveryService;
             _dotNetAddPackageService = dotNetAddPackageService;
+            _centralPackageVersionManagementService = centralPackageVersionManagementService;
         }
 
         public async Task<int> OnExecute(CommandLineApplication app, IConsole console)
@@ -264,7 +267,9 @@ namespace DotNetOutdated
 
                         foreach (var project in package.Projects)
                         {
-                            var status = _dotNetAddPackageService.AddPackage(project.ProjectFilePath, package.Name, project.Framework.ToString(), package.LatestVersion, NoRestore, IgnoreFailedSources);
+                            RunStatus status = package.IsVersionCentrallyManaged
+                                ? _centralPackageVersionManagementService.AddPackage(project.ProjectFilePath, package.Name, package.LatestVersion, NoRestore)
+                                : _dotNetAddPackageService.AddPackage(project.ProjectFilePath, package.Name, project.Framework.ToString(), package.LatestVersion, NoRestore, IgnoreFailedSources);
 
                             if (status.IsSuccess)
                             {
