@@ -1,4 +1,13 @@
-﻿using System;
+﻿using DotNetOutdated.Core;
+using DotNetOutdated.Core.Exceptions;
+using DotNetOutdated.Core.Models;
+using DotNetOutdated.Core.Services;
+using DotNetOutdated.Models;
+using McMaster.Extensions.CommandLineUtils;
+using Microsoft.Extensions.DependencyInjection;
+using NuGet.Credentials;
+using NuGet.Versioning;
+using System;
 using System.Collections.Generic;
 using System.IO.Abstractions;
 using System.Linq;
@@ -6,16 +15,6 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
-using DotNetOutdated.Core.Exceptions;
-using DotNetOutdated.Models;
-using DotNetOutdated.Core.Models;
-using DotNetOutdated.Services;
-using DotNetOutdated.Core.Services;
-using McMaster.Extensions.CommandLineUtils;
-using Microsoft.Extensions.DependencyInjection;
-using NuGet.Versioning;
-using DotNetOutdated.Core;
-using NuGet.Credentials;
 
 [assembly: InternalsVisibleTo("DotNetOutdated.Tests")]
 [assembly: InternalsVisibleTo("DynamicProxyGenAssembly2")]
@@ -24,6 +23,7 @@ namespace DotNetOutdated
 {
     using System.Collections.Concurrent;
     using System.Diagnostics;
+    using System.IO;
 
     [Command(
         Name = "dotnet outdated",
@@ -63,7 +63,7 @@ namespace DotNetOutdated
 
         [Option(CommandOptionType.SingleValue, Description = "Defines how many levels deep transitive dependencies should be analyzed. " +
                                                              "Integer value (default = 1)",
-            ShortName="td", LongName = "transitive-depth")]
+            ShortName = "td", LongName = "transitive-depth")]
         public int TransitiveDepth { get; set; } = 1;
 
         [Option(CommandOptionType.SingleOrNoValue, Description = "Specifies whether outdated packages should be upgraded. " +
@@ -105,7 +105,7 @@ namespace DotNetOutdated
             ShortName = "r", LongName = "recursive")]
         public bool Recursive { get; set; } = false;
 
-        [Option(CommandOptionType.NoValue, Description = "Treat package source failures as warnings.", ShortName ="ifs", LongName = "ignore-failed-sources")]
+        [Option(CommandOptionType.NoValue, Description = "Treat package source failures as warnings.", ShortName = "ifs", LongName = "ignore-failed-sources")]
         public bool IgnoreFailedSources { get; set; } = false;
 
         public static int Main(string[] args)
@@ -175,7 +175,7 @@ namespace DotNetOutdated
 
                 // Analyze the projects
                 console.Write("Analyzing project(s)...");
-                
+
                 var projects = projectPaths.SelectMany(path => _projectAnalysisService.AnalyzeProject(path, false, Transitive, TransitiveDepth)).ToList();
 
                 if (!console.IsOutputRedirected)
@@ -405,7 +405,7 @@ namespace DotNetOutdated
             }
 
             await Task.WhenAll(tasks);
-            
+
             if (!console.IsOutputRedirected)
                 ClearCurrentConsoleLine();
             else
@@ -525,18 +525,15 @@ namespace DotNetOutdated
             {
                 Console.WriteLine();
                 Console.WriteLine($"Generating {OutputFileFormat.ToString().ToUpper()} report...");
-                string reportContent;
-                switch (OutputFileFormat)
+                using var stream = _fileSystem.File.Create(OutputFilename);
+                using var sw = new StreamWriter(stream);
+                IOutputFormatter formatter = OutputFileFormat switch
                 {
-                    case OutputFormat.Csv:
-                        reportContent = Report.GetCsvReportContent(projects);
-                        break;
-                    default:
-                        reportContent = Report.GetJsonReportContent(projects);
-                        break;
-                }
-                _fileSystem.File.WriteAllText(OutputFilename, reportContent);
-
+                    OutputFormat.Csv => new Formatters.CsvFormatter(),
+                    OutputFormat.Markdown => new Formatters.MarkdownFormatter(),
+                    _ => new Formatters.JsonFormatter(),
+                };
+                formatter.Format(projects, sw);
                 Console.WriteLine($"Report written to {OutputFilename}");
                 Console.WriteLine();
             }
