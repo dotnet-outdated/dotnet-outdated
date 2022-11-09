@@ -19,7 +19,7 @@
   <ItemGroup>
     <PackageReference Include="McMaster.Extensions.CommandLineUtils" Version="4.0.1" />
     <PackageReference Include="NuGet.Configuration" Version="6.0.2" />
-    <PackageReference Include="NuGet.Credentials" Version="6.0.0" />
+    <PackageReference Include="NuGet.Credentials" Version="6.4.0" />
     <PackageReference Include="NuGet.ProjectModel" Version="6.0.0" />
     <PackageReference Include="NuGet.Protocol" Version="6.0.0" />
     <PackageReference Include="NuGet.Versioning" Version="6.0.0" />
