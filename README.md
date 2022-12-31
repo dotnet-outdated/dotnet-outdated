@@ -5,7 +5,9 @@
 
 # dotnet-outdated
 
-This is a continuation of the original `dotnet-outdated` tool created by Jerrie Pelser.
+This is a fork by Yetly of the continuation of the original `dotnet-outdated` tool created by Jerrie Pelser.
+
+This fork contains early fixes and is used internally by the Yextly organization.
 
 If you already have the original `dotnet-outdated` tool installed you need to
 run `dotnet tool uninstall --global dotnet-outdated` before installing this
