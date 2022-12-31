@@ -1,5 +1,9 @@
 # Changelog
 
+## [v1.0.0-yextly]
+
+- First release, forked from 4.3.2 336e0df6d84442c42d32c4e4a872baa88418278c
+
 ## [v4.1.0]
 
 - Add `--ignore-failed-sources` option to treat package source failures as warnings. - Thank you [Tim Heuer](https://github.com/timheuer)

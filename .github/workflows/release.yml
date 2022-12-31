@@ -55,10 +55,12 @@ jobs:
           VERSION=`cat semver.txt`
           OUTPUT=./nupkgs
           echo "##[set-output name=version;]$VERSION"
-          echo "##[set-output name=core_package_name;]DotNetOutdatedTool.Core.$VERSION.nupkg"
-          echo "##[set-output name=core_package_filename;]$OUTPUT/DotNetOutdatedTool.Core.$VERSION.nupkg"
-          echo "##[set-output name=tool_package_name;]dotnet-outdated-tool.$VERSION.nupkg"
-          echo "##[set-output name=tool_package_filename;]$OUTPUT/dotnet-outdated-tool.$VERSION.nupkg"
+          echo "##[set-output name=core_package_name;]Yextly.DotNetOutdatedTool.Core.$VERSION.nupkg"
+          echo "##[set-output name=core_symbol_package_name;]Yextly.DotNetOutdatedTool.Core.$VERSION.snupkg"
+          echo "##[set-output name=core_package_filename;]$OUTPUT/Yextly.DotNetOutdatedTool.Core.$VERSION.nupkg"
+          echo "##[set-output name=core_symbol_package_filename;]$OUTPUT/Yextly.DotNetOutdatedTool.Core.$VERSION.snupkg"
+          echo "##[set-output name=tool_package_name;]yextly-dotnet-outdated-tool.$VERSION.nupkg"
+          echo "##[set-output name=tool_package_filename;]$OUTPUT/yextly-dotnet-outdated-tool.$VERSION.nupkg"
           dotnet build --configuration Release
           dotnet pack --configuration Release /p:Version=$VERSION --output $OUTPUT
 
@@ -67,6 +69,7 @@ jobs:
           NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
         run: |
           dotnet nuget push --source https://api.nuget.org/v3/index.json --api-key "$NUGET_API_KEY" ${{ steps.package_release.outputs.core_package_filename }}
+          dotnet nuget push --source https://api.nuget.org/v3/index.json --api-key "$NUGET_API_KEY" ${{ steps.package_release.outputs.core_symbol_package_filename }}
           dotnet nuget push --source https://api.nuget.org/v3/index.json --api-key "$NUGET_API_KEY" ${{ steps.package_release.outputs.tool_package_filename }}
 
       - name: Create github release
@@ -87,6 +90,7 @@ jobs:
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ${{ steps.package_release.outputs.core_package_filename }}
+          asset_path: ${{ steps.package_release.outputs.core_symbol_package_filename }}
           asset_name: ${{ steps.package_release.outputs.core_package_name }}
           asset_content_type: application/zip
 
