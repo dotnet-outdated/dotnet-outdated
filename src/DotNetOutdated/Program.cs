@@ -1,4 +1,14 @@
-﻿using System;
+﻿using DotNetOutdated.Core;
+using DotNetOutdated.Core.Exceptions;
+using DotNetOutdated.Core.Models;
+using DotNetOutdated.Core.Services;
+using DotNetOutdated.Models;
+using DotNetOutdated.Services;
+using McMaster.Extensions.CommandLineUtils;
+using Microsoft.Extensions.DependencyInjection;
+using NuGet.Credentials;
+using NuGet.Versioning;
+using System;
 using System.Collections.Generic;
 using System.IO.Abstractions;
 using System.Linq;
@@ -6,16 +16,6 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
-using DotNetOutdated.Core.Exceptions;
-using DotNetOutdated.Models;
-using DotNetOutdated.Core.Models;
-using DotNetOutdated.Services;
-using DotNetOutdated.Core.Services;
-using McMaster.Extensions.CommandLineUtils;
-using Microsoft.Extensions.DependencyInjection;
-using NuGet.Versioning;
-using DotNetOutdated.Core;
-using NuGet.Credentials;
 
 [assembly: InternalsVisibleTo("DotNetOutdated.Tests")]
 [assembly: InternalsVisibleTo("DynamicProxyGenAssembly2")]
@@ -29,7 +29,7 @@ namespace DotNetOutdated
         Name = "dotnet outdated",
         FullName = "A .NET Core global tool to list outdated Nuget packages.")]
     [VersionOptionFromMember(MemberName = nameof(GetVersion))]
-    class Program : CommandBase
+    internal class Program : CommandBase
     {
         private readonly IFileSystem _fileSystem;
         private readonly IReporter _reporter;
@@ -63,7 +63,7 @@ namespace DotNetOutdated
 
         [Option(CommandOptionType.SingleValue, Description = "Defines how many levels deep transitive dependencies should be analyzed. " +
                                                              "Integer value (default = 1)",
-            ShortName="td", LongName = "transitive-depth")]
+            ShortName = "td", LongName = "transitive-depth")]
         public int TransitiveDepth { get; set; } = 1;
 
         [Option(CommandOptionType.SingleOrNoValue, Description = "Specifies whether outdated packages should be upgraded. " +
@@ -105,7 +105,7 @@ namespace DotNetOutdated
             ShortName = "r", LongName = "recursive")]
         public bool Recursive { get; set; } = false;
 
-        [Option(CommandOptionType.NoValue, Description = "Treat package source failures as warnings.", ShortName ="ifs", LongName = "ignore-failed-sources")]
+        [Option(CommandOptionType.NoValue, Description = "Treat package source failures as warnings.", ShortName = "ifs", LongName = "ignore-failed-sources")]
         public bool IgnoreFailedSources { get; set; } = false;
 
         public static int Main(string[] args)
@@ -175,7 +175,7 @@ namespace DotNetOutdated
 
                 // Analyze the projects
                 console.Write("Analyzing project(s)...");
-                
+
                 var projects = projectPaths.SelectMany(path => _projectAnalysisService.AnalyzeProject(path, false, Transitive, TransitiveDepth)).ToList();
 
                 if (!console.IsOutputRedirected)
@@ -184,7 +184,7 @@ namespace DotNetOutdated
                     console.WriteLine();
 
                 // Analyze the dependencies
-                var outdatedProjects = await AnalyzeDependencies(projects, console);
+                var outdatedProjects = await AnalyzeDependencies(projects, console).ConfigureAwait(false);
 
                 if (outdatedProjects.Any())
                 {
@@ -404,8 +404,8 @@ namespace DotNetOutdated
                 tasks[index] = AddOutdatedProjectsIfNeeded(project, outdatedProjects, console);
             }
 
-            await Task.WhenAll(tasks);
-            
+            await Task.WhenAll(tasks).ConfigureAwait(false);
+
             if (!console.IsOutputRedirected)
                 ClearCurrentConsoleLine();
             else
@@ -436,7 +436,7 @@ namespace DotNetOutdated
                 tasks[index] = AddOutdatedFrameworkIfNeeded(targetFramework, project, outdatedFrameworks, console);
             }
 
-            await Task.WhenAll(tasks);
+            await Task.WhenAll(tasks).ConfigureAwait(false);
 
             if (outdatedFrameworks.Count > 0)
                 outdatedProjects.Add(new AnalyzedProject(project.Name, project.FilePath, outdatedFrameworks));
@@ -467,7 +467,7 @@ namespace DotNetOutdated
                 tasks[index] = this.AddOutdatedDependencyIfNeeded(project, targetFramework, dependency, outdatedDependencies);
             }
 
-            await Task.WhenAll(tasks);
+            await Task.WhenAll(tasks).ConfigureAwait(false);
 
             if (outdatedDependencies.Count > 0)
                 outdatedFrameworks.Add(new AnalyzedTargetFramework(targetFramework.Name, outdatedDependencies));
@@ -481,7 +481,7 @@ namespace DotNetOutdated
             if (referencedVersion != null)
             {
                 latestVersion = await _nugetService.ResolvePackageVersions(dependency.Name, referencedVersion, project.Sources, dependency.VersionRange,
-                    VersionLock, Prerelease, targetFramework.Name, project.FilePath, dependency.IsDevelopmentDependency, OlderThanDays, IgnoreFailedSources);
+                    VersionLock, Prerelease, targetFramework.Name, project.FilePath, dependency.IsDevelopmentDependency, OlderThanDays, IgnoreFailedSources).ConfigureAwait(false);
             }
 
             if (referencedVersion == null || latestVersion == null || referencedVersion != latestVersion)
@@ -490,7 +490,7 @@ namespace DotNetOutdated
                 if (OlderThanDays > 0 && latestVersion == null)
                 {
                     NuGetVersion absoluteLatestVersion = await _nugetService.ResolvePackageVersions(dependency.Name, referencedVersion, project.Sources, dependency.VersionRange,
-                        VersionLock, Prerelease, targetFramework.Name, project.FilePath, dependency.IsDevelopmentDependency);
+                        VersionLock, Prerelease, targetFramework.Name, project.FilePath, dependency.IsDevelopmentDependency).ConfigureAwait(false);
 
                     if (absoluteLatestVersion == null || referencedVersion > absoluteLatestVersion)
                     {
@@ -510,10 +510,13 @@ namespace DotNetOutdated
             {
                 case DependencyUpgradeSeverity.Major:
                     return Constants.ReporingColors.MajorVersionUpgrade;
+
                 case DependencyUpgradeSeverity.Minor:
                     return Constants.ReporingColors.MinorVersionUpgrade;
+
                 case DependencyUpgradeSeverity.Patch:
                     return Constants.ReporingColors.PatchVersionUpgrade;
+
                 default:
                     return Console.ForegroundColor;
             }
@@ -531,6 +534,7 @@ namespace DotNetOutdated
                     case OutputFormat.Csv:
                         reportContent = Report.GetCsvReportContent(projects);
                         break;
+
                     default:
                         reportContent = Report.GetJsonReportContent(projects);
                         break;

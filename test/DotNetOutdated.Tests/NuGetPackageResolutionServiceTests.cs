@@ -61,7 +61,7 @@ namespace DotNetOutdated.Tests
             // Arrange
 
             // Act
-            var latestVersion = await _nuGetPackageResolutionService.ResolvePackageVersions(packageName, NuGetVersion.Parse(current), new List<Uri>(), VersionRange.Parse(current), versionLock, prerelease, null, null, false, 0);
+            var latestVersion = await _nuGetPackageResolutionService.ResolvePackageVersions(packageName, NuGetVersion.Parse(current), new List<Uri>(), VersionRange.Parse(current), versionLock, prerelease, null, null, false, 0).ConfigureAwait(false);
 
             // Assert
             Assert.Equal(NuGetVersion.Parse(latest), latestVersion);
