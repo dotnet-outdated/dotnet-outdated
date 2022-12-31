@@ -15,7 +15,7 @@ namespace DotNetOutdated.Core.Services
 {
     using System.Collections.Concurrent;
 
-    public class NuGetPackageInfoService : INuGetPackageInfoService, IDisposable
+    public sealed class NuGetPackageInfoService : INuGetPackageInfoService, IDisposable
     {
         private IEnumerable<PackageSource> _enabledSources = null;
         private readonly SourceCacheContext _context;
@@ -97,7 +97,7 @@ namespace DotNetOutdated.Core.Services
                             var reducer = new FrameworkReducer();
 
                             compatibleMetadataList = compatibleMetadataList
-                                .Where(meta => meta.DependencySets == null || !meta.DependencySets.Any() ||
+                                .Where(meta => meta.DependencySets?.Any() != true ||
                                                reducer.GetNearest(targetFramework, meta.DependencySets.Select(ds => ds.TargetFramework)) != null)
                                 .ToList();
                         }
@@ -120,7 +120,7 @@ namespace DotNetOutdated.Core.Services
                             {
                                 allVersions.Add(m.Identity.Version);
                             }
-                        };
+                        }
                     }
                 }
                 catch (HttpRequestException)
