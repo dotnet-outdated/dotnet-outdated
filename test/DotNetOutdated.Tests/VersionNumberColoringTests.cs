@@ -5,7 +5,7 @@ using Xunit.Abstractions;
 
 namespace DotNetOutdated.Tests
 {
-    public class VersionNumberColoringTests
+    public sealed class VersionNumberColoringTests
     {
         private readonly ITestOutputHelper _output;
 
@@ -57,10 +57,9 @@ namespace DotNetOutdated.Tests
             var console = new MockConsole();
 
             Program.WriteColoredUpgrade(DependencyUpgradeSeverity.Minor, resolvedVersion, latestVersion, 9, 9, console);
-            var firstDot = latest.IndexOf(".") + 1;
+            var firstDot = latest.IndexOf(".", System.StringComparison.Ordinal) + 1;
             Assert.Equal($"{resolved} -> {latest.Substring(0, firstDot)}[Yellow]{latest.Substring(firstDot)}[White]", console.WrittenOut);
         }
-
 
         [Theory]
         [InlineData("1.2.3    ", "1.2.4    ")]
@@ -74,7 +73,7 @@ namespace DotNetOutdated.Tests
             var console = new MockConsole();
 
             Program.WriteColoredUpgrade(DependencyUpgradeSeverity.Patch, resolvedVersion, latestVersion, 9, 9, console);
-            var secondDot = latest.IndexOf(".", latest.IndexOf(".") + 1) + 1;
+            var secondDot = latest.IndexOf(".", latest.IndexOf(".", System.StringComparison.Ordinal) + 1) + 1;
             Assert.Equal($"{resolved} -> {latest.Substring(0, secondDot)}[Green]{latest.Substring(secondDot)}[White]", console.WrittenOut);
         }
     }
