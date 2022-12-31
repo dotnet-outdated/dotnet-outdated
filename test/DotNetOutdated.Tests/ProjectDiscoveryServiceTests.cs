@@ -170,8 +170,7 @@ namespace DotNetOutdated.Tests
             // Act
 
             // Assert
-            var exception = Assert.Throws<CommandValidationException>(() => projectDiscoveryService.DiscoverProjects(_nonProjectFile));
-            Assert.Equal(string.Format(CultureInfo.InvariantCulture, ValidationErrorMessages.FileNotAValidSolutionOrProject, _nonProjectFile), exception.Message);
+            Assert.Throws<System.IO.DirectoryNotFoundException>(() => projectDiscoveryService.DiscoverProjects(_nonProjectFile));
         }
 
         [Fact]
