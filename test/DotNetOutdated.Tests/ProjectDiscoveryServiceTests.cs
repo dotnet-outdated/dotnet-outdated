@@ -2,6 +2,7 @@ using DotNetOutdated.Core.Exceptions;
 using DotNetOutdated.Core.Resources;
 using DotNetOutdated.Core.Services;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO.Abstractions.TestingHelpers;
 using System.Linq;
 using Xunit;
@@ -106,7 +107,7 @@ namespace DotNetOutdated.Tests
 
             // Assert
             var exception = Assert.Throws<CommandValidationException>(() => projectDiscoveryService.DiscoverProjects(_path));
-            Assert.Equal(string.Format(ValidationErrorMessages.DirectoryContainsMultipleProjects, _path), exception.Message);
+            Assert.Equal(string.Format(CultureInfo.InvariantCulture, ValidationErrorMessages.DirectoryContainsMultipleProjects, _path), exception.Message);
         }
 
         [Fact]
@@ -139,7 +140,7 @@ namespace DotNetOutdated.Tests
 
             // Assert
             var exception = Assert.Throws<CommandValidationException>(() => projectDiscoveryService.DiscoverProjects(_path));
-            Assert.Equal(string.Format(ValidationErrorMessages.DirectoryDoesNotContainSolutionsOrProjects, _path), exception.Message);
+            Assert.Equal(string.Format(CultureInfo.InvariantCulture, ValidationErrorMessages.DirectoryDoesNotContainSolutionsOrProjects, _path), exception.Message);
         }
 
         [Fact]
@@ -153,7 +154,7 @@ namespace DotNetOutdated.Tests
 
             // Assert
             var exception = Assert.Throws<CommandValidationException>(() => projectDiscoveryService.DiscoverProjects(_path));
-            Assert.Equal(string.Format(ValidationErrorMessages.DirectoryOrFileDoesNotExist, _path), exception.Message);
+            Assert.Equal(string.Format(CultureInfo.InvariantCulture, ValidationErrorMessages.DirectoryOrFileDoesNotExist, _path), exception.Message);
         }
 
         [Fact]
@@ -170,7 +171,7 @@ namespace DotNetOutdated.Tests
 
             // Assert
             var exception = Assert.Throws<CommandValidationException>(() => projectDiscoveryService.DiscoverProjects(_nonProjectFile));
-            Assert.Equal(string.Format(ValidationErrorMessages.FileNotAValidSolutionOrProject, _nonProjectFile), exception.Message);
+            Assert.Equal(string.Format(CultureInfo.InvariantCulture, ValidationErrorMessages.FileNotAValidSolutionOrProject, _nonProjectFile), exception.Message);
         }
 
         [Fact]
