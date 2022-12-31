@@ -1,23 +1,23 @@
-﻿using System.Collections.Generic;
-using DotNetOutdated.Core.Models;
+﻿using DotNetOutdated.Core.Models;
 using DotNetOutdated.Services;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using NuGet.Frameworks;
 using NuGet.Versioning;
+using System.Collections.Generic;
 
 namespace DotNetOutdated.Models
 {
     [JsonObject(MemberSerialization.OptIn)]
     public class AnalyzedProject
     {
-        [JsonProperty(Order=2)]
+        [JsonProperty(Order = 2)]
         public IReadOnlyList<AnalyzedTargetFramework> TargetFrameworks { get; }
 
-        [JsonProperty(Order=0)]
+        [JsonProperty(Order = 0)]
         public string Name { get; set; }
 
-        [JsonProperty(Order=1)]
+        [JsonProperty(Order = 1)]
         public string FilePath { get; set; }
 
         public AnalyzedProject(string name, string filePath, IEnumerable<AnalyzedTargetFramework> targetFrameworks)
@@ -31,10 +31,10 @@ namespace DotNetOutdated.Models
     [JsonObject(MemberSerialization.OptIn)]
     public class AnalyzedTargetFramework
     {
-        [JsonProperty(Order=1)]
+        [JsonProperty(Order = 1)]
         public IReadOnlyList<AnalyzedDependency> Dependencies { get; }
 
-        [JsonProperty(Order=0)]
+        [JsonProperty(Order = 0)]
         [JsonConverter(typeof(ToStringJsonConverter))]
         public NuGetFramework Name { get; set; }
 
@@ -78,11 +78,11 @@ namespace DotNetOutdated.Models
         [JsonConverter(typeof(ToStringJsonConverter))]
         public NuGetVersion ResolvedVersion => _dependency.ResolvedVersion;
 
-        [JsonProperty(Order=2)]
+        [JsonProperty(Order = 2)]
         [JsonConverter(typeof(ToStringJsonConverter))]
         public NuGetVersion LatestVersion { get; set; }
 
-        [JsonProperty(Order=3)]
+        [JsonProperty(Order = 3)]
         [JsonConverter(typeof(StringEnumConverter))]
         public DependencyUpgradeSeverity UpgradeSeverity
         {
@@ -97,7 +97,7 @@ namespace DotNetOutdated.Models
                     return DependencyUpgradeSeverity.Minor;
                 if (LatestVersion.Patch > ResolvedVersion.Patch || LatestVersion.Revision > ResolvedVersion.Revision)
                     return DependencyUpgradeSeverity.Patch;
-                    
+
                 return DependencyUpgradeSeverity.None;
             }
         }

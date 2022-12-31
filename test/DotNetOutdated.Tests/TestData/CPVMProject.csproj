@@ -8,5 +8,4 @@
 	<ItemGroup>
 		<PackageReference Include="FakePackage" />
 	</ItemGroup>
-
 </Project>

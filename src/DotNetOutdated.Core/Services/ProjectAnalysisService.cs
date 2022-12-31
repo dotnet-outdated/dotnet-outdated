@@ -1,12 +1,12 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO.Abstractions;
-using System.Linq;
-using DotNetOutdated.Core.Models;
+﻿using DotNetOutdated.Core.Models;
 using NuGet.Common;
 using NuGet.Packaging.Core;
 using NuGet.ProjectModel;
 using NuGet.Protocol;
+using System;
+using System.Collections.Generic;
+using System.IO.Abstractions;
+using System.Linq;
 
 namespace DotNetOutdated.Core.Services
 {
@@ -22,7 +22,7 @@ namespace DotNetOutdated.Core.Services
             _dotNetRestoreService = dotNetRestoreService;
             _fileSystem = fileSystem;
         }
-        
+
         public List<Project> AnalyzeProject(string projectPath, bool runRestore, bool includeTransitiveDependencies, int transitiveDepth)
         {
             var dependencyGraph = _dependencyGraphService.GenerateDependencyGraph(projectPath);
@@ -46,7 +46,7 @@ namespace DotNetOutdated.Core.Services
                 var project = new Project(packageSpec.Name, packageSpec.FilePath, packageSpec.RestoreMetadata.Sources.Select(s => s.SourceUri).ToList(), packageSpec.Version);
                 projects.Add(project);
 
-                // Get the target frameworks with their dependencies 
+                // Get the target frameworks with their dependencies
                 foreach (var targetFrameworkInformation in packageSpec.TargetFrameworks)
                 {
                     var targetFramework = new TargetFramework(targetFrameworkInformation.FrameworkName);
@@ -58,7 +58,7 @@ namespace DotNetOutdated.Core.Services
                     {
                         foreach (var projectDependency in targetFrameworkInformation.Dependencies)
                         {
-                           var projectLibrary = target.Libraries.FirstOrDefault(library => string.Equals(library.Name, projectDependency.Name, StringComparison.OrdinalIgnoreCase));
+                            var projectLibrary = target.Libraries.FirstOrDefault(library => string.Equals(library.Name, projectDependency.Name, StringComparison.OrdinalIgnoreCase));
 
                             bool isDevelopmentDependency = false;
                             if (projectLibrary != null)

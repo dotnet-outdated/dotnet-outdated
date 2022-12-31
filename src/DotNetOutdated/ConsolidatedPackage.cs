@@ -1,7 +1,7 @@
-﻿using System.Collections.Generic;
-using DotNetOutdated.Models;
+﻿using DotNetOutdated.Models;
 using NuGet.Frameworks;
 using NuGet.Versioning;
+using System.Collections.Generic;
 
 namespace DotNetOutdated
 {

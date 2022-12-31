@@ -1,10 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿using System.Collections.Generic;
 
 namespace DotNetOutdated.Core.Extensions
 {
-    static class DictionaryExtensions
+    internal static class DictionaryExtensions
     {
         /// <summary>
         /// Tries to get a value in a dictionary identified by its key, otherwise returns default value for passed-in type.

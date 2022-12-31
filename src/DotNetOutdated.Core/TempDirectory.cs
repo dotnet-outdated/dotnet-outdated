@@ -3,7 +3,7 @@ using System.IO;
 
 namespace DotNetOutdated
 {
-    class TempDirectory : IDisposable
+    internal class TempDirectory : IDisposable
     {
         private string tempPath;
         private string tempDirName;

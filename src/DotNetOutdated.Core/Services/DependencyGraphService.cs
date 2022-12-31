@@ -1,9 +1,7 @@
-﻿using System;
-using System.IO.Abstractions;
-using DotNetOutdated.Core.Exceptions;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
+﻿using DotNetOutdated.Core.Exceptions;
 using NuGet.ProjectModel;
+using System;
+using System.IO.Abstractions;
 
 namespace DotNetOutdated.Core.Services
 {
@@ -20,12 +18,12 @@ namespace DotNetOutdated.Core.Services
             _dotNetRunner = dotNetRunner;
             _fileSystem = fileSystem;
         }
-        
+
         public DependencyGraphSpec GenerateDependencyGraph(string projectPath)
         {
             var dgOutput = _fileSystem.Path.Combine(_fileSystem.Path.GetTempPath(), _fileSystem.Path.GetTempFileName());
-                
-            string[] arguments = {"msbuild", $"\"{projectPath}\"", "/t:Restore,GenerateRestoreGraphFile", $"/p:RestoreGraphOutputPath=\"{dgOutput}\""};
+
+            string[] arguments = { "msbuild", $"\"{projectPath}\"", "/t:Restore,GenerateRestoreGraphFile", $"/p:RestoreGraphOutputPath=\"{dgOutput}\"" };
 
             var runStatus = _dotNetRunner.Run(_fileSystem.Path.GetDirectoryName(projectPath), arguments);
 

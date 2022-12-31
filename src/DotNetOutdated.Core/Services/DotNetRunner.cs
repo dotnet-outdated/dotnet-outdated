@@ -21,7 +21,7 @@ namespace DotNetOutdated.Core.Services
                 RedirectStandardOutput = true,
                 RedirectStandardError = true
             };
-            
+
             var p = new Process();
             try
             {
@@ -51,7 +51,7 @@ namespace DotNetOutdated.Core.Services
                 p.Dispose();
             }
         }
-        
+
         private static async Task ConsumeStreamReaderAsync(StreamReader reader, StringBuilder lines)
         {
             await Task.Yield();

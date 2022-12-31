@@ -1,5 +1,5 @@
-﻿using System.Collections.Generic;
-using DotNetOutdated.Core.Models;
+﻿using DotNetOutdated.Core.Models;
+using System.Collections.Generic;
 
 namespace DotNetOutdated.Core.Services
 {

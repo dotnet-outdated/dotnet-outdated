@@ -1,6 +1,6 @@
-﻿using System.Collections.Generic;
+﻿using DotNetOutdated.Models;
+using System.Collections.Generic;
 using System.Linq;
-using DotNetOutdated.Models;
 
 namespace DotNetOutdated
 {
