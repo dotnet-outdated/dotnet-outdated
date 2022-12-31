@@ -1,5 +1,10 @@
 # Changelog
 
+## [v1.0.5-yextly]
+
+- Minor internal changes
+
+
 ## [v1.0.4-yextly]
 
 - Minor internal changes
