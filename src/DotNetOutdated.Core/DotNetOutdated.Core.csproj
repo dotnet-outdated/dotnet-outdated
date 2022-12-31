@@ -1,43 +1,44 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>
-    <IsPackable>true</IsPackable>
-    <PackageTags>dotnet;outdated;core;lib</PackageTags>
-    <Description>The core functionality of DotNet Outdated as a library which allows you to embed it into your own applications (Yextly fork)</Description>
-    <Authors>dotnet-outdated Team &amp; Contributors</Authors>
-    <Copyright>Copyright (c) Jerrie Pelser</Copyright>
-    <PackageId>Yextly.DotNetOutdatedTool.Core</PackageId>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <PackageProjectUrl>https://github.com/yextly/dotnet-outdated/dotnet-outdated</PackageProjectUrl>
-    <PackageReleaseNotes>See $(PackageProjectUrl)/blob/master/CHANGELOG.md#$(VersionSuffix.Replace('.','')) for release notes.</PackageReleaseNotes>
-    <PackageVersion>$(VersionSuffix)</PackageVersion>
-    <RepositoryType>git</RepositoryType>
-    <RepositoryUrl>https://github.com/yextly/dotnet-outdated/dotnet-outdated.git</RepositoryUrl>
-  </PropertyGroup>
+	<PropertyGroup>
+		<TargetFramework>netstandard2.1</TargetFramework>
+		<IsPackable>true</IsPackable>
+		<PackageTags>dotnet;outdated;core;lib</PackageTags>
+		<Description>The core functionality of DotNet Outdated as a library which allows you to embed it into your own applications (Yextly fork)</Description>
+		<Authors>dotnet-outdated Team &amp; Contributors</Authors>
+		<Copyright>Copyright (c) Jerrie Pelser</Copyright>
+		<PackageId>Yextly.DotNetOutdatedTool.Core</PackageId>
+		<AssemblyName>Yextly.DotNetOutdatedTool.Core</AssemblyName>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<PackageProjectUrl>https://github.com/yextly/dotnet-outdated/dotnet-outdated</PackageProjectUrl>
+		<PackageReleaseNotes>See $(PackageProjectUrl)/blob/master/CHANGELOG.md#$(VersionSuffix.Replace('.','')) for release notes.</PackageReleaseNotes>
+		<PackageVersion>$(VersionSuffix)</PackageVersion>
+		<RepositoryType>git</RepositoryType>
+		<RepositoryUrl>https://github.com/yextly/dotnet-outdated/dotnet-outdated.git</RepositoryUrl>
+	</PropertyGroup>
 
-  <ItemGroup>
-    <PackageReference Include="McMaster.Extensions.CommandLineUtils" Version="4.0.1" />
-    <PackageReference Include="NuGet.Configuration" Version="6.0.2" />
-    <PackageReference Include="NuGet.Credentials" Version="6.0.0" />
-    <PackageReference Include="NuGet.ProjectModel" Version="6.0.0" />
-    <PackageReference Include="NuGet.Protocol" Version="6.0.0" />
-    <PackageReference Include="NuGet.Versioning" Version="6.0.0" />
-    <PackageReference Include="System.IO.Abstractions" Version="14.0.13" />
-  </ItemGroup>
+	<ItemGroup>
+		<PackageReference Include="McMaster.Extensions.CommandLineUtils" Version="4.0.1" />
+		<PackageReference Include="NuGet.Configuration" Version="6.0.2" />
+		<PackageReference Include="NuGet.Credentials" Version="6.0.0" />
+		<PackageReference Include="NuGet.ProjectModel" Version="6.0.0" />
+		<PackageReference Include="NuGet.Protocol" Version="6.0.0" />
+		<PackageReference Include="NuGet.Versioning" Version="6.0.0" />
+		<PackageReference Include="System.IO.Abstractions" Version="14.0.13" />
+	</ItemGroup>
 
-  <ItemGroup>
-    <Compile Update="Resources\ValidationErrorMessages.Designer.cs">
-      <DesignTime>True</DesignTime>
-      <AutoGen>True</AutoGen>
-      <DependentUpon>ValidationErrorMessages.resx</DependentUpon>
-    </Compile>
-  </ItemGroup>
+	<ItemGroup>
+		<Compile Update="Resources\ValidationErrorMessages.Designer.cs">
+			<DesignTime>True</DesignTime>
+			<AutoGen>True</AutoGen>
+			<DependentUpon>ValidationErrorMessages.resx</DependentUpon>
+		</Compile>
+	</ItemGroup>
 
-  <ItemGroup>
-    <EmbeddedResource Update="Resources\ValidationErrorMessages.resx">
-      <Generator>ResXFileCodeGenerator</Generator>
-      <LastGenOutput>ValidationErrorMessages.Designer.cs</LastGenOutput>
-    </EmbeddedResource>
-  </ItemGroup>
+	<ItemGroup>
+		<EmbeddedResource Update="Resources\ValidationErrorMessages.resx">
+			<Generator>ResXFileCodeGenerator</Generator>
+			<LastGenOutput>ValidationErrorMessages.Designer.cs</LastGenOutput>
+		</EmbeddedResource>
+	</ItemGroup>
 </Project>
