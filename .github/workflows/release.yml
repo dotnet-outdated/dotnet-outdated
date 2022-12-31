@@ -49,13 +49,13 @@ jobs:
         run: |
           VERSION=`cat semver.txt`
           OUTPUT=./nupkgs
-          echo "version=$VERSION" >> $GITGUB_OUTPUT"
-          echo "core_package_name=Yextly.DotNetOutdatedTool.Core.$VERSION.nupkg" >> $GITGUB_OUTPUT"
-          echo "core_symbol_package_name=Yextly.DotNetOutdatedTool.Core.$VERSION.snupkg" >> $GITGUB_OUTPUT"
-          echo "core_package_filename=$OUTPUT/Yextly.DotNetOutdatedTool.Core.$VERSION.nupkg" >> $GITGUB_OUTPUT"
-          echo "core_symbol_package_filename=$OUTPUT/Yextly.DotNetOutdatedTool.Core.$VERSION.snupkg" >> $GITGUB_OUTPUT"
-          echo "tool_package_name=yextly-dotnet-outdated-tool.$VERSION.nupkg" >> $GITGUB_OUTPUT"
-          echo "tool_package_filename=$OUTPUT/yextly-dotnet-outdated-tool.$VERSION.nupkg" >> $GITGUB_OUTPUT"
+          echo "version=$VERSION" >> $GITGUB_OUTPUT
+          echo "core_package_name=Yextly.DotNetOutdatedTool.Core.$VERSION.nupkg" >> $GITGUB_OUTPUT
+          echo "core_symbol_package_name=Yextly.DotNetOutdatedTool.Core.$VERSION.snupkg" >> $GITGUB_OUTPUT
+          echo "core_package_filename=$OUTPUT/Yextly.DotNetOutdatedTool.Core.$VERSION.nupkg" >> $GITGUB_OUTPUT
+          echo "core_symbol_package_filename=$OUTPUT/Yextly.DotNetOutdatedTool.Core.$VERSION.snupkg" >> $GITGUB_OUTPUT
+          echo "tool_package_name=yextly-dotnet-outdated-tool.$VERSION.nupkg" >> $GITGUB_OUTPUT
+          echo "tool_package_filename=$OUTPUT/yextly-dotnet-outdated-tool.$VERSION.nupkg" >> $GITGUB_OUTPUT
           dotnet build --configuration Release
           dotnet pack --configuration Release /p:Version=$VERSION --output $OUTPUT
 
