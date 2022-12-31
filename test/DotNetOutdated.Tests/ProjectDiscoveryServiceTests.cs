@@ -55,7 +55,7 @@ namespace DotNetOutdated.Tests
 
             // Assert
             var exception = Assert.Throws<CommandValidationException>(() => projectDiscoveryService.DiscoverProjects(_path));
-            Assert.Equal(string.Format(ValidationErrorMessages.DirectoryContainsMultipleSolutions, _path), exception.Message);
+            Assert.Equal(string.Format(CultureInfo.InvariantCulture, ValidationErrorMessages.DirectoryContainsMultipleSolutions, _path), exception.Message);
         }
 
         [Fact]
