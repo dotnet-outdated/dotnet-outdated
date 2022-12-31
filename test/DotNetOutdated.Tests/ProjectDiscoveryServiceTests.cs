@@ -23,7 +23,7 @@ namespace DotNetOutdated.Tests
         private readonly string _nonProjectFile = XFS.Path(@"c:\path\file.cs");
 
         [Fact]
-        public void SingleSolution_ReturnsSolution()
+        public void SingleSolutionReturnsSolution()
         {
             // Arrange
             var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
@@ -40,7 +40,7 @@ namespace DotNetOutdated.Tests
         }
 
         [Fact]
-        public void MultipleSolutions_Throws()
+        public void MultipleSolutionsThrows()
         {
             // Arrange
             var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
@@ -58,7 +58,7 @@ namespace DotNetOutdated.Tests
         }
 
         [Fact]
-        public void SingleProject_ReturnsCsProject()
+        public void SingleProjectReturnsCsProject()
         {
             // Arrange
             var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
@@ -75,7 +75,7 @@ namespace DotNetOutdated.Tests
         }
 
         [Fact]
-        public void SingleProject_ReturnsFsProject()
+        public void SingleProjectReturnsFsProject()
         {
             // Arrange
             var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
@@ -92,7 +92,7 @@ namespace DotNetOutdated.Tests
         }
 
         [Fact]
-        public void MultipleProjects_Throws()
+        public void MultipleProjectsThrows()
         {
             // Arrange
             var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
@@ -110,7 +110,7 @@ namespace DotNetOutdated.Tests
         }
 
         [Fact]
-        public void MultipleProjectsRecursive_ReturnsProjects()
+        public void MultipleProjectsRecursiveReturnsProjects()
         {
             // Arrange
             var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
@@ -129,7 +129,7 @@ namespace DotNetOutdated.Tests
         }
 
         [Fact]
-        public void NoSolutionsOrProjects_Throws()
+        public void NoSolutionsOrProjectsThrows()
         {
             // Arrange
             var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>(), _path);
@@ -143,7 +143,7 @@ namespace DotNetOutdated.Tests
         }
 
         [Fact]
-        public void NonExistentPath_Throws()
+        public void NonExistentPathThrows()
         {
             // Arrange
             var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>(), _someOtherPath);
@@ -157,7 +157,7 @@ namespace DotNetOutdated.Tests
         }
 
         [Fact]
-        public void NonSolution_Throws()
+        public void NonSolutionThrows()
         {
             // Arrange
             var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
@@ -174,7 +174,7 @@ namespace DotNetOutdated.Tests
         }
 
         [Fact]
-        public void SingleSolutionFilter_ReturnsSolution()
+        public void SingleSolutionFilterReturnsSolution()
         {
             // Arrange
             var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
