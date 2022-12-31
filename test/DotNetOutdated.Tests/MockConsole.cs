@@ -1,11 +1,10 @@
+using McMaster.Extensions.CommandLineUtils;
 using System;
 using System.IO;
-using System.Text;
-using McMaster.Extensions.CommandLineUtils;
 
 namespace DotNetOutdated.Tests
 {
-    public class MockConsole : IConsole
+    public sealed class MockConsole : IConsole, IDisposable
     {
         private readonly MockTextWriter _out;
         private readonly MockTextWriter _error;
@@ -22,15 +21,16 @@ namespace DotNetOutdated.Tests
 
         public TextWriter Error => _error;
 
-        public TextReader In => throw new NotImplementedException();
+        public TextReader In => throw new NotSupportedException();
 
-        public bool IsInputRedirected => throw new NotImplementedException();
+        public bool IsInputRedirected => throw new NotSupportedException();
 
         public bool IsOutputRedirected => true;
 
         public bool IsErrorRedirected => true;
 
         private ConsoleColor _foreground = ConsoleColor.White;
+
         public ConsoleColor ForegroundColor
         {
             get => _foreground; set
@@ -39,36 +39,29 @@ namespace DotNetOutdated.Tests
                 _out.Write($"[{value}]");
             }
         }
+
         public ConsoleColor BackgroundColor { get; set; }
 
         // build warning because it is not used
-        #pragma warning disable 67
+#pragma warning disable 67
+
         public event ConsoleCancelEventHandler CancelKeyPress;
-        #pragma warning restore 67
+
+#pragma warning restore 67
 
         public void ResetColor()
         {
-            throw new NotImplementedException();
+            throw new NotSupportedException();
         }
 
-    }
-
-    internal class MockTextWriter : TextWriter
-    {
-        private readonly StringBuilder _sb;
-
-        public MockTextWriter()
+        public void Dispose()
         {
-            _sb = new StringBuilder();
+            using (_out)
+            {
+            }
+            using (_error)
+            {
+            }
         }
-
-        public override void Write(char c)
-        {
-            _sb.Append(c);
-        }
-
-        public string Contents => _sb.ToString();
-
-        public override Encoding Encoding => Encoding.Unicode;
     }
 }
