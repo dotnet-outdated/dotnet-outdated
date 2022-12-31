@@ -10,7 +10,7 @@
     <Authors>dotnet-outdated Team &amp; Contributors</Authors>
     <Copyright>Copyright (c) Jerrie Pelser</Copyright>
     <Description>A .NET Core global tool to update project dependencies (Yextly fork).</Description>
-    <PackageId>dotnet-outdated-tool</PackageId>
+    <PackageId>yextly-dotnet-outdated-tool</PackageId>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/yextly/dotnet-outdated/dotnet-outdated</PackageProjectUrl>
     <PackageReleaseNotes>See $(PackageProjectUrl)/blob/main/CHANGELOG.md#$(VersionSuffix.Replace('.','')) for release notes.</PackageReleaseNotes>

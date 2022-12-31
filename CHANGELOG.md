@@ -1,5 +1,9 @@
 # Changelog
 
+## [v1.0.2-yextly]
+
+- Minor internal changes
+
 ## [v1.0.1-yextly]
 
 - Drop support for legacy frameworks
