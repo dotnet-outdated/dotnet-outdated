@@ -4,7 +4,7 @@ updates:
     directory: "/"
     schedule:
       interval: "daily"
-    target-branch: "master"
+    target-branch: "main"
 
   - package-ecosystem: "github-actions"
     directory: "/"
