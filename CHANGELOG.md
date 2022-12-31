@@ -1,5 +1,9 @@
 # Changelog
 
+## [v1.0.1-yextly]
+
+- Drop support for legacy frameworks
+
 ## [v1.0.0-yextly]
 
 - First release, forked from 4.3.2 336e0df6d84442c42d32c4e4a872baa88418278c
