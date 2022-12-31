@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<Project>
+	<PropertyGroup>
+		<Company>Yextly Group</Company>
+		<IncludeSymbols>true</IncludeSymbols>
+		<SymbolPackageFormat>snupkg</SymbolPackageFormat>
+		<EnableNETAnalyzers>True</EnableNETAnalyzers>
+		<AnalysisMode>All</AnalysisMode>
+		<GenerateDocumentationFile>True</GenerateDocumentationFile>
+		<NoWarn>$(NoWarn)</NoWarn>
+		<WarnOnPackingNonPackableProject>True</WarnOnPackingNonPackableProject>
+	</PropertyGroup>
+</Project>
+
