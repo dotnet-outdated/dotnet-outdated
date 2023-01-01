@@ -1,17 +1,17 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 15
-VisualStudioVersion = 15.0.26124.0
+# Visual Studio Version 17
+VisualStudioVersion = 17.4.33205.214
 MinimumVisualStudioVersion = 15.0.26124.0
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{BD4D78F7-32FA-42D2-BF7B-6728F85EF2C6}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DotNetOutdated", "src\DotNetOutdated\DotNetOutdated.csproj", "{532CD641-5978-43CB-B384-AF137C642323}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DotNetOutdated", "src\DotNetOutdated\DotNetOutdated.csproj", "{532CD641-5978-43CB-B384-AF137C642323}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DotNetOutdated.Core", "src\DotNetOutdated.Core\DotNetOutdated.Core.csproj", "{23C0491C-EE39-4ECF-A45E-962C01D50750}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DotNetOutdated.Core", "src\DotNetOutdated.Core\DotNetOutdated.Core.csproj", "{23C0491C-EE39-4ECF-A45E-962C01D50750}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "test", "test", "{ECC69204-F52B-4967-BDA1-884F70159D36}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DotNetOutdated.Tests", "test\DotNetOutdated.Tests\DotNetOutdated.Tests.csproj", "{7859E458-8905-4E71-BF74-227888E1403B}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DotNetOutdated.Tests", "test\DotNetOutdated.Tests\DotNetOutdated.Tests.csproj", "{7859E458-8905-4E71-BF74-227888E1403B}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -21,9 +21,6 @@ Global
 		Release|Any CPU = Release|Any CPU
 		Release|x64 = Release|x64
 		Release|x86 = Release|x86
-	EndGlobalSection
-	GlobalSection(SolutionProperties) = preSolution
-		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 		{532CD641-5978-43CB-B384-AF137C642323}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
@@ -63,9 +60,15 @@ Global
 		{7859E458-8905-4E71-BF74-227888E1403B}.Release|x86.ActiveCfg = Release|Any CPU
 		{7859E458-8905-4E71-BF74-227888E1403B}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{532CD641-5978-43CB-B384-AF137C642323} = {BD4D78F7-32FA-42D2-BF7B-6728F85EF2C6}
 		{23C0491C-EE39-4ECF-A45E-962C01D50750} = {BD4D78F7-32FA-42D2-BF7B-6728F85EF2C6}
 		{7859E458-8905-4E71-BF74-227888E1403B} = {ECC69204-F52B-4967-BDA1-884F70159D36}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {0437D5D4-5576-4328-804A-89817DBE3984}
 	EndGlobalSection
 EndGlobal
