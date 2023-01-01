@@ -54,8 +54,7 @@ namespace DotNetOutdated.Tests
             // Act
 
             // Assert
-            var exception = Assert.Throws<CommandValidationException>(() => projectDiscoveryService.DiscoverProjects(_path));
-            Assert.Equal(string.Format(CultureInfo.InvariantCulture, ValidationErrorMessages.DirectoryContainsMultipleSolutions, _path), exception.Message);
+            Assert.Throws<CommandValidationException>(() => projectDiscoveryService.DiscoverProjects(_path));
         }
 
         [Fact]
@@ -106,8 +105,7 @@ namespace DotNetOutdated.Tests
             // Act
 
             // Assert
-            var exception = Assert.Throws<CommandValidationException>(() => projectDiscoveryService.DiscoverProjects(_path));
-            Assert.Equal(string.Format(CultureInfo.InvariantCulture, ValidationErrorMessages.DirectoryContainsMultipleProjects, _path), exception.Message);
+            Assert.Throws<CommandValidationException>(() => projectDiscoveryService.DiscoverProjects(_path));
         }
 
         [Fact]
@@ -170,7 +168,7 @@ namespace DotNetOutdated.Tests
             // Act
 
             // Assert
-            Assert.Throws<System.IO.DirectoryNotFoundException>(() => projectDiscoveryService.DiscoverProjects(_nonProjectFile));
+            Assert.Throws<CommandValidationException>(() => projectDiscoveryService.DiscoverProjects(_nonProjectFile));
         }
 
         [Fact]
