@@ -13,7 +13,7 @@ namespace DotNetOutdated.Tests
         {
             SetupCPVMMocks(out Mock<IDotNetRestoreService> mockRestoreService, out MockFileSystem mockFileSystem, out string path, out string nearestCPVMFilePath, out string rootCPVMFilePath, out string rootCPVMFileContent, out string _, out string _);
 
-            CentralPackageVersionManagementService subject = new CentralPackageVersionManagementService(mockFileSystem, mockRestoreService.Object);
+            var subject = new CentralPackageVersionManagementService(mockFileSystem, mockRestoreService.Object);
             RunStatus status = subject.AddPackage(path, "FakePackage", new NuGet.Versioning.NuGetVersion(2, 0, 0), false);
 
             Assert.NotNull(status);
@@ -28,7 +28,7 @@ namespace DotNetOutdated.Tests
         {
             SetupCPVMMocks(out Mock<IDotNetRestoreService> mockRestoreService, out MockFileSystem mockFileSystem, out string path, out string _, out string _, out string _, out string _, out string projectFileContent);
 
-            CentralPackageVersionManagementService subject = new CentralPackageVersionManagementService(mockFileSystem, mockRestoreService.Object);
+            var subject = new CentralPackageVersionManagementService(mockFileSystem, mockRestoreService.Object);
             RunStatus status = subject.AddPackage(path, "FakePackage", new NuGet.Versioning.NuGetVersion(2, 0, 0), false);
 
             Assert.Equal(projectFileContent, mockFileSystem.GetFile(path).TextContents);
@@ -41,7 +41,7 @@ namespace DotNetOutdated.Tests
         {
             SetupCommonMocks(out Mock<IDotNetRestoreService> mockRestoreService, out MockFileSystem mockFileSystem, out string projectPath, out string _);
 
-            CentralPackageVersionManagementService subject = new CentralPackageVersionManagementService(mockFileSystem, mockRestoreService.Object);
+            var subject = new CentralPackageVersionManagementService(mockFileSystem, mockRestoreService.Object);
             RunStatus status = subject.AddPackage(projectPath, "FakePackage", new NuGet.Versioning.NuGetVersion(1, 0, 0), noRestore);
 
             if (noRestore)

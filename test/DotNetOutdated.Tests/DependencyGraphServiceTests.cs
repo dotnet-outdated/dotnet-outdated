@@ -1,6 +1,7 @@
 ﻿using DotNetOutdated.Core.Exceptions;
 using DotNetOutdated.Core.Services;
 using Moq;
+using System;
 using System.Collections.Generic;
 using System.IO.Abstractions.TestingHelpers;
 using Xunit;
@@ -26,6 +27,8 @@ namespace DotNetOutdated.Tests
                 .Returns(new RunStatus(string.Empty, string.Empty, 0))
                 .Callback((string directory, string[] arguments) =>
                 {
+                    ArgumentNullException.ThrowIfNull(directory);
+
                     // Grab the temp filename that was passed...
                     string tempFileName = arguments[3].Replace("/p:RestoreGraphOutputPath=", string.Empty, System.StringComparison.OrdinalIgnoreCase).Trim('"');
 
@@ -73,6 +76,8 @@ namespace DotNetOutdated.Tests
                 .Returns(new RunStatus(string.Empty, string.Empty, 0))
                 .Callback((string directory, string[] arguments) =>
                 {
+                    ArgumentNullException.ThrowIfNull(directory);
+
                     // Grab the temp filename that was passed...
                     string tempFileName = arguments[3].Replace("/p:RestoreGraphOutputPath=", string.Empty, System.StringComparison.OrdinalIgnoreCase).Trim('"');
 

@@ -6,6 +6,9 @@ using System.Threading.Tasks;
 
 namespace DotNetOutdated.Core.Services
 {
+    /// <summary>
+    /// Runs dot net executable.
+    /// </summary>
     /// <remarks>
     /// Credit for the stuff happening in here goes to the https://github.com/jaredcnance/dotnet-status project
     /// </remarks>
@@ -35,7 +38,7 @@ namespace DotNetOutdated.Core.Services
 
                 var processExited = p.WaitForExit(20000);
 
-                if (processExited == false)
+                if (!processExited)
                 {
                     p.Kill();
 
