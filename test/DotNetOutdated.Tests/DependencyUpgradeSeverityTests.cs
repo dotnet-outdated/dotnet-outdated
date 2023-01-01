@@ -2,17 +2,13 @@ using DotNetOutdated.Core.Models;
 using DotNetOutdated.Models;
 using NuGet.Versioning;
 using Xunit;
-using Xunit.Abstractions;
 
 namespace DotNetOutdated.Tests
 {
     public class DependencyUpgradeSeverityTests
     {
-        private readonly ITestOutputHelper _output;
-
-        public DependencyUpgradeSeverityTests(ITestOutputHelper output)
+        public DependencyUpgradeSeverityTests()
         {
-            _output = output;
         }
 
         [Theory]
