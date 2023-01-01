@@ -14,6 +14,5 @@
             Errors = errors;
             ExitCode = exitCode;
         }
-        
     }
 }

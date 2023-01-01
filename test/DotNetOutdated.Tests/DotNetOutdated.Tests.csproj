@@ -1,27 +1,28 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <TargetFrameworks>net6.0;net7.0</TargetFrameworks>
-    <IsPackable>false</IsPackable>
-  </PropertyGroup>
-  <ItemGroup>
-    <PackageReference Include="McMaster.Extensions.CommandLineUtils" Version="4.0.1" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.0.0" />
-    <PackageReference Include="Moq" Version="4.18.2" />
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
-    <PackageReference Include="System.IO.Abstractions.TestingHelpers" Version="14.0.13" />
-    <PackageReference Include="xunit" Version="2.4.1" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="2.4.3">
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-      <PrivateAssets>all</PrivateAssets>
-    </PackageReference>
-    <DotNetCliToolReference Include="dotnet-xunit" Version="2.3.1" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\..\src\DotNetOutdated.Core\DotNetOutdated.Core.csproj" />
-    <ProjectReference Include="..\..\src\DotNetOutdated\DotNetOutdated.csproj" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Remove="TestData\*.*" />
-    <EmbeddedResource Include="TestData\*.*" />
-  </ItemGroup>
+	<PropertyGroup>
+		<TargetFrameworks>net6.0;net7.0</TargetFrameworks>
+		<IsPackable>false</IsPackable>
+		<GenerateDocumentationFile>False</GenerateDocumentationFile>
+	</PropertyGroup>
+	<ItemGroup>
+		<PackageReference Include="McMaster.Extensions.CommandLineUtils" Version="4.0.2" />
+		<PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.4.1" />
+		<PackageReference Include="Moq" Version="4.18.4" />
+		<PackageReference Include="Newtonsoft.Json" Version="13.0.2" />
+		<PackageReference Include="System.IO.Abstractions.TestingHelpers" Version="19.1.5" />
+		<PackageReference Include="xunit" Version="2.4.2" />
+		<PackageReference Include="xunit.runner.visualstudio" Version="2.4.5">
+			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+			<PrivateAssets>all</PrivateAssets>
+		</PackageReference>
+		<DotNetCliToolReference Include="dotnet-xunit" Version="2.3.1" />
+	</ItemGroup>
+	<ItemGroup>
+		<ProjectReference Include="..\..\src\DotNetOutdated.Core\DotNetOutdated.Core.csproj" />
+		<ProjectReference Include="..\..\src\DotNetOutdated\DotNetOutdated.csproj" />
+	</ItemGroup>
+	<ItemGroup>
+		<None Remove="TestData\*.*" />
+		<EmbeddedResource Include="TestData\*.*" />
+	</ItemGroup>
 </Project>

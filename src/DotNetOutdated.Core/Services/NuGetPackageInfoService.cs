@@ -1,27 +1,25 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net.Http;
-using System.Threading;
-using System.Threading.Tasks;
-using DotNetOutdated.Core.Extensions;
-using NuGet.Common;
+﻿using NuGet.Common;
 using NuGet.Configuration;
 using NuGet.Frameworks;
 using NuGet.Protocol;
 using NuGet.Protocol.Core.Types;
 using NuGet.Versioning;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Net.Http;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace DotNetOutdated.Core.Services
 {
     using System.Collections.Concurrent;
-    using System.Diagnostics;
 
-    public class NuGetPackageInfoService : INuGetPackageInfoService, IDisposable
+    public sealed class NuGetPackageInfoService : INuGetPackageInfoService, IDisposable
     {
         private IEnumerable<PackageSource> _enabledSources = null;
         private readonly SourceCacheContext _context;
-        
+
         private readonly ConcurrentDictionary<string, Lazy<Task<PackageMetadataResource>>> _metadataResourceRequests = new ConcurrentDictionary<string, Lazy<Task<PackageMetadataResource>>>();
 
         public NuGetPackageInfoService()
@@ -99,7 +97,7 @@ namespace DotNetOutdated.Core.Services
                             var reducer = new FrameworkReducer();
 
                             compatibleMetadataList = compatibleMetadataList
-                                .Where(meta => meta.DependencySets == null || !meta.DependencySets.Any() ||
+                                .Where(meta => meta.DependencySets?.Any() != true ||
                                                reducer.GetNearest(targetFramework, meta.DependencySets.Select(ds => ds.TargetFramework)) != null)
                                 .ToList();
                         }
@@ -117,15 +115,15 @@ namespace DotNetOutdated.Core.Services
                             else if (m is LocalPackageSearchMetadata localPackageSearchMetadata)
                             {
                                 allVersions.Add(localPackageSearchMetadata.Identity.Version);
-                            } 
+                            }
                             else
                             {
                                 allVersions.Add(m.Identity.Version);
                             }
-                        };
+                        }
                     }
                 }
-                catch(HttpRequestException)
+                catch (HttpRequestException)
                 {
                     // Suppress HTTP errors when connecting to NuGet sources
                 }
@@ -136,7 +134,7 @@ namespace DotNetOutdated.Core.Services
                         continue;
                     }
                     // if the inner exception is NOT HttpRequestException, throw it
-                    if (ex.InnerException != null && !(ex.InnerException is HttpRequestException)) throw ex;
+                    if (ex.InnerException != null && !(ex.InnerException is HttpRequestException)) throw;
                 }
             }
 
@@ -148,5 +146,4 @@ namespace DotNetOutdated.Core.Services
             _context?.Dispose();
         }
     }
-
 }
