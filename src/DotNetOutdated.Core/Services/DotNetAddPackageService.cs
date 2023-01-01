@@ -1,4 +1,5 @@
 ﻿using NuGet.Versioning;
+using System;
 using System.Collections.Generic;
 using System.IO.Abstractions;
 
@@ -20,8 +21,11 @@ namespace DotNetOutdated.Core.Services
             return AddPackage(projectPath, packageName, frameworkName, version, false);
         }
 
-        public RunStatus AddPackage(string projectPath, string packageName, string frameworkName, NuGetVersion version, bool noRestore, bool ignoreFailedSource = false)
+        public RunStatus AddPackage(string projectPath, string packageName, string frameworkName, NuGetVersion version, bool noRestore, bool ignoreFailedSources = false)
         {
+            if (version == null)
+                throw new ArgumentNullException(nameof(version));
+
             string projectName = _fileSystem.Path.GetFileName(projectPath);
 
             List<string> arguments = new List<string> { "add", $"\"{projectName}\"", "package", packageName, "-v", version.ToString(), "-f", $"\"{frameworkName}\"" };
@@ -29,7 +33,7 @@ namespace DotNetOutdated.Core.Services
             {
                 arguments.Add("--no-restore");
             }
-            if (ignoreFailedSource)
+            if (ignoreFailedSources)
             {
                 arguments.Add("--ignore-failed-sources");
             }
