@@ -1,9 +1,15 @@
 # Changelog
 
+## [v2.0.0-yextly]
+
+- Fix deadlocks due to async usage
+- Fix NRE when version lock is set to major and pre-release set to always
+- Drop support for legacy frameworks
+- Upgrade all dependencies
+
 ## [v1.0.5-yextly]
 
 - Minor internal changes
-
 
 ## [v1.0.4-yextly]
 
