@@ -3,6 +3,12 @@
 ## [v2.0.1-yextly]
 
 - Fix deadlocks due to async usage
+- Move McMaster.Extensions.CommandLineUtils out of the library (this could affect how and where the dotnet cli executable is detected)
+- Fix NRE when version lock is set to major and pre-release set to always
+
+## [v2.0.1-yextly]
+
+- Fix deadlocks due to async usage
 
 ## [v2.0.0-yextly]
 
