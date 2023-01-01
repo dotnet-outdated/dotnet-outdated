@@ -1,5 +1,9 @@
 # Changelog
 
+## [v2.0.1-yextly]
+
+- Fix deadlocks due to async usage
+
 ## [v2.0.0-yextly]
 
 - Fix deadlocks due to async usage
