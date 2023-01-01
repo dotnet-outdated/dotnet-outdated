@@ -1,5 +1,4 @@
-﻿using McMaster.Extensions.CommandLineUtils;
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Threading.Tasks;
@@ -16,7 +15,7 @@ namespace DotNetOutdated.Core.Services
     {
         public RunStatus Run(string workingDirectory, string[] arguments)
         {
-            var psi = new ProcessStartInfo(DotNetExe.FullPathOrDefault(), string.Join(" ", arguments))
+            var psi = new ProcessStartInfo("dotnet", string.Join(" ", arguments))
             {
                 WorkingDirectory = workingDirectory,
                 UseShellExecute = false,
