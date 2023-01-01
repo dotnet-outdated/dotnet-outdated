@@ -31,6 +31,7 @@ namespace DotNetOutdated.Tests
             var subject = new CentralPackageVersionManagementService(mockFileSystem, mockRestoreService.Object);
             RunStatus status = subject.AddPackage(path, "FakePackage", new NuGet.Versioning.NuGetVersion(2, 0, 0), false);
 
+            Assert.Equal(0, status.ExitCode);
             Assert.Equal(projectFileContent, mockFileSystem.GetFile(path).TextContents);
         }
 
