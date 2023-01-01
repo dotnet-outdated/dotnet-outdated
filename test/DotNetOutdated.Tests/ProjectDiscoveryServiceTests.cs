@@ -210,7 +210,7 @@ namespace DotNetOutdated.Tests
 
             // Assert
             Assert.Single(projects);
-            Assert.Equal(_solutionFilter1, projects.First());
+            Assert.Equal(_solutionFilter1, projects[0]);
         }
 
         [Fact]

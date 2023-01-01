@@ -4,7 +4,7 @@ using System.Linq;
 
 namespace DotNetOutdated
 {
-    public static class ProjectExtensions
+    internal static class ProjectExtensions
     {
         public static List<ConsolidatedPackage> ConsolidatePackages(this List<AnalyzedProject> projects)
         {

@@ -10,7 +10,7 @@ using System.Threading.Tasks;
 
 namespace DotNetOutdated.Services
 {
-    public interface IReportingService
+    internal interface IReportingService
     {
         Task WriteReport(string filename, List<Project> projects);
     }
@@ -46,9 +46,14 @@ namespace DotNetOutdated.Services
         }
     }
 
-    public class Report
+    internal sealed class Report
     {
-        public List<AnalyzedProject> Projects { get; set; }
+        public List<AnalyzedProject> Projects { get; }
+
+        public Report(List<AnalyzedProject> projects)
+        {
+            Projects = projects ?? throw new ArgumentNullException(nameof(projects));
+        }
 
         internal static string GetTextReportLine(AnalyzedProject project, AnalyzedTargetFramework targetFramework, AnalyzedDependency dependency)
         {
@@ -66,41 +71,38 @@ namespace DotNetOutdated.Services
         {
             ArgumentNullException.ThrowIfNull(projects);
 
-            using (var sw = new StringWriter())
-            using (var csv = new CsvWriter(sw, CultureInfo.CurrentCulture))
-            {
-                foreach (var project in projects)
-                {
-                    foreach (var targetFramework in project.TargetFrameworks)
-                    {
-                        foreach (var dependency in targetFramework.Dependencies)
-                        {
-                            var upgradeSeverity = Enum.GetName(typeof(DependencyUpgradeSeverity), dependency.UpgradeSeverity);
+            using var sw = new StringWriter();
+            using var csv = new CsvWriter(sw, CultureInfo.CurrentCulture);
 
-                            csv.WriteRecord(new
-                            {
-                                ProjectName = project.Name,
-                                TargetFrameworkName = targetFramework.Name.DotNetFrameworkName,
-                                DependencyName = dependency.Name,
-                                ResolvedVersion = dependency.ResolvedVersion?.ToString(),
-                                LatestVersion = dependency.LatestVersion?.ToString(),
-                                UpgradeSeverity = upgradeSeverity
-                            });
-                            csv.NextRecord();
-                        }
+            foreach (var project in projects)
+            {
+                foreach (var targetFramework in project.TargetFrameworks)
+                {
+                    foreach (var dependency in targetFramework.Dependencies)
+                    {
+                        var upgradeSeverity = Enum.GetName(typeof(DependencyUpgradeSeverity), dependency.UpgradeSeverity);
+
+                        csv.WriteRecord(new
+                        {
+                            ProjectName = project.Name,
+                            TargetFrameworkName = targetFramework.Name.DotNetFrameworkName,
+                            DependencyName = dependency.Name,
+                            ResolvedVersion = dependency.ResolvedVersion?.ToString(),
+                            LatestVersion = dependency.LatestVersion?.ToString(),
+                            UpgradeSeverity = upgradeSeverity
+                        });
+                        csv.NextRecord();
                     }
                 }
-
-                return sw.ToString();
             }
+
+            return sw.ToString();
         }
 
         public static string GetJsonReportContent(List<AnalyzedProject> projects)
         {
-            var report = new Report
-            {
-                Projects = projects
-            };
+            var report = new Report(projects);
+
             return JsonConvert.SerializeObject(report, Formatting.Indented);
         }
     }

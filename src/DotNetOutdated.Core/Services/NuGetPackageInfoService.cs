@@ -17,7 +17,7 @@ namespace DotNetOutdated.Core.Services
 
     public sealed class NuGetPackageInfoService : INuGetPackageInfoService, IDisposable
     {
-        private IEnumerable<PackageSource> _enabledSources = null;
+        private IEnumerable<PackageSource> _enabledSources;
         private readonly SourceCacheContext _context;
 
         private readonly ConcurrentDictionary<string, Lazy<Task<PackageMetadataResource>>> _metadataResourceRequests = new ConcurrentDictionary<string, Lazy<Task<PackageMetadataResource>>>();
@@ -41,6 +41,7 @@ namespace DotNetOutdated.Core.Services
             return _enabledSources;
         }
 
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "This method is supposed to fail silently")]
         private async Task<PackageMetadataResource> FindMetadataResourceForSource(Uri source, string projectFilePath)
         {
             try
@@ -57,7 +58,7 @@ namespace DotNetOutdated.Core.Services
                                            : Repository.Factory.GetCoreV3(resourceUrl);
 
                 var resourceRequest = new Lazy<Task<PackageMetadataResource>>(() => sourceRepository.GetResourceAsync<PackageMetadataResource>());
-                return await this._metadataResourceRequests.GetOrAdd(resourceUrl, resourceRequest).Value;
+                return await _metadataResourceRequests.GetOrAdd(resourceUrl, resourceRequest).Value.ConfigureAwait(false);
             }
             catch (Exception)
             {
@@ -68,21 +69,24 @@ namespace DotNetOutdated.Core.Services
         public async Task<IReadOnlyList<NuGetVersion>> GetAllVersions(string package, IEnumerable<Uri> sources, bool includePrerelease, NuGetFramework targetFramework,
             string projectFilePath, bool isDevelopmentDependency)
         {
-            return await GetAllVersions(package, sources, includePrerelease, targetFramework, projectFilePath, isDevelopmentDependency, 0);
+            return await GetAllVersions(package, sources, includePrerelease, targetFramework, projectFilePath, isDevelopmentDependency, 0).ConfigureAwait(false);
         }
 
         public async Task<IReadOnlyList<NuGetVersion>> GetAllVersions(string package, IEnumerable<Uri> sources, bool includePrerelease, NuGetFramework targetFramework,
             string projectFilePath, bool isDevelopmentDependency, int olderThanDays, bool ignoreFailedSources = false)
         {
+            if (sources == null)
+                throw new ArgumentNullException(nameof(sources));
+
             var allVersions = new List<NuGetVersion>();
             foreach (var source in sources)
             {
                 try
                 {
-                    var metadata = await FindMetadataResourceForSource(source, projectFilePath);
+                    var metadata = await FindMetadataResourceForSource(source, projectFilePath).ConfigureAwait(false);
                     if (metadata != null)
                     {
-                        var compatibleMetadataList = (await metadata.GetMetadataAsync(package, includePrerelease, false, _context, NullLogger.Instance, CancellationToken.None)).ToList();
+                        var compatibleMetadataList = (await metadata.GetMetadataAsync(package, includePrerelease, false, _context, NullLogger.Instance, CancellationToken.None).ConfigureAwait(false)).ToList();
 
                         if (olderThanDays > 0)
                         {

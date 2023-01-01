@@ -13,5 +13,9 @@ namespace DotNetOutdated.Core.Exceptions
             : base(message, innerException)
         {
         }
+
+        public CommandValidationException()
+        {
+        }
     }
 }

@@ -6,6 +6,7 @@
 		<SymbolPackageFormat>snupkg</SymbolPackageFormat>
 		<EnableNETAnalyzers>True</EnableNETAnalyzers>
 		<AnalysisMode>All</AnalysisMode>
+		<AnalysisLevel>latest</AnalysisLevel>
 		<GenerateDocumentationFile>True</GenerateDocumentationFile>
 		<NoWarn>$(NoWarn);CS1591</NoWarn>
 		<WarnOnPackingNonPackableProject>True</WarnOnPackingNonPackableProject>
