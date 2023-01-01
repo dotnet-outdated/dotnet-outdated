@@ -1,7 +1,7 @@
-[![Build Status](https://github.com/dotnet-outdated/dotnet-outdated/workflows/Release/badge.svg)](https://github.com/dotnet-outdated/dotnet-outdated/actions?workflow=Release)
+[![Build Status](https://github.com/yextly/dotnet-outdated/workflows/Release/badge.svg)](https://github.com/yextly/dotnet-outdated/actions?workflow=Release)
 [![License](https://img.shields.io/badge/license-MIT-brightgreen.svg)](LICENSE)
-[![NuGet Version](https://img.shields.io/nuget/v/dotnet-outdated-tool.svg)](https://www.nuget.org/packages/dotnet-outdated-tool/)
-![Nuget](https://img.shields.io/nuget/dt/dotnet-outdated-tool.svg)
+[![NuGet Version](https://img.shields.io/nuget/v/Yextly.DotNetOutdatedTool.Core.svg)](https://www.nuget.org/packages/Yextly.DotNetOutdatedTool.Core/)
+![Nuget](https://img.shields.io/nuget/dt/Yextly.DotNetOutdatedTool.Core.svg)
 
 # dotnet-outdated
 
