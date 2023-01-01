@@ -47,7 +47,7 @@ namespace DotNetOutdated
                     IsAutoReferenced = gp.Key.IsAutoReferenced,
                     IsVersionCentrallyManaged = gp.Key.IsVersionCentrallyManaged,
                     UpgradeSeverity = gp.Key.UpgradeSeverity,
-                    Projects = gp.Select(v => new ConsolidatedPackage.PackageProjectReference
+                    Projects = gp.Select(v => new PackageProjectReference
                     {
                         Project = v.Project,
                         ProjectFilePath = v.ProjectFilePath,

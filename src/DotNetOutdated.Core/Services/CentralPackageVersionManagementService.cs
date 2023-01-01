@@ -24,7 +24,7 @@ namespace DotNetOutdated.Core.Services
 
             try
             {
-                IFileInfo projectFile = _fileSystem.FileInfo.FromFileName(projectFilePath);
+                IFileInfo projectFile = _fileSystem.FileInfo.New(projectFilePath);
                 bool foundCPVMFile = false;
                 IDirectoryInfo directoryInfo = projectFile.Directory;
 

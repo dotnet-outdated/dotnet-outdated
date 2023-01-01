@@ -1,5 +1,4 @@
 ﻿using DotNetOutdated.Models;
-using NuGet.Frameworks;
 using NuGet.Versioning;
 using System.Collections.Generic;
 
@@ -7,17 +6,6 @@ namespace DotNetOutdated
 {
     public class ConsolidatedPackage
     {
-        public class PackageProjectReference
-        {
-            public string Description => $"{Project} [{Framework}]";
-
-            public NuGetFramework Framework { get; set; }
-
-            public string Project { get; set; }
-
-            public string ProjectFilePath { get; set; }
-        }
-
         public string Description
         {
             get
@@ -43,7 +31,7 @@ namespace DotNetOutdated
 
         public string Name { get; set; }
 
-        public List<PackageProjectReference> Projects { get; set; }
+        public List<PackageProjectReference> Projects { get; set; } = new();
 
         public NuGetVersion ResolvedVersion { get; set; }
 

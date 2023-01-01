@@ -7,6 +7,8 @@ namespace DotNetOutdated
     {
         public static void Write(this IConsole console, object value, ConsoleColor color)
         {
+            ArgumentNullException.ThrowIfNull(console);
+
             ConsoleColor currentColor = console.ForegroundColor;
 
             console.ForegroundColor = color;
@@ -16,6 +18,8 @@ namespace DotNetOutdated
 
         public static void Write(this IConsole console, object value, ConsoleColor foregroundColor, ConsoleColor backgroundColor)
         {
+            ArgumentNullException.ThrowIfNull(console);
+
             ConsoleColor currentForegroundColor = console.ForegroundColor;
             ConsoleColor currentBackgroundColor = console.BackgroundColor;
 
@@ -28,6 +32,8 @@ namespace DotNetOutdated
 
         public static void WriteLine(this IConsole console, object value, ConsoleColor color)
         {
+            ArgumentNullException.ThrowIfNull(console);
+
             ConsoleColor currentColor = console.ForegroundColor;
 
             console.ForegroundColor = color;
