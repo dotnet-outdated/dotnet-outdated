@@ -7,7 +7,7 @@
 		<EnableNETAnalyzers>True</EnableNETAnalyzers>
 		<AnalysisMode>All</AnalysisMode>
 		<GenerateDocumentationFile>True</GenerateDocumentationFile>
-		<NoWarn>$(NoWarn)</NoWarn>
+		<NoWarn>$(NoWarn);CS1591</NoWarn>
 		<WarnOnPackingNonPackableProject>True</WarnOnPackingNonPackableProject>
 	</PropertyGroup>
 </Project>
