@@ -12,11 +12,11 @@ namespace DotNetOutdated.Tests
     {
         private readonly string _path = XFS.Path(@"c:\path");
         private readonly string _solutionPath = XFS.Path(@"c:\path\proj.sln");
-        private readonly string _project1Path = XFS.Path(@"c:\path\proj1\proj1.csproj");
-        private readonly string _project2Path = XFS.Path(@"c:\path\proj2\proj2.csproj");
+        //private readonly string _project1Path = XFS.Path(@"c:\path\proj1\proj1.csproj");
+        //private readonly string _project2Path = XFS.Path(@"c:\path\proj2\proj2.csproj");
 
         [Fact]
-        public void SuccessfulDotNetRunnerExecution_ReturnsDependencyGraph()
+        public void SuccessfulDotNetRunnerExecutionReturnsDependencyGraph()
         {
             var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>());
 
@@ -27,7 +27,7 @@ namespace DotNetOutdated.Tests
                 .Callback((string directory, string[] arguments) =>
                 {
                     // Grab the temp filename that was passed...
-                    string tempFileName = arguments[3].Replace("/p:RestoreGraphOutputPath=", string.Empty).Trim('"');
+                    string tempFileName = arguments[3].Replace("/p:RestoreGraphOutputPath=", string.Empty, System.StringComparison.OrdinalIgnoreCase).Trim('"');
 
                     // ... and stuff it with our dummy dependency graph
                     mockFileSystem.AddFileFromEmbeddedResource(tempFileName, GetType().Assembly, "DotNetOutdated.Tests.TestData.test.dg");
@@ -46,7 +46,7 @@ namespace DotNetOutdated.Tests
         }
 
         [Fact]
-        public void UnsuccessfulDotNetRunnerExecution_Throws()
+        public void UnsuccessfulDotNetRunnerExecutionThrows()
         {
             var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>());
 
@@ -62,7 +62,7 @@ namespace DotNetOutdated.Tests
         }
 
         [Fact]
-        public void EmptySolution_ReturnsEmptyDependencyGraph()
+        public void EmptySolutionReturnsEmptyDependencyGraph()
         {
             var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>());
 
@@ -74,11 +74,11 @@ namespace DotNetOutdated.Tests
                 .Callback((string directory, string[] arguments) =>
                 {
                     // Grab the temp filename that was passed...
-                    string tempFileName = arguments[3].Replace("/p:RestoreGraphOutputPath=", string.Empty).Trim('"');
+                    string tempFileName = arguments[3].Replace("/p:RestoreGraphOutputPath=", string.Empty, System.StringComparison.OrdinalIgnoreCase).Trim('"');
 
                     // ... and stuff it with our dummy dependency graph
                     mockFileSystem.AddFileFromEmbeddedResource(tempFileName, GetType().Assembly, "DotNetOutdated.Tests.TestData.empty.dg");
-                }); ;
+                });
 
             var graphService = new DependencyGraphService(dotNetRunner.Object, mockFileSystem);
 

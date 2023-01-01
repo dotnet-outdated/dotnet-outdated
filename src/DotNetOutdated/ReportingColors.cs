@@ -4,15 +4,15 @@ namespace DotNetOutdated
 {
     public sealed class ReportingColors
     {
-        public readonly ConsoleColor ProjectName = ConsoleColor.Blue;
-        public readonly ConsoleColor TargetFrameworkName = ConsoleColor.Cyan;
-        public readonly ConsoleColor PackageName = ConsoleColor.Magenta;
+        public ConsoleColor ProjectName { get; } = ConsoleColor.Blue;
+        public ConsoleColor TargetFrameworkName { get; } = ConsoleColor.Cyan;
+        public ConsoleColor PackageName { get; } = ConsoleColor.Magenta;
 
-        public readonly ConsoleColor MajorVersionUpgrade = ConsoleColor.Red;
-        public readonly ConsoleColor MinorVersionUpgrade = ConsoleColor.Yellow;
-        public readonly ConsoleColor PatchVersionUpgrade = ConsoleColor.Green;
+        public ConsoleColor MajorVersionUpgrade { get; } = ConsoleColor.Red;
+        public ConsoleColor MinorVersionUpgrade { get; } = ConsoleColor.Yellow;
+        public ConsoleColor PatchVersionUpgrade { get; } = ConsoleColor.Green;
 
-        public readonly ConsoleColor UpgradeSuccess = ConsoleColor.Green;
-        public readonly ConsoleColor UpgradeFailure = ConsoleColor.Red;
+        public ConsoleColor UpgradeSuccess { get; } = ConsoleColor.Green;
+        public ConsoleColor UpgradeFailure { get; } = ConsoleColor.Red;
     }
 }

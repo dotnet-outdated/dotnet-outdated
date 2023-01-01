@@ -11,14 +11,19 @@ namespace DotNetOutdated
         {
             ArgumentNullException.ThrowIfNull(version);
 
-            yield return version.Major.ToString(CultureInfo.InvariantCulture);
-            yield return version.Minor.ToString(CultureInfo.InvariantCulture);
-            yield return version.Patch.ToString(CultureInfo.InvariantCulture);
-            yield return version.Revision.ToString(CultureInfo.InvariantCulture);
+            return YieldItems();
 
-            foreach (var label in version.ReleaseLabels)
+            IEnumerable<string> YieldItems()
             {
-                yield return label;
+                yield return version.Major.ToString(CultureInfo.InvariantCulture);
+                yield return version.Minor.ToString(CultureInfo.InvariantCulture);
+                yield return version.Patch.ToString(CultureInfo.InvariantCulture);
+                yield return version.Revision.ToString(CultureInfo.InvariantCulture);
+
+                foreach (var label in version.ReleaseLabels)
+                {
+                    yield return label;
+                }
             }
         }
     }

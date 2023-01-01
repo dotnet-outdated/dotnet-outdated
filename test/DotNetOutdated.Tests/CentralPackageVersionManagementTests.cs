@@ -9,7 +9,7 @@ namespace DotNetOutdated.Tests
     public class CentralPackageVersionManagementTests
     {
         [Fact]
-        public void UpgradingCPVMEnabledPackage_UpdatesNearestCPVMFile()
+        public void UpgradingCPVMEnabledPackageUpdatesNearestCPVMFile()
         {
             SetupCPVMMocks(out Mock<IDotNetRestoreService> mockRestoreService, out MockFileSystem mockFileSystem, out string path, out string nearestCPVMFilePath, out string rootCPVMFilePath, out string rootCPVMFileContent, out string _, out string _);
 
@@ -24,7 +24,7 @@ namespace DotNetOutdated.Tests
         }
 
         [Fact]
-        public void UpgradingCPVMEnabledPackage_DoesNotModifyProjectFile()
+        public void UpgradingCPVMEnabledPackageDoesNotModifyProjectFile()
         {
             SetupCPVMMocks(out Mock<IDotNetRestoreService> mockRestoreService, out MockFileSystem mockFileSystem, out string path, out string _, out string _, out string _, out string _, out string projectFileContent);
 
@@ -37,7 +37,7 @@ namespace DotNetOutdated.Tests
         [Theory]
         [InlineData(true)]
         [InlineData(false)]
-        public void UpgradingCPVMEnabledPackage_RespectsNoRestoreFlag(bool noRestore)
+        public void UpgradingCPVMEnabledPackageRespectsNoRestoreFlag(bool noRestore)
         {
             SetupCommonMocks(out Mock<IDotNetRestoreService> mockRestoreService, out MockFileSystem mockFileSystem, out string projectPath, out string _);
 
