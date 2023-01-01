@@ -3,7 +3,7 @@ using System.Text;
 
 namespace DotNetOutdated.Tests
 {
-    internal class MockTextWriter : TextWriter
+    internal sealed class MockTextWriter : TextWriter
     {
         private readonly StringBuilder _sb;
 
