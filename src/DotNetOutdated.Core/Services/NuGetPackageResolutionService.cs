@@ -49,7 +49,7 @@ namespace DotNetOutdated.Core.Services
             if (versionLock == VersionLock.Minor)
                 floatingBehaviour = includePrerelease ? NuGetVersionFloatBehavior.PrereleasePatch : NuGetVersionFloatBehavior.Patch;
 
-            string releasePrefix = null;
+            string releasePrefix = string.Empty;
             if (referencedVersion.IsPrerelease)
                 releasePrefix = referencedVersion.ReleaseLabels.First(); // TODO Not sure exactly what to do for this bit
 
