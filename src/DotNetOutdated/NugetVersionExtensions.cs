@@ -1,5 +1,7 @@
-using System.Collections.Generic;
 using NuGet.Versioning;
+using System;
+using System.Collections.Generic;
+using System.Globalization;
 
 namespace DotNetOutdated
 {
@@ -7,13 +9,21 @@ namespace DotNetOutdated
     {
         public static IEnumerable<string> GetParts(this NuGetVersion version)
         {
-            yield return version.Major.ToString();
-            yield return version.Minor.ToString();
-            yield return version.Patch.ToString();
-            yield return version.Revision.ToString();
-            foreach (var label in version.ReleaseLabels)
+            ArgumentNullException.ThrowIfNull(version);
+
+            return YieldItems();
+
+            IEnumerable<string> YieldItems()
             {
-                yield return label;
+                yield return version.Major.ToString(CultureInfo.InvariantCulture);
+                yield return version.Minor.ToString(CultureInfo.InvariantCulture);
+                yield return version.Patch.ToString(CultureInfo.InvariantCulture);
+                yield return version.Revision.ToString(CultureInfo.InvariantCulture);
+
+                foreach (var label in version.ReleaseLabels)
+                {
+                    yield return label;
+                }
             }
         }
     }
