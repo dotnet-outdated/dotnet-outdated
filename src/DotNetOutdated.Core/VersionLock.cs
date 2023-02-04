@@ -2,8 +2,8 @@
 {
     public enum VersionLock
     {
-        None,
-        Major,
-        Minor
+        None = 0,
+        Major = 1,
+        Minor = 2,
     }
 }
