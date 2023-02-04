@@ -2,17 +2,13 @@ using DotNetOutdated.Core.Models;
 using DotNetOutdated.Models;
 using NuGet.Versioning;
 using Xunit;
-using Xunit.Abstractions;
 
 namespace DotNetOutdated.Tests
 {
     public class DependencyUpgradeSeverityTests
     {
-        private readonly ITestOutputHelper _output;
-
-        public DependencyUpgradeSeverityTests(ITestOutputHelper output)
+        public DependencyUpgradeSeverityTests()
         {
-            _output = output;
         }
 
         [Theory]
@@ -24,20 +20,7 @@ namespace DotNetOutdated.Tests
             var resolvedVersion = new NuGetVersion(resolved);
             var latestVersion = new NuGetVersion(latest);
 
-            var dependency = CreateAnalyzedDependency(resolvedVersion, latestVersion);
-
-            Assert.Equal(DependencyUpgradeSeverity.Major, dependency.UpgradeSeverity);
-        }
-
-        [Theory]
-        [InlineData("1.0.1-al ", "1.0.1-be ")]
-        [InlineData("1.0.2-al ", "1.0.2    ")]
-        public void DependencyUpgradeSeverityForPrereleaseUpgrades(string resolved, string latest)
-        {
-            var resolvedVersion = new NuGetVersion(resolved);
-            var latestVersion = new NuGetVersion(latest);
-
-            var dependency = CreateAnalyzedDependency(resolvedVersion, latestVersion);
+            var dependency = DependencyUpgradeSeverityTests.CreateAnalyzedDependency(resolvedVersion, latestVersion);
 
             Assert.Equal(DependencyUpgradeSeverity.Major, dependency.UpgradeSeverity);
         }
@@ -51,23 +34,9 @@ namespace DotNetOutdated.Tests
             var resolvedVersion = new NuGetVersion(resolved);
             var latestVersion = new NuGetVersion(latest);
 
-            var dependency = CreateAnalyzedDependency(resolvedVersion, latestVersion);
+            var dependency = DependencyUpgradeSeverityTests.CreateAnalyzedDependency(resolvedVersion, latestVersion);
 
             Assert.Equal(DependencyUpgradeSeverity.Minor, dependency.UpgradeSeverity);
-        }
-
-        [Theory]
-        [InlineData("1.2.3    ", "1.2.4    ")]
-        [InlineData("1.0.13   ", "1.0.20   ")]
-        [InlineData("12.0.16  ", "12.0.1542")]
-        public void DependencyUpgradeSeverityForPatchUpgrades(string resolved, string latest)
-        {
-            var resolvedVersion = new NuGetVersion(resolved);
-            var latestVersion = new NuGetVersion(latest);
-
-            var dependency = CreateAnalyzedDependency(resolvedVersion, latestVersion);
-
-            Assert.Equal(DependencyUpgradeSeverity.Patch, dependency.UpgradeSeverity);
         }
 
         [Theory]
@@ -79,12 +48,39 @@ namespace DotNetOutdated.Tests
             var resolvedVersion = new NuGetVersion(resolved);
             var latestVersion = new NuGetVersion(latest);
 
-            var dependency = CreateAnalyzedDependency(resolvedVersion, latestVersion);
+            var dependency = DependencyUpgradeSeverityTests.CreateAnalyzedDependency(resolvedVersion, latestVersion);
 
             Assert.Equal(DependencyUpgradeSeverity.None, dependency.UpgradeSeverity);
         }
 
-        private AnalyzedDependency CreateAnalyzedDependency(NuGetVersion resolvedVersion, NuGetVersion latestVersion)
+        [Theory]
+        [InlineData("1.2.3    ", "1.2.4    ")]
+        [InlineData("1.0.13   ", "1.0.20   ")]
+        [InlineData("12.0.16  ", "12.0.1542")]
+        public void DependencyUpgradeSeverityForPatchUpgrades(string resolved, string latest)
+        {
+            var resolvedVersion = new NuGetVersion(resolved);
+            var latestVersion = new NuGetVersion(latest);
+
+            var dependency = DependencyUpgradeSeverityTests.CreateAnalyzedDependency(resolvedVersion, latestVersion);
+
+            Assert.Equal(DependencyUpgradeSeverity.Patch, dependency.UpgradeSeverity);
+        }
+
+        [Theory]
+        [InlineData("1.0.1-al ", "1.0.1-be ")]
+        [InlineData("1.0.2-al ", "1.0.2    ")]
+        public void DependencyUpgradeSeverityForPrereleaseUpgrades(string resolved, string latest)
+        {
+            var resolvedVersion = new NuGetVersion(resolved);
+            var latestVersion = new NuGetVersion(latest);
+
+            var dependency = DependencyUpgradeSeverityTests.CreateAnalyzedDependency(resolvedVersion, latestVersion);
+
+            Assert.Equal(DependencyUpgradeSeverity.Major, dependency.UpgradeSeverity);
+        }
+
+        private static AnalyzedDependency CreateAnalyzedDependency(NuGetVersion resolvedVersion, NuGetVersion latestVersion)
         {
             return new AnalyzedDependency(new Dependency("Does not matter", VersionRange.All, resolvedVersion, false, false, false, false), latestVersion);
         }
