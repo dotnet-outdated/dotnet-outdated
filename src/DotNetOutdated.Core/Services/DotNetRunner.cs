@@ -1,11 +1,13 @@
-﻿using McMaster.Extensions.CommandLineUtils;
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Threading.Tasks;
 
 namespace DotNetOutdated.Core.Services
 {
+    /// <summary>
+    /// Runs dot net executable.
+    /// </summary>
     /// <remarks>
     /// Credit for the stuff happening in here goes to the https://github.com/jaredcnance/dotnet-status project
     /// </remarks>
@@ -13,7 +15,7 @@ namespace DotNetOutdated.Core.Services
     {
         public RunStatus Run(string workingDirectory, string[] arguments)
         {
-            var psi = new ProcessStartInfo(DotNetExe.FullPathOrDefault(), string.Join(" ", arguments))
+            var psi = new ProcessStartInfo("dotnet", string.Join(" ", arguments))
             {
                 WorkingDirectory = workingDirectory,
                 UseShellExecute = false,
@@ -21,7 +23,7 @@ namespace DotNetOutdated.Core.Services
                 RedirectStandardOutput = true,
                 RedirectStandardError = true
             };
-            
+
             var p = new Process();
             try
             {
@@ -35,7 +37,7 @@ namespace DotNetOutdated.Core.Services
 
                 var processExited = p.WaitForExit(20000);
 
-                if (processExited == false)
+                if (!processExited)
                 {
                     p.Kill();
 
@@ -51,7 +53,7 @@ namespace DotNetOutdated.Core.Services
                 p.Dispose();
             }
         }
-        
+
         private static async Task ConsumeStreamReaderAsync(StreamReader reader, StringBuilder lines)
         {
             await Task.Yield();
