@@ -1,27 +1,25 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net.Http;
-using System.Threading;
-using System.Threading.Tasks;
-using DotNetOutdated.Core.Extensions;
-using NuGet.Common;
+﻿using NuGet.Common;
 using NuGet.Configuration;
 using NuGet.Frameworks;
 using NuGet.Protocol;
 using NuGet.Protocol.Core.Types;
 using NuGet.Versioning;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Net.Http;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace DotNetOutdated.Core.Services
 {
     using System.Collections.Concurrent;
-    using System.Diagnostics;
 
-    public class NuGetPackageInfoService : INuGetPackageInfoService, IDisposable
+    public sealed class NuGetPackageInfoService : INuGetPackageInfoService, IDisposable
     {
-        private IEnumerable<PackageSource> _enabledSources = null;
+        private IEnumerable<PackageSource> _enabledSources;
         private readonly SourceCacheContext _context;
-        
+
         private readonly ConcurrentDictionary<string, Lazy<Task<PackageMetadataResource>>> _metadataResourceRequests = new ConcurrentDictionary<string, Lazy<Task<PackageMetadataResource>>>();
 
         public NuGetPackageInfoService()
@@ -43,6 +41,7 @@ namespace DotNetOutdated.Core.Services
             return _enabledSources;
         }
 
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "This method is supposed to fail silently")]
         private async Task<PackageMetadataResource> FindMetadataResourceForSource(Uri source, string projectFilePath)
         {
             try
@@ -76,6 +75,9 @@ namespace DotNetOutdated.Core.Services
         public async Task<IReadOnlyList<NuGetVersion>> GetAllVersions(string package, IEnumerable<Uri> sources, bool includePrerelease, NuGetFramework targetFramework,
             string projectFilePath, bool isDevelopmentDependency, int olderThanDays, bool ignoreFailedSources = false)
         {
+            if (sources == null)
+                throw new ArgumentNullException(nameof(sources));
+
             var allVersions = new List<NuGetVersion>();
             foreach (var source in sources)
             {
@@ -99,7 +101,7 @@ namespace DotNetOutdated.Core.Services
                             var reducer = new FrameworkReducer();
 
                             compatibleMetadataList = compatibleMetadataList
-                                .Where(meta => meta.DependencySets == null || !meta.DependencySets.Any() ||
+                                .Where(meta => meta.DependencySets?.Any() != true ||
                                                reducer.GetNearest(targetFramework, meta.DependencySets.Select(ds => ds.TargetFramework)) != null)
                                 .ToList();
                         }
@@ -117,15 +119,15 @@ namespace DotNetOutdated.Core.Services
                             else if (m is LocalPackageSearchMetadata localPackageSearchMetadata)
                             {
                                 allVersions.Add(localPackageSearchMetadata.Identity.Version);
-                            } 
+                            }
                             else
                             {
                                 allVersions.Add(m.Identity.Version);
                             }
-                        };
+                        }
                     }
                 }
-                catch(HttpRequestException)
+                catch (HttpRequestException)
                 {
                     // Suppress HTTP errors when connecting to NuGet sources
                 }
@@ -136,7 +138,7 @@ namespace DotNetOutdated.Core.Services
                         continue;
                     }
                     // if the inner exception is NOT HttpRequestException, throw it
-                    if (ex.InnerException != null && !(ex.InnerException is HttpRequestException)) throw ex;
+                    if (ex.InnerException != null && !(ex.InnerException is HttpRequestException)) throw;
                 }
             }
 
@@ -148,5 +150,4 @@ namespace DotNetOutdated.Core.Services
             _context?.Dispose();
         }
     }
-
 }
