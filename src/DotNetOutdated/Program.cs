@@ -24,6 +24,7 @@ namespace DotNetOutdated
 {
     using System.Collections.Concurrent;
     using System.Diagnostics;
+    using System.IO;
 
     [Command(
         Name = "dotnet outdated",
@@ -533,19 +534,15 @@ namespace DotNetOutdated
             {
                 Console.WriteLine();
                 Console.WriteLine($"Generating {OutputFileFormat.ToString().ToUpperInvariant()} report...");
-                string reportContent;
-                switch (OutputFileFormat)
+                using var stream = _fileSystem.File.Create(OutputFilename);
+                using var sw = new StreamWriter(stream);
+                IOutputFormatter formatter = OutputFileFormat switch
                 {
-                    case OutputFormat.Csv:
-                        reportContent = Report.GetCsvReportContent(projects);
-                        break;
-
-                    default:
-                        reportContent = Report.GetJsonReportContent(projects);
-                        break;
-                }
-                _fileSystem.File.WriteAllText(OutputFilename, reportContent);
-
+                    OutputFormat.Csv => new Formatters.CsvFormatter(),
+                    OutputFormat.Markdown => new Formatters.MarkdownFormatter(),
+                    _ => new Formatters.JsonFormatter(),
+                };
+                formatter.Format(projects, sw);
                 Console.WriteLine($"Report written to {OutputFilename}");
                 Console.WriteLine();
             }

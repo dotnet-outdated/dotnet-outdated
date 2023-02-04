@@ -1,6 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <LangVersion>10</LangVersion>
+    <LangVersion>latest</LangVersion>
     <OutputType>Exe</OutputType>
     <TargetFrameworks>net6.0;net7.0</TargetFrameworks>
     <IsPackable>true</IsPackable>
