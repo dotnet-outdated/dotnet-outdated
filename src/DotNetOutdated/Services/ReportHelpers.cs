@@ -1,16 +1,16 @@
+using CsvHelper;
+using DotNetOutdated.Core.Models;
+using DotNetOutdated.Models;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Threading.Tasks;
-using CsvHelper;
-using DotNetOutdated.Core.Models;
-using DotNetOutdated.Models;
-using Newtonsoft.Json;
 
 namespace DotNetOutdated.Services
 {
-    public interface IReportingService
+    internal interface IReportingService
     {
         Task WriteReport(string filename, List<Project> projects);
     }
@@ -46,14 +46,19 @@ namespace DotNetOutdated.Services
         }
     }
 
-    public class Report
+    internal sealed class Report
     {
-        public List<AnalyzedProject> Projects { get; set; }
+        public List<AnalyzedProject> Projects { get; }
+
+        public Report(List<AnalyzedProject> projects)
+        {
+            Projects = projects ?? throw new ArgumentNullException(nameof(projects));
+        }
 
         internal static string GetTextReportLine(AnalyzedProject project, AnalyzedTargetFramework targetFramework, AnalyzedDependency dependency)
         {
             var upgradeSeverity = Enum.GetName(typeof(DependencyUpgradeSeverity), dependency.UpgradeSeverity);
-            return string.Format("{0};{1};{2};{3};{4};{5}",
+            return string.Format(CultureInfo.InvariantCulture, "{0};{1};{2};{3};{4};{5}",
                 project.Name,
                 targetFramework.Name,
                 dependency.Name,
@@ -64,41 +69,40 @@ namespace DotNetOutdated.Services
 
         public static string GetCsvReportContent(List<AnalyzedProject> projects)
         {
-            using (var sw = new StringWriter())
-            using (var csv = new CsvWriter(sw, CultureInfo.CurrentCulture))
-            {
-                foreach (var project in projects)
-                {
-                    foreach (var targetFramework in project.TargetFrameworks)
-                    {
-                        foreach (var dependency in targetFramework.Dependencies)
-                        {
-                            var upgradeSeverity = Enum.GetName(typeof(DependencyUpgradeSeverity), dependency.UpgradeSeverity);
+            ArgumentNullException.ThrowIfNull(projects);
 
-                            csv.WriteRecord(new
-                            {
-                                ProjectName = project.Name,
-                                TargetFrameworkName = targetFramework.Name.DotNetFrameworkName,
-                                DependencyName = dependency.Name,
-                                ResolvedVersion = dependency.ResolvedVersion?.ToString(),
-                                LatestVersion = dependency.LatestVersion?.ToString(),
-                                UpgradeSeverity = upgradeSeverity
-                            });
-                            csv.NextRecord();
-                        }
+            using var sw = new StringWriter();
+            using var csv = new CsvWriter(sw, CultureInfo.CurrentCulture);
+
+            foreach (var project in projects)
+            {
+                foreach (var targetFramework in project.TargetFrameworks)
+                {
+                    foreach (var dependency in targetFramework.Dependencies)
+                    {
+                        var upgradeSeverity = Enum.GetName(typeof(DependencyUpgradeSeverity), dependency.UpgradeSeverity);
+
+                        csv.WriteRecord(new
+                        {
+                            ProjectName = project.Name,
+                            TargetFrameworkName = targetFramework.Name.DotNetFrameworkName,
+                            DependencyName = dependency.Name,
+                            ResolvedVersion = dependency.ResolvedVersion?.ToString(),
+                            LatestVersion = dependency.LatestVersion?.ToString(),
+                            UpgradeSeverity = upgradeSeverity
+                        });
+                        csv.NextRecord();
                     }
                 }
-
-                return sw.ToString();
             }
+
+            return sw.ToString();
         }
 
         public static string GetJsonReportContent(List<AnalyzedProject> projects)
         {
-            var report = new Report
-            {
-                Projects = projects
-            };
+            var report = new Report(projects);
+
             return JsonConvert.SerializeObject(report, Formatting.Indented);
         }
     }
