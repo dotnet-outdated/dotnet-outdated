@@ -4,13 +4,17 @@ namespace DotNetOutdated.Core.Exceptions
 {
     public class CommandValidationException : Exception
     {
-        public CommandValidationException(string message) 
+        public CommandValidationException(string message)
             : base(message)
         {
         }
 
-        public CommandValidationException(string message, Exception innerException) 
+        public CommandValidationException(string message, Exception innerException)
             : base(message, innerException)
+        {
+        }
+
+        public CommandValidationException()
         {
         }
     }
