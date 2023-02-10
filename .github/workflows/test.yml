@@ -19,7 +19,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        framework: ['netcoreapp3.1', 'net6.0', 'net7.0']
+        framework: ['net6.0', 'net7.0']
     timeout-minutes: 30
 
     steps:
