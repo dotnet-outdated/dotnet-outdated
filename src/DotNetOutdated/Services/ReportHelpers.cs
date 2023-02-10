@@ -1,16 +1,16 @@
+using CsvHelper;
+using DotNetOutdated.Core.Models;
+using DotNetOutdated.Models;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Threading.Tasks;
-using CsvHelper;
-using DotNetOutdated.Core.Models;
-using DotNetOutdated.Models;
-using Newtonsoft.Json;
 
 namespace DotNetOutdated.Services
 {
-    public interface IReportingService
+    internal interface IReportingService
     {
         Task WriteReport(string filename, List<Project> projects);
     }

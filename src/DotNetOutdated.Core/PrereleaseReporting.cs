@@ -2,8 +2,8 @@
 {
     public enum PrereleaseReporting
     {
-        Auto,
-        Always,
-        Never
+        Auto = 0,
+        Always = 1,
+        Never = 2,
     }
 }

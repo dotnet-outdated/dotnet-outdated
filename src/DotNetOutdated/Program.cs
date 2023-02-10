@@ -3,6 +3,7 @@ using DotNetOutdated.Core.Exceptions;
 using DotNetOutdated.Core.Models;
 using DotNetOutdated.Core.Services;
 using DotNetOutdated.Models;
+using DotNetOutdated.Services;
 using McMaster.Extensions.CommandLineUtils;
 using Microsoft.Extensions.DependencyInjection;
 using NuGet.Credentials;
@@ -29,7 +30,7 @@ namespace DotNetOutdated
         Name = "dotnet outdated",
         FullName = "A .NET Core global tool to list outdated Nuget packages.")]
     [VersionOptionFromMember(MemberName = nameof(GetVersion))]
-    class Program : CommandBase
+    internal class Program : CommandBase
     {
         private readonly IFileSystem _fileSystem;
         private readonly IReporter _reporter;
@@ -125,12 +126,14 @@ namespace DotNetOutdated
                     .AddSingleton<ICentralPackageVersionManagementService, CentralPackageVersionManagementService>()
                     .BuildServiceProvider())
             {
-                var app = new CommandLineApplication<Program>();
-                app.Conventions
-                    .UseDefaultConventions()
-                    .UseConstructorInjection(services);
+                using (var app = new CommandLineApplication<Program>())
+                {
+                    app.Conventions
+                        .UseDefaultConventions()
+                        .UseConstructorInjection(services);
 
-                return app.Execute(args);
+                    return app.Execute(args);
+                }
             }
         }
 
@@ -153,6 +156,9 @@ namespace DotNetOutdated
 
         public async Task<int> OnExecute(CommandLineApplication app, IConsole console)
         {
+            ArgumentNullException.ThrowIfNull(app);
+            ArgumentNullException.ThrowIfNull(console);
+
             try
             {
                 var stopwatch = Stopwatch.StartNew();
@@ -184,7 +190,7 @@ namespace DotNetOutdated
                     console.WriteLine();
 
                 // Analyze the dependencies
-                var outdatedProjects = await AnalyzeDependencies(projects, console);
+                var outdatedProjects = await AnalyzeDependencies(projects, console).ConfigureAwait(false);
 
                 if (outdatedProjects.Any())
                 {
@@ -246,7 +252,7 @@ namespace DotNetOutdated
                         string latestVersion = package.LatestVersion?.ToString() ?? "";
 
                         console.Write($"The package ");
-                        console.Write(package.Description, Constants.ReporingColors.PackageName);
+                        console.Write(package.Description, Constants.ReportingColors.PackageName);
                         console.Write($" can be upgraded from {resolvedVersion} to ");
                         console.Write(latestVersion, GetUpgradeSeverityColor(package.UpgradeSeverity));
                         console.WriteLine(". The following project(s) will be affected:");
@@ -261,7 +267,7 @@ namespace DotNetOutdated
                     if (upgrade)
                     {
                         console.Write("Upgrading package ");
-                        console.Write(package.Description, Constants.ReporingColors.PackageName);
+                        console.Write(package.Description, Constants.ReportingColors.PackageName);
                         console.Write("...");
                         console.WriteLine();
 
@@ -273,15 +279,15 @@ namespace DotNetOutdated
 
                             if (status.IsSuccess)
                             {
-                                console.Write($"Project {project.Description} upgraded successfully", Constants.ReporingColors.UpgradeSuccess);
+                                console.Write($"Project {project.Description} upgraded successfully", Constants.ReportingColors.UpgradeSuccess);
                                 console.WriteLine();
                             }
                             else
                             {
                                 success = false;
-                                console.Write($"An error occurred while upgrading {project.Project}", Constants.ReporingColors.UpgradeFailure);
+                                console.Write($"An error occurred while upgrading {project.Project}", Constants.ReportingColors.UpgradeFailure);
                                 console.WriteLine();
-                                console.Write(status.Errors, Constants.ReporingColors.UpgradeFailure);
+                                console.Write(status.Errors, Constants.ReportingColors.UpgradeFailure);
                                 console.WriteLine();
                             }
                         }
@@ -298,11 +304,11 @@ namespace DotNetOutdated
         {
             console.WriteLine("Version color legend:");
 
-            console.Write("<red>".PadRight(8), Constants.ReporingColors.MajorVersionUpgrade);
+            console.Write("<red>".PadRight(8), Constants.ReportingColors.MajorVersionUpgrade);
             console.WriteLine(": Major version update or pre-release version. Possible breaking changes.");
-            console.Write("<yellow>".PadRight(8), Constants.ReporingColors.MinorVersionUpgrade);
+            console.Write("<yellow>".PadRight(8), Constants.ReportingColors.MinorVersionUpgrade);
             console.WriteLine(": Minor version update. Backwards-compatible features added.");
-            console.Write("<green>".PadRight(8), Constants.ReporingColors.PatchVersionUpgrade);
+            console.Write("<green>".PadRight(8), Constants.ReportingColors.PatchVersionUpgrade);
             console.WriteLine(": Patch version update. Backwards-compatible bug fixes.");
         }
 
@@ -404,7 +410,7 @@ namespace DotNetOutdated
                 tasks[index] = AddOutdatedProjectsIfNeeded(project, outdatedProjects, console);
             }
 
-            await Task.WhenAll(tasks);
+            await Task.WhenAll(tasks).ConfigureAwait(false);
 
             if (!console.IsOutputRedirected)
                 ClearCurrentConsoleLine();
@@ -436,9 +442,9 @@ namespace DotNetOutdated
                 tasks[index] = AddOutdatedFrameworkIfNeeded(targetFramework, project, outdatedFrameworks, console);
             }
 
-            await Task.WhenAll(tasks);
+            await Task.WhenAll(tasks).ConfigureAwait(false);
 
-            if (outdatedFrameworks.Count > 0)
+            if (!outdatedFrameworks.IsEmpty)
                 outdatedProjects.Add(new AnalyzedProject(project.Name, project.FilePath, outdatedFrameworks));
         }
 
@@ -446,7 +452,7 @@ namespace DotNetOutdated
         {
             var outdatedDependencies = new ConcurrentBag<AnalyzedDependency>();
 
-            var deps = targetFramework.Dependencies.Where(d => this.IncludeAutoReferences || d.IsAutoReferenced == false);
+            var deps = targetFramework.Dependencies.Where(d => this.IncludeAutoReferences || !d.IsAutoReferenced);
 
             if (FilterInclude.Any())
                 deps = deps.Where(AnyIncludeFilterMatches);
@@ -467,7 +473,7 @@ namespace DotNetOutdated
                 tasks[index] = this.AddOutdatedDependencyIfNeeded(project, targetFramework, dependency, outdatedDependencies);
             }
 
-            await Task.WhenAll(tasks);
+            await Task.WhenAll(tasks).ConfigureAwait(false);
 
             if (outdatedDependencies.Count > 0)
                 outdatedFrameworks.Add(new AnalyzedTargetFramework(targetFramework.Name, outdatedDependencies));
@@ -481,7 +487,7 @@ namespace DotNetOutdated
             if (referencedVersion != null)
             {
                 latestVersion = await _nugetService.ResolvePackageVersions(dependency.Name, referencedVersion, project.Sources, dependency.VersionRange,
-                    VersionLock, Prerelease, targetFramework.Name, project.FilePath, dependency.IsDevelopmentDependency, OlderThanDays, IgnoreFailedSources);
+                    VersionLock, Prerelease, targetFramework.Name, project.FilePath, dependency.IsDevelopmentDependency, OlderThanDays, IgnoreFailedSources).ConfigureAwait(false);
             }
 
             if (referencedVersion == null || latestVersion == null || referencedVersion != latestVersion)
@@ -490,7 +496,7 @@ namespace DotNetOutdated
                 if (OlderThanDays > 0 && latestVersion == null)
                 {
                     NuGetVersion absoluteLatestVersion = await _nugetService.ResolvePackageVersions(dependency.Name, referencedVersion, project.Sources, dependency.VersionRange,
-                        VersionLock, Prerelease, targetFramework.Name, project.FilePath, dependency.IsDevelopmentDependency);
+                        VersionLock, Prerelease, targetFramework.Name, project.FilePath, dependency.IsDevelopmentDependency).ConfigureAwait(false);
 
                     if (absoluteLatestVersion == null || referencedVersion > absoluteLatestVersion)
                     {
@@ -509,11 +515,14 @@ namespace DotNetOutdated
             switch (upgradeSeverity)
             {
                 case DependencyUpgradeSeverity.Major:
-                    return Constants.ReporingColors.MajorVersionUpgrade;
+                    return Constants.ReportingColors.MajorVersionUpgrade;
+
                 case DependencyUpgradeSeverity.Minor:
-                    return Constants.ReporingColors.MinorVersionUpgrade;
+                    return Constants.ReportingColors.MinorVersionUpgrade;
+
                 case DependencyUpgradeSeverity.Patch:
-                    return Constants.ReporingColors.PatchVersionUpgrade;
+                    return Constants.ReportingColors.PatchVersionUpgrade;
+
                 default:
                     return Console.ForegroundColor;
             }
@@ -524,7 +533,7 @@ namespace DotNetOutdated
             if (OutputFilename != null)
             {
                 Console.WriteLine();
-                Console.WriteLine($"Generating {OutputFileFormat.ToString().ToUpper()} report...");
+                Console.WriteLine($"Generating {OutputFileFormat.ToString().ToUpperInvariant()} report...");
                 using var stream = _fileSystem.File.Create(OutputFilename);
                 using var sw = new StreamWriter(stream);
                 IOutputFormatter formatter = OutputFileFormat switch
@@ -541,14 +550,14 @@ namespace DotNetOutdated
 
         private static void WriteProjectName(string name, IConsole console)
         {
-            console.Write($"» {name}", Constants.ReporingColors.ProjectName);
+            console.Write($"» {name}", Constants.ReportingColors.ProjectName);
             console.WriteLine();
         }
 
         private static void WriteTargetFramework(AnalyzedTargetFramework targetFramework, IConsole console)
         {
             console.WriteIndent();
-            console.Write($"[{targetFramework.Name}]", Constants.ReporingColors.TargetFrameworkName);
+            console.Write($"[{targetFramework.Name}]", Constants.ReportingColors.TargetFrameworkName);
             console.WriteLine();
         }
 

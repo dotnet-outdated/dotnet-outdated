@@ -33,11 +33,6 @@ jobs:
       - name: Setup dotnet
         uses: actions/setup-dotnet@v3.0.3
         with:
-          dotnet-version: '3.1.x'
-
-      - name: Setup dotnet
-        uses: actions/setup-dotnet@v3.0.3
-        with:
           dotnet-version: '6.0.x'
 
       - name: Setup dotnet

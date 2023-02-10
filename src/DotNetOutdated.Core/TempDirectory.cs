@@ -3,15 +3,15 @@ using System.IO;
 
 namespace DotNetOutdated
 {
-    class TempDirectory : IDisposable
+    internal class TempDirectory : IDisposable
     {
-        private string tempPath;
-        private string tempDirName;
+        private readonly string _tempPath;
+        private readonly string _tempDirName;
 
         public TempDirectory()
         {
-            tempPath = Path.GetTempPath();
-            tempDirName = Path.GetRandomFileName();
+            _tempPath = Path.GetTempPath();
+            _tempDirName = Path.GetRandomFileName();
             Directory.CreateDirectory(DirectoryPath);
         }
 
@@ -22,7 +22,7 @@ namespace DotNetOutdated
 
         public string DirectoryPath
         {
-            get => Path.Combine(tempPath, tempDirName);
+            get => Path.Combine(_tempPath, _tempDirName);
         }
     }
 }
