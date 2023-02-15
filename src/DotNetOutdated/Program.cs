@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO.Abstractions;
 using System.Linq;
@@ -154,9 +154,25 @@ namespace DotNetOutdated
             Console.Write($@"Reading configuration file {configurationFile}...");
             using var streamReader = File.OpenText(configurationFile);
             var json = streamReader.ReadToEnd();
+            
+            var errors = new List<string>();
+            var serializerSettings = new JsonSerializerSettings
+            {
+                Error = delegate(object sender, Newtonsoft.Json.Serialization.ErrorEventArgs args)
+                {
+                    errors.Add(args.ErrorContext.Error.Message);
+                    args.ErrorContext.Handled = true;
+                }
+            };
+            var configurationFileOptions = JsonConvert.DeserializeObject<ConfigurationFileOptions>(json, serializerSettings);
 
-            var configurationFileOptions = JsonConvert.DeserializeObject<ConfigurationFileOptions>(json);
-                
+            if (errors.Count > 0)
+            {
+                Console.WriteLine($@"Ignoring configuration from {configurationFile} due to the following error(s):");
+                errors.ForEach(Console.WriteLine);
+                return Enumerable.Empty<string>();
+            }
+
             var argsFromConfigFile = new List<string>();
             if (configurationFileOptions.IncludeAutoReferences ?? false)
                 argsFromConfigFile.Add($@"--include-auto-references");
