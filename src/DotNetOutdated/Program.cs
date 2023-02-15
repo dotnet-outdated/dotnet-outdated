@@ -15,6 +15,7 @@ using McMaster.Extensions.CommandLineUtils;
 using Microsoft.Extensions.DependencyInjection;
 using NuGet.Credentials;
 using NuGet.Versioning;
+using Newtonsoft.Json;
 
 [assembly: InternalsVisibleTo("DotNetOutdated.Tests")]
 [assembly: InternalsVisibleTo("DynamicProxyGenAssembly2")]
@@ -108,6 +109,8 @@ namespace DotNetOutdated
         [Option(CommandOptionType.NoValue, Description = "Treat package source failures as warnings.", ShortName = "ifs", LongName = "ignore-failed-sources")]
         public bool IgnoreFailedSources { get; set; } = false;
 
+        private static string ConfigurationFile => ".dotnet-outdated.json";
+        
         public static int Main(string[] args)
         {
             using var services = new ServiceCollection()
@@ -129,14 +132,67 @@ namespace DotNetOutdated
             app.Conventions
                 .UseDefaultConventions()
                 .UseConstructorInjection(services);
+            
+            var configFileArguments = GetArgumentsFromConfigurationFile(ConfigurationFile);
+            var combinedArguments = configFileArguments.Concat(args).ToArray();
 
-            return app.Execute(args);
+            return app.Execute(combinedArguments);
         }
 
         public static string GetVersion() => typeof(Program)
             .Assembly
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
             .InformationalVersion;
+        
+        private static IEnumerable<string> GetArgumentsFromConfigurationFile(string configurationFile)
+        {
+            if (!File.Exists(configurationFile))
+            {
+                return Enumerable.Empty<string>();
+            }
+
+            Console.Write($@"Reading configuration file {configurationFile}...");
+            using var streamReader = File.OpenText(configurationFile);
+            var json = streamReader.ReadToEnd();
+
+            var configurationFileOptions = JsonConvert.DeserializeObject<ConfigurationFileOptions>(json);
+                
+            var argsFromConfigFile = new List<string>();
+            if (configurationFileOptions.IncludeAutoReferences ?? false)
+                argsFromConfigFile.Add($@"--include-auto-references");
+            if (configurationFileOptions.Prerelease.HasValue)
+                argsFromConfigFile.Add($@"--pre-release:{configurationFileOptions.Prerelease.ToString()}");
+            if (configurationFileOptions.VersionLock.HasValue)
+                argsFromConfigFile.Add($@"--version-lock:{configurationFileOptions.VersionLock.ToString()}");
+            if (configurationFileOptions.Transitive ?? false)
+                argsFromConfigFile.Add(@"--transitive");
+            if (configurationFileOptions.TransitiveDepth.HasValue)
+                argsFromConfigFile.Add($@"--transitive-depth:{configurationFileOptions.TransitiveDepth}");
+            if (configurationFileOptions.Upgrade.HasValue)
+                argsFromConfigFile.Add($@"--upgrade:{configurationFileOptions.Upgrade.ToString()}");
+            if (configurationFileOptions.FailOnUpdates ?? false)
+                argsFromConfigFile.Add(@"--fail-on-updates");
+            configurationFileOptions.FilterInclude
+                .ForEach(item => argsFromConfigFile.Add($@"--include:{item}"));
+            configurationFileOptions.FilterExclude
+                .ForEach(item => argsFromConfigFile.Add($@"--exclude:{item}"));
+            if (!string.IsNullOrEmpty(configurationFileOptions.OutputFilename))
+                argsFromConfigFile.Add($@"--output:{configurationFileOptions.OutputFilename}");
+            if (configurationFileOptions.OutputFileFormat.HasValue)
+                argsFromConfigFile.Add($@"--output-format:{configurationFileOptions.OutputFileFormat}");
+            if (configurationFileOptions.OlderThanDays.HasValue)
+                argsFromConfigFile.Add($@"--older-than:{configurationFileOptions.OlderThanDays}");
+            if (configurationFileOptions.NoRestore ?? false)
+                argsFromConfigFile.Add(@"--no-restore");
+            if (configurationFileOptions.Recursive ?? false)
+                argsFromConfigFile.Add($@"--recursive");
+            if (configurationFileOptions.IgnoreFailedSources ?? false)
+                argsFromConfigFile.Add(@"--ignore-failed-sources");
+
+            Console.WriteLine();
+            return argsFromConfigFile;
+        }
+
 
         public Program(IFileSystem fileSystem, IReporter reporter, INuGetPackageResolutionService nugetService, IProjectAnalysisService projectAnalysisService,
             IProjectDiscoveryService projectDiscoveryService, IDotNetAddPackageService dotNetAddPackageService, ICentralPackageVersionManagementService centralPackageVersionManagementService)
