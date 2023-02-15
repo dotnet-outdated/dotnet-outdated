@@ -168,8 +168,10 @@ namespace DotNetOutdated
 
             if (errors.Count > 0)
             {
+                Console.ForegroundColor = Constants.ReportingColors.ConfigurationFileFailure;
                 Console.WriteLine($@"Ignoring configuration from {configurationFile} due to the following error(s):");
                 errors.ForEach(Console.WriteLine);
+                Console.ResetColor();
                 return Enumerable.Empty<string>();
             }
 
