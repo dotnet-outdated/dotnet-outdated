@@ -17,7 +17,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="NuGet.Configuration" Version="6.4.0" />
+    <PackageReference Include="NuGet.Configuration" Version="6.5.0" />
     <PackageReference Include="NuGet.Credentials" Version="6.4.0" />
     <PackageReference Include="NuGet.ProjectModel" Version="6.4.0" />
     <PackageReference Include="NuGet.Protocol" Version="6.4.0" />
