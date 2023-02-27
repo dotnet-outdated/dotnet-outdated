@@ -1,14 +1,4 @@
-﻿using DotNetOutdated.Core;
-using DotNetOutdated.Core.Exceptions;
-using DotNetOutdated.Core.Models;
-using DotNetOutdated.Core.Services;
-using DotNetOutdated.Models;
-using DotNetOutdated.Services;
-using McMaster.Extensions.CommandLineUtils;
-using Microsoft.Extensions.DependencyInjection;
-using NuGet.Credentials;
-using NuGet.Versioning;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO.Abstractions;
 using System.Linq;
@@ -16,6 +6,15 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using DotNetOutdated.Core;
+using DotNetOutdated.Core.Exceptions;
+using DotNetOutdated.Core.Models;
+using DotNetOutdated.Core.Services;
+using DotNetOutdated.Models;
+using McMaster.Extensions.CommandLineUtils;
+using Microsoft.Extensions.DependencyInjection;
+using NuGet.Credentials;
+using NuGet.Versioning;
 
 [assembly: InternalsVisibleTo("DotNetOutdated.Tests")]
 [assembly: InternalsVisibleTo("DynamicProxyGenAssembly2")]
@@ -358,9 +357,7 @@ namespace DotNetOutdated
                 {
                     WriteTargetFramework(targetFramework, console);
 
-                    var dependencies = targetFramework.Dependencies
-                        .OrderBy(d => d.Name)
-                        .ToList();
+                    var dependencies = targetFramework.Dependencies.ToList();
 
                     int[] columnWidths = dependencies.DetermineColumnWidths();
 
@@ -417,7 +414,10 @@ namespace DotNetOutdated
             else
                 console.WriteLine();
 
-            return outdatedProjects.ToList();
+            return outdatedProjects
+                .OrderBy(p => p.Name)
+                .ThenBy(p => p.FilePath)
+                .ToList();
         }
 
         private bool AnyIncludeFilterMatches(Dependency dep) =>
