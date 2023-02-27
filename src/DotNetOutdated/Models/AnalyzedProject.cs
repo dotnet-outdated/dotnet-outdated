@@ -1,10 +1,11 @@
-﻿using DotNetOutdated.Core.Models;
+﻿using System.Collections.Generic;
+using System.Linq;
+using DotNetOutdated.Core.Models;
 using DotNetOutdated.Services;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using NuGet.Frameworks;
 using NuGet.Versioning;
-using System.Collections.Generic;
 
 namespace DotNetOutdated.Models
 {
@@ -24,7 +25,7 @@ namespace DotNetOutdated.Models
         {
             Name = name;
             FilePath = filePath;
-            TargetFrameworks = new List<AnalyzedTargetFramework>(targetFrameworks);
+            TargetFrameworks = targetFrameworks.OrderBy(p => p.Name.Framework).ToList();
         }
     }
 
@@ -41,7 +42,7 @@ namespace DotNetOutdated.Models
         public AnalyzedTargetFramework(NuGetFramework name, IEnumerable<AnalyzedDependency> dependencies)
         {
             Name = name;
-            Dependencies = new List<AnalyzedDependency>(dependencies);
+            Dependencies = dependencies.OrderBy(p => p.Name).ToList();
         }
     }
 
