@@ -21,7 +21,7 @@ internal class JsonFormatter : IOutputFormatter
 
     private class Report
     {
-        public IReadOnlyList<AnalyzedProject>? Projects { get; set; }
+        public IReadOnlyList<AnalyzedProject> Projects { get; set; }
 
         internal static string GetTextReportLine(AnalyzedProject project, AnalyzedTargetFramework targetFramework, AnalyzedDependency dependency)
         {
