@@ -25,19 +25,16 @@ jobs:
     steps:
     - uses: actions/checkout@v3.3.0
 
-    - name: Setup dotnet
+    - name: Setup .NET
       uses: actions/setup-dotnet@v3.0.3
       with:
-        dotnet-version: '6.0.x'
-
-    - name: Setup dotnet
-      uses: actions/setup-dotnet@v3.0.3
-      with:
-        dotnet-version: '7.0.x'
+        dotnet-version: | 
+            6.0.x
+            7.0.x
 
     - name: Smoke test
       run: |
-        dotnet run --framework ${{ matrix.framework }} --project src/DotNetOutdated test-projects/development-dependencies
+        dotnet run --configuration Release --framework ${{ matrix.framework }} --project src/DotNetOutdated test-projects/development-dependencies
 
     - name: Tests
-      run: dotnet test --framework ${{ matrix.framework }}
+      run: dotnet test --configuration Release --framework ${{ matrix.framework }}
