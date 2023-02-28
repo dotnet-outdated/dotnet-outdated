@@ -29,8 +29,7 @@ namespace DotNetOutdated.Core.Services
             string[] arguments = {
                 "msbuild",
                 $"\"{projectPath}\"",
-                "/t:GenerateRestoreGraphFile",
-                "/p:BuildProjectReferences=false",
+                "/t:Restore,GenerateRestoreGraphFile",
                 "/p:WarningLevel=0",
                 "/p:TreatWarningsAsErrors=false",
                 "/p:RestoreUseStaticGraphEvaluation=true",
