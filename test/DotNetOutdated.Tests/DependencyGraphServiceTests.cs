@@ -30,7 +30,7 @@ namespace DotNetOutdated.Tests
                     ArgumentNullException.ThrowIfNull(directory);
 
                     // Grab the temp filename that was passed...
-                    string tempFileName = arguments[3].Replace("/p:RestoreGraphOutputPath=", string.Empty, System.StringComparison.OrdinalIgnoreCase).Trim('"');
+                    string tempFileName = arguments[7].Replace("/p:RestoreGraphOutputPath=", string.Empty, System.StringComparison.OrdinalIgnoreCase).Trim('"');
 
                     // ... and stuff it with our dummy dependency graph
                     mockFileSystem.AddFileFromEmbeddedResource(tempFileName, GetType().Assembly, "DotNetOutdated.Tests.TestData.test.dg");
@@ -72,14 +72,14 @@ namespace DotNetOutdated.Tests
             // Arrange
             var dotNetRunner = new Mock<IDotNetRunner>();
 
-            dotNetRunner.Setup(runner => runner.Run(It.IsAny<string>(), It.Is<string[]>(a => a[0] == "msbuild" && a[2] == "/t:Restore,GenerateRestoreGraphFile")))
+            dotNetRunner.Setup(runner => runner.Run(It.IsAny<string>(), It.Is<string[]>(a => a[0] == "msbuild" && a[2] == "/t:GenerateRestoreGraphFile")))
                 .Returns(new RunStatus(string.Empty, string.Empty, 0))
                 .Callback((string directory, string[] arguments) =>
                 {
                     ArgumentNullException.ThrowIfNull(directory);
 
                     // Grab the temp filename that was passed...
-                    string tempFileName = arguments[3].Replace("/p:RestoreGraphOutputPath=", string.Empty, System.StringComparison.OrdinalIgnoreCase).Trim('"');
+                    string tempFileName = arguments[7].Replace("/p:RestoreGraphOutputPath=", string.Empty, System.StringComparison.OrdinalIgnoreCase).Trim('"');
 
                     // ... and stuff it with our dummy dependency graph
                     mockFileSystem.AddFileFromEmbeddedResource(tempFileName, GetType().Assembly, "DotNetOutdated.Tests.TestData.empty.dg");
@@ -94,7 +94,7 @@ namespace DotNetOutdated.Tests
             Assert.NotNull(dependencyGraph);
             Assert.Equal(0, dependencyGraph.Projects.Count);
 
-            dotNetRunner.Verify(runner => runner.Run(_path, It.Is<string[]>(a => a[0] == "msbuild" && a[1] == '\"' + _solutionPath + '\"' && a[2] == "/t:Restore,GenerateRestoreGraphFile")));
+            dotNetRunner.Verify(runner => runner.Run(_path, It.Is<string[]>(a => a[0] == "msbuild" && a[1] == '\"' + _solutionPath + '\"' && a[2] == "/t:GenerateRestoreGraphFile")));
         }
     }
 }
