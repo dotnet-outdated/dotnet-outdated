@@ -26,7 +26,16 @@ namespace DotNetOutdated.Core.Services
         {
             var dgOutput = _fileSystem.Path.Combine(_fileSystem.Path.GetTempPath(), _fileSystem.Path.GetTempFileName());
 
-            string[] arguments = { "msbuild", $"\"{projectPath}\"", "/t:Restore,GenerateRestoreGraphFile", $"/p:RestoreGraphOutputPath=\"{dgOutput}\"" };
+            string[] arguments = {
+                "msbuild",
+                $"\"{projectPath}\"",
+                "/t:GenerateRestoreGraphFile",
+                "/p:BuildProjectReferences=false",
+                "/p:WarningLevel=0",
+                "/p:TreatWarningsAsErrors=false",
+                "/p:RestoreUseStaticGraphEvaluation=true",
+                $"/p:RestoreGraphOutputPath=\"{dgOutput}\""
+            };
 
             var runStatus = _dotNetRunner.Run(_fileSystem.Path.GetDirectoryName(projectPath), arguments);
 
