@@ -52,7 +52,7 @@ jobs:
           echo "tool_package_name=dotnet-outdated-tool.$VERSION.nupkg" >> $GITHUB_OUTPUT
           echo "tool_package_filename=$OUTPUT/dotnet-outdated-tool.$VERSION.nupkg" >> $GITHUB_OUTPUT
           dotnet build --configuration Release
-          dotnet pack --configuration Release /p:Version=$VERSION /p:PackageOutputPath $OUTPUT
+          dotnet pack --configuration Release /p:Version=$VERSION /p:PackageOutputPath=$OUTPUT
 
       - name: Publish package
         env:
