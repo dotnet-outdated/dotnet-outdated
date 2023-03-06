@@ -30,36 +30,31 @@ jobs:
       contents: write
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v3.1.0
+      - uses: actions/checkout@v3.3.0
 
-      - name: Setup dotnet
-        uses: actions/setup-dotnet@v3.0.2
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3.0.3
         with:
-          dotnet-version: '6.0.x'
-
-      - name: Setup dotnet
-        uses: actions/setup-dotnet@v3.0.2
-        with:
-          dotnet-version: '7.0.x'
+          dotnet-version: | 
+            6.0.x
+            7.0.x
 
       # The tests should have already been run during the PR workflow, so this is really just a sanity check
       - name: Tests
-        run: dotnet test
+        run: dotnet test --configuration Release
 
       - name: Package release
         id: package_release
         run: |
           VERSION=`cat semver.txt`
           OUTPUT=./nupkgs
-          echo "##[set-output name=version;]$VERSION"
-          echo "##[set-output name=core_package_name;]Yextly.DotNetOutdatedTool.Core.$VERSION.nupkg"
-          echo "##[set-output name=core_symbol_package_name;]Yextly.DotNetOutdatedTool.Core.$VERSION.snupkg"
-          echo "##[set-output name=core_package_filename;]$OUTPUT/Yextly.DotNetOutdatedTool.Core.$VERSION.nupkg"
-          echo "##[set-output name=core_symbol_package_filename;]$OUTPUT/Yextly.DotNetOutdatedTool.Core.$VERSION.snupkg"
-          echo "##[set-output name=tool_package_name;]yextly-dotnet-outdated-tool.$VERSION.nupkg"
-          echo "##[set-output name=tool_package_filename;]$OUTPUT/yextly-dotnet-outdated-tool.$VERSION.nupkg"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "core_package_name=Yextly.DotNetOutdatedTool.Core.$VERSION.nupkg" >> $GITHUB_OUTPUT
+          echo "core_package_filename=$OUTPUT/Yextly.DotNetOutdatedTool.Core.$VERSION.nupkg" >> $GITHUB_OUTPUT
+          echo "tool_package_name=yextly-dotnet-outdated-tool.$VERSION.nupkg" >> $GITHUB_OUTPUT
+          echo "tool_package_filename=$OUTPUT/yextly-dotnet-outdated-tool.$VERSION.nupkg" >> $GITHUB_OUTPUT
           dotnet build --configuration Release
-          dotnet pack --configuration Release /p:Version=$VERSION --output $OUTPUT
+          dotnet pack --configuration Release /p:Version=$VERSION /p:PackageOutputPath=$OUTPUT
 
       - name: Publish package
         env:
