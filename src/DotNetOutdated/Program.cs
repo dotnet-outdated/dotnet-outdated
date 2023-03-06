@@ -1,12 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO.Abstractions;
-using System.Linq;
-using System.Reflection;
-using System.Runtime.CompilerServices;
-using System.Text.RegularExpressions;
-using System.Threading.Tasks;
-using DotNetOutdated.Core;
+﻿using DotNetOutdated.Core;
 using DotNetOutdated.Core.Exceptions;
 using DotNetOutdated.Core.Models;
 using DotNetOutdated.Core.Services;
@@ -15,6 +7,14 @@ using McMaster.Extensions.CommandLineUtils;
 using Microsoft.Extensions.DependencyInjection;
 using NuGet.Credentials;
 using NuGet.Versioning;
+using System;
+using System.Collections.Generic;
+using System.IO.Abstractions;
+using System.Linq;
+using System.Reflection;
+using System.Runtime.CompilerServices;
+using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 
 [assembly: InternalsVisibleTo("DotNetOutdated.Tests")]
 [assembly: InternalsVisibleTo("DynamicProxyGenAssembly2")]
@@ -299,7 +299,7 @@ namespace DotNetOutdated
             return success;
         }
 
-        private void PrintColorLegend(IConsole console)
+        private static void PrintColorLegend(IConsole console)
         {
             console.WriteLine("Version color legend:");
 
@@ -390,7 +390,7 @@ namespace DotNetOutdated
                 console.WriteLine();
             }
 
-            PrintColorLegend(console);
+            Program.PrintColorLegend(console);
         }
 
         private async Task<List<AnalyzedProject>> AnalyzeDependencies(List<Project> projects, IConsole console)
@@ -421,12 +421,12 @@ namespace DotNetOutdated
         }
 
         private bool AnyIncludeFilterMatches(Dependency dep) =>
-            FilterInclude.Any(f => NameContains(dep, f));
+            FilterInclude.Any(f => Program.NameContains(dep, f));
 
         private bool NoExcludeFilterMatches(Dependency dep) =>
-            !FilterExclude.Any(f => NameContains(dep, f));
+            !FilterExclude.Any(f => Program.NameContains(dep, f));
 
-        private bool NameContains(Dependency dep, string part) =>
+        private static bool NameContains(Dependency dep, string part) =>
             dep.Name.Contains(part, StringComparison.InvariantCultureIgnoreCase);
 
         private async Task AddOutdatedProjectsIfNeeded(Project project, ConcurrentBag<AnalyzedProject> outdatedProjects, IConsole console)
