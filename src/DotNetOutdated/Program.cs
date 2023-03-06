@@ -110,7 +110,7 @@ namespace DotNetOutdated
 
         public static int Main(string[] args)
         {
-            using (var services = new ServiceCollection()
+            using var services = new ServiceCollection()
                     .AddSingleton<IConsole>(PhysicalConsole.Singleton)
                     .AddSingleton<IReporter>(provider => new ConsoleReporter(provider.GetService<IConsole>()))
                     .AddSingleton<IFileSystem, FileSystem>()
@@ -123,17 +123,14 @@ namespace DotNetOutdated
                     .AddSingleton<INuGetPackageInfoService, NuGetPackageInfoService>()
                     .AddSingleton<INuGetPackageResolutionService, NuGetPackageResolutionService>()
                     .AddSingleton<ICentralPackageVersionManagementService, CentralPackageVersionManagementService>()
-                    .BuildServiceProvider())
-            {
-                using (var app = new CommandLineApplication<Program>())
-                {
-                    app.Conventions
-                        .UseDefaultConventions()
-                        .UseConstructorInjection(services);
+                    .BuildServiceProvider();
 
-                    return app.Execute(args);
-                }
-            }
+            using var app = new CommandLineApplication<Program>();
+            app.Conventions
+                .UseDefaultConventions()
+                .UseConstructorInjection(services);
+
+            return app.Execute(args);
         }
 
         public static string GetVersion() => typeof(Program)
