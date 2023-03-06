@@ -2,6 +2,7 @@
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 
 namespace DotNetOutdated.Formatters;
@@ -26,7 +27,7 @@ internal class JsonFormatter : IOutputFormatter
         internal static string GetTextReportLine(AnalyzedProject project, AnalyzedTargetFramework targetFramework, AnalyzedDependency dependency)
         {
             var upgradeSeverity = Enum.GetName(typeof(DependencyUpgradeSeverity), dependency.UpgradeSeverity);
-            return string.Format("{0};{1};{2};{3};{4};{5}",
+            return string.Format(CultureInfo.InvariantCulture, "{0};{1};{2};{3};{4};{5}",
                 project.Name,
                 targetFramework.Name,
                 dependency.Name,
