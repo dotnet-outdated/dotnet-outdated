@@ -404,7 +404,7 @@ namespace DotNetOutdated
             for (var index = 0; index < projects.Count; index++)
             {
                 var project = projects[index];
-                tasks[index] = AddOutdatedProjectsIfNeeded(project, outdatedProjects, console);
+                tasks[index] = AddOutdatedProjectsIfNeeded(project, outdatedProjects);
             }
 
             await Task.WhenAll(tasks).ConfigureAwait(false);
@@ -429,7 +429,7 @@ namespace DotNetOutdated
         private static bool NameContains(Dependency dep, string part) =>
             dep.Name.Contains(part, StringComparison.InvariantCultureIgnoreCase);
 
-        private async Task AddOutdatedProjectsIfNeeded(Project project, ConcurrentBag<AnalyzedProject> outdatedProjects, IConsole console)
+        private async Task AddOutdatedProjectsIfNeeded(Project project, ConcurrentBag<AnalyzedProject> outdatedProjects)
         {
             var outdatedFrameworks = new ConcurrentBag<AnalyzedTargetFramework>();
 
@@ -439,7 +439,7 @@ namespace DotNetOutdated
             for (var index = 0; index < project.TargetFrameworks.Count; index++)
             {
                 var targetFramework = project.TargetFrameworks[index];
-                tasks[index] = AddOutdatedFrameworkIfNeeded(targetFramework, project, outdatedFrameworks, console);
+                tasks[index] = AddOutdatedFrameworkIfNeeded(targetFramework, project, outdatedFrameworks);
             }
 
             await Task.WhenAll(tasks).ConfigureAwait(false);
@@ -448,7 +448,7 @@ namespace DotNetOutdated
                 outdatedProjects.Add(new AnalyzedProject(project.Name, project.FilePath, outdatedFrameworks));
         }
 
-        private async Task AddOutdatedFrameworkIfNeeded(TargetFramework targetFramework, Project project, ConcurrentBag<AnalyzedTargetFramework> outdatedFrameworks, IConsole console)
+        private async Task AddOutdatedFrameworkIfNeeded(TargetFramework targetFramework, Project project, ConcurrentBag<AnalyzedTargetFramework> outdatedFrameworks)
         {
             var outdatedDependencies = new ConcurrentBag<AnalyzedDependency>();
 
