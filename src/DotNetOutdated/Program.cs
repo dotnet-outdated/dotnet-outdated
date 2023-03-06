@@ -110,7 +110,7 @@ namespace DotNetOutdated
 
         public static int Main(string[] args)
         {
-            using (var services = new ServiceCollection()
+            using var services = new ServiceCollection()
                     .AddSingleton<IConsole>(PhysicalConsole.Singleton)
                     .AddSingleton<IReporter>(provider => new ConsoleReporter(provider.GetService<IConsole>()))
                     .AddSingleton<IFileSystem, FileSystem>()
@@ -123,17 +123,14 @@ namespace DotNetOutdated
                     .AddSingleton<INuGetPackageInfoService, NuGetPackageInfoService>()
                     .AddSingleton<INuGetPackageResolutionService, NuGetPackageResolutionService>()
                     .AddSingleton<ICentralPackageVersionManagementService, CentralPackageVersionManagementService>()
-                    .BuildServiceProvider())
-            {
-                using (var app = new CommandLineApplication<Program>())
-                {
-                    app.Conventions
-                        .UseDefaultConventions()
-                        .UseConstructorInjection(services);
+                    .BuildServiceProvider();
 
-                    return app.Execute(args);
-                }
-            }
+            using var app = new CommandLineApplication<Program>();
+            app.Conventions
+                .UseDefaultConventions()
+                .UseConstructorInjection(services);
+
+            return app.Execute(args);
         }
 
         public static string GetVersion() => typeof(Program)
@@ -250,7 +247,7 @@ namespace DotNetOutdated
                         string resolvedVersion = package.ResolvedVersion?.ToString() ?? "";
                         string latestVersion = package.LatestVersion?.ToString() ?? "";
 
-                        console.Write($"The package ");
+                        console.Write("The package ");
                         console.Write(package.Description, Constants.ReportingColors.PackageName);
                         console.Write($" can be upgraded from {resolvedVersion} to ");
                         console.Write(latestVersion, GetUpgradeSeverityColor(package.UpgradeSeverity));
@@ -299,7 +296,7 @@ namespace DotNetOutdated
             return success;
         }
 
-        private void PrintColorLegend(IConsole console)
+        private static void PrintColorLegend(IConsole console)
         {
             console.WriteLine("Version color legend:");
 
@@ -346,7 +343,7 @@ namespace DotNetOutdated
             console.Write(rest, GetUpgradeSeverityColor(upgradeSeverity));
         }
 
-        private void ReportOutdatedDependencies(List<AnalyzedProject> projects, IConsole console)
+        private static void ReportOutdatedDependencies(List<AnalyzedProject> projects, IConsole console)
         {
             foreach (var project in projects)
             {
@@ -404,7 +401,7 @@ namespace DotNetOutdated
             for (var index = 0; index < projects.Count; index++)
             {
                 var project = projects[index];
-                tasks[index] = AddOutdatedProjectsIfNeeded(project, outdatedProjects, console);
+                tasks[index] = AddOutdatedProjectsIfNeeded(project, outdatedProjects);
             }
 
             await Task.WhenAll(tasks).ConfigureAwait(false);
@@ -426,10 +423,10 @@ namespace DotNetOutdated
         private bool NoExcludeFilterMatches(Dependency dep) =>
             !FilterExclude.Any(f => NameContains(dep, f));
 
-        private bool NameContains(Dependency dep, string part) =>
+        private static bool NameContains(Dependency dep, string part) =>
             dep.Name.Contains(part, StringComparison.InvariantCultureIgnoreCase);
 
-        private async Task AddOutdatedProjectsIfNeeded(Project project, ConcurrentBag<AnalyzedProject> outdatedProjects, IConsole console)
+        private async Task AddOutdatedProjectsIfNeeded(Project project, ConcurrentBag<AnalyzedProject> outdatedProjects)
         {
             var outdatedFrameworks = new ConcurrentBag<AnalyzedTargetFramework>();
 
@@ -439,7 +436,7 @@ namespace DotNetOutdated
             for (var index = 0; index < project.TargetFrameworks.Count; index++)
             {
                 var targetFramework = project.TargetFrameworks[index];
-                tasks[index] = AddOutdatedFrameworkIfNeeded(targetFramework, project, outdatedFrameworks, console);
+                tasks[index] = AddOutdatedFrameworkIfNeeded(targetFramework, project, outdatedFrameworks);
             }
 
             await Task.WhenAll(tasks).ConfigureAwait(false);
@@ -448,7 +445,7 @@ namespace DotNetOutdated
                 outdatedProjects.Add(new AnalyzedProject(project.Name, project.FilePath, outdatedFrameworks));
         }
 
-        private async Task AddOutdatedFrameworkIfNeeded(TargetFramework targetFramework, Project project, ConcurrentBag<AnalyzedTargetFramework> outdatedFrameworks, IConsole console)
+        private async Task AddOutdatedFrameworkIfNeeded(TargetFramework targetFramework, Project project, ConcurrentBag<AnalyzedTargetFramework> outdatedFrameworks)
         {
             var outdatedDependencies = new ConcurrentBag<AnalyzedDependency>();
 
@@ -475,7 +472,7 @@ namespace DotNetOutdated
 
             await Task.WhenAll(tasks).ConfigureAwait(false);
 
-            if (outdatedDependencies.Count > 0)
+            if (!outdatedDependencies.IsEmpty)
                 outdatedFrameworks.Add(new AnalyzedTargetFramework(targetFramework.Name, outdatedDependencies));
         }
 
@@ -512,20 +509,13 @@ namespace DotNetOutdated
 
         private static ConsoleColor GetUpgradeSeverityColor(DependencyUpgradeSeverity? upgradeSeverity)
         {
-            switch (upgradeSeverity)
+            return upgradeSeverity switch
             {
-                case DependencyUpgradeSeverity.Major:
-                    return Constants.ReportingColors.MajorVersionUpgrade;
-
-                case DependencyUpgradeSeverity.Minor:
-                    return Constants.ReportingColors.MinorVersionUpgrade;
-
-                case DependencyUpgradeSeverity.Patch:
-                    return Constants.ReportingColors.PatchVersionUpgrade;
-
-                default:
-                    return Console.ForegroundColor;
-            }
+                DependencyUpgradeSeverity.Major => Constants.ReportingColors.MajorVersionUpgrade,
+                DependencyUpgradeSeverity.Minor => Constants.ReportingColors.MinorVersionUpgrade,
+                DependencyUpgradeSeverity.Patch => Constants.ReportingColors.PatchVersionUpgrade,
+                _ => Console.ForegroundColor,
+            };
         }
 
         private void GenerateOutputFile(List<AnalyzedProject> projects)
