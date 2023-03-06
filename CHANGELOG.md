@@ -1,6 +1,10 @@
 # Changelog
 
-## [v2.0.1-yextly]
+## [v2.0.3-yextly]
+
+- Maintenance release
+
+## [v2.0.2-yextly]
 
 - Fix deadlocks due to async usage
 - Move McMaster.Extensions.CommandLineUtils out of the library (this could affect how and where the dotnet cli executable is detected)
