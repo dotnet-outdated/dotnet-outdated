@@ -35,7 +35,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v3.0.3
         with:
-          dotnet-version: | 
+          dotnet-version: |
             6.0.x
             7.0.x
 
@@ -47,7 +47,7 @@ jobs:
         id: package_release
         run: |
           VERSION=`cat semver.txt`
-          OUTPUT=./nupkgs
+          OUTPUT=${{ runner.temp }}/nupkgs
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "core_package_name=Yextly.DotNetOutdatedTool.Core.$VERSION.nupkg" >> $GITHUB_OUTPUT
           echo "core_package_filename=$OUTPUT/Yextly.DotNetOutdatedTool.Core.$VERSION.nupkg" >> $GITHUB_OUTPUT
