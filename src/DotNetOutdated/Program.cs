@@ -299,7 +299,7 @@ namespace DotNetOutdated
             return success;
         }
 
-        private void PrintColorLegend(IConsole console)
+        private static void PrintColorLegend(IConsole console)
         {
             console.WriteLine("Version color legend:");
 
@@ -346,7 +346,7 @@ namespace DotNetOutdated
             console.Write(rest, GetUpgradeSeverityColor(upgradeSeverity));
         }
 
-        private void ReportOutdatedDependencies(List<AnalyzedProject> projects, IConsole console)
+        private static void ReportOutdatedDependencies(List<AnalyzedProject> projects, IConsole console)
         {
             foreach (var project in projects)
             {
@@ -426,7 +426,7 @@ namespace DotNetOutdated
         private bool NoExcludeFilterMatches(Dependency dep) =>
             !FilterExclude.Any(f => NameContains(dep, f));
 
-        private bool NameContains(Dependency dep, string part) =>
+        private static bool NameContains(Dependency dep, string part) =>
             dep.Name.Contains(part, StringComparison.InvariantCultureIgnoreCase);
 
         private async Task AddOutdatedProjectsIfNeeded(Project project, ConcurrentBag<AnalyzedProject> outdatedProjects, IConsole console)
