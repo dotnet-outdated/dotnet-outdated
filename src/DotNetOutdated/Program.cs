@@ -512,20 +512,13 @@ namespace DotNetOutdated
 
         private static ConsoleColor GetUpgradeSeverityColor(DependencyUpgradeSeverity? upgradeSeverity)
         {
-            switch (upgradeSeverity)
+            return upgradeSeverity switch
             {
-                case DependencyUpgradeSeverity.Major:
-                    return Constants.ReportingColors.MajorVersionUpgrade;
-
-                case DependencyUpgradeSeverity.Minor:
-                    return Constants.ReportingColors.MinorVersionUpgrade;
-
-                case DependencyUpgradeSeverity.Patch:
-                    return Constants.ReportingColors.PatchVersionUpgrade;
-
-                default:
-                    return Console.ForegroundColor;
-            }
+                DependencyUpgradeSeverity.Major => Constants.ReportingColors.MajorVersionUpgrade,
+                DependencyUpgradeSeverity.Minor => Constants.ReportingColors.MinorVersionUpgrade,
+                DependencyUpgradeSeverity.Patch => Constants.ReportingColors.PatchVersionUpgrade,
+                _ => Console.ForegroundColor,
+            };
         }
 
         private void GenerateOutputFile(List<AnalyzedProject> projects)
