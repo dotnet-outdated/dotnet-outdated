@@ -250,7 +250,7 @@ namespace DotNetOutdated
                         string resolvedVersion = package.ResolvedVersion?.ToString() ?? "";
                         string latestVersion = package.LatestVersion?.ToString() ?? "";
 
-                        console.Write($"The package ");
+                        console.Write("The package ");
                         console.Write(package.Description, Constants.ReportingColors.PackageName);
                         console.Write($" can be upgraded from {resolvedVersion} to ");
                         console.Write(latestVersion, GetUpgradeSeverityColor(package.UpgradeSeverity));
