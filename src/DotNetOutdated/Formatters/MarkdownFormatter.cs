@@ -41,7 +41,7 @@ internal class MarkdownFormatter : IOutputFormatter
                     writer.Write('|');
                     writer.Write(dependency.ResolvedVersion);
                     writer.Write('|');
-                    if (GetFormatedLatestVersion(dependency) is { } latestVersion)
+                    if (GetFormattedLatestVersion(dependency) is { } latestVersion)
                     {
                         writer.Write('$');
                         if (!string.IsNullOrWhiteSpace(latestVersion.matching))
@@ -83,7 +83,7 @@ internal class MarkdownFormatter : IOutputFormatter
         writer.WriteLine("> 🟢: Patch version update. Backwards-compatible bug fixes.");
     }
 
-    private static (string? color, string? matching, string? rest)? GetFormatedLatestVersion(AnalyzedDependency dependency)
+    private static (string? color, string? matching, string? rest)? GetFormattedLatestVersion(AnalyzedDependency dependency)
     {
         if (dependency.LatestVersion is { } latestVersion)
         {

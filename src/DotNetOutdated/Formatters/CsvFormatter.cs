@@ -11,29 +11,28 @@ internal class CsvFormatter : IOutputFormatter
 {
     public void Format(IReadOnlyList<AnalyzedProject> projects, TextWriter writer)
     {
-        using (var csv = new CsvWriter(writer, CultureInfo.CurrentCulture))
+        using var csv = new CsvWriter(writer, CultureInfo.CurrentCulture);
+        foreach (var project in projects)
         {
-            foreach (var project in projects)
+            foreach (var targetFramework in project.TargetFrameworks)
             {
-                foreach (var targetFramework in project.TargetFrameworks)
+                foreach (var dependency in targetFramework.Dependencies)
                 {
-                    foreach (var dependency in targetFramework.Dependencies)
-                    {
-                        var upgradeSeverity = Enum.GetName(typeof(DependencyUpgradeSeverity), dependency.UpgradeSeverity);
+                    var upgradeSeverity = Enum.GetName(dependency.UpgradeSeverity);
 
-                        csv.WriteRecord(new
-                        {
-                            ProjectName = project.Name,
-                            TargetFrameworkName = targetFramework.Name.DotNetFrameworkName,
-                            DependencyName = dependency.Name,
-                            ResolvedVersion = dependency.ResolvedVersion?.ToString(),
-                            LatestVersion = dependency.LatestVersion?.ToString(),
-                            UpgradeSeverity = upgradeSeverity
-                        });
-                        csv.NextRecord();
-                    }
+                    csv.WriteRecord(new
+                    {
+                        ProjectName = project.Name,
+                        TargetFrameworkName = targetFramework.Name.DotNetFrameworkName,
+                        DependencyName = dependency.Name,
+                        ResolvedVersion = dependency.ResolvedVersion?.ToString(),
+                        LatestVersion = dependency.LatestVersion?.ToString(),
+                        UpgradeSeverity = upgradeSeverity
+                    });
+                    csv.NextRecord();
                 }
             }
         }
+
     }
 }
