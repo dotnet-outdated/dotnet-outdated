@@ -475,7 +475,7 @@ namespace DotNetOutdated
 
             await Task.WhenAll(tasks).ConfigureAwait(false);
 
-            if (outdatedDependencies.Count > 0)
+            if (!outdatedDependencies.IsEmpty)
                 outdatedFrameworks.Add(new AnalyzedTargetFramework(targetFramework.Name, outdatedDependencies));
         }
 
