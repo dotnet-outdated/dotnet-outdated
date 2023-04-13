@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>netstandard2.1</TargetFramework>
@@ -22,7 +22,7 @@
     <PackageReference Include="NuGet.ProjectModel" Version="6.4.0" />
     <PackageReference Include="NuGet.Protocol" Version="6.4.0" />
     <PackageReference Include="NuGet.Versioning" Version="6.4.0" />
-    <PackageReference Include="System.IO.Abstractions" Version="19.1.14" />
+    <PackageReference Include="System.IO.Abstractions" Version="19.2.11" />
   </ItemGroup>
 
   <ItemGroup>
