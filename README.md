@@ -57,24 +57,35 @@ dotnet tool update --global dotnet-outdated-tool
 Usage: dotnet outdated [options] <Path>
 
 Arguments:
-  Path                                       The path to a .sln, .csproj or .fsproj file, or to a directory containing a .NET Core solution/project. If none is specified, the current directory will be used.
+  Path                                       The path to a .sln, .slnf, .csproj or .fsproj file, or to a directory containing a .NET Core solution/project. If none is specified, the current directory will be used.
 
 Options:
-  --version                                  Show version information
-  -?|-h|--help                               Show help information
+  --version                                  Show version information.
+  -?|-h|--help                               Show help information.
   -i|--include-auto-references               Specifies whether to include auto-referenced packages.
   -pre|--pre-release <PRERELEASE>            Specifies whether to look for pre-release versions of packages. Possible values: Auto (default), Always or Never.
+                                             Allowed values are: Auto, Always, Never.
+                                             Default value is: Auto.
   -vl|--version-lock <VERSION_LOCK>          Specifies whether the package should be locked to the current Major or Minor version. Possible values: None (default), Major or Minor.
+                                             Allowed values are: None, Major, Minor.
+                                             Default value is: None.
   -t|--transitive                            Specifies whether it should detect transitive dependencies.
   -td|--transitive-depth <TRANSITIVE_DEPTH>  Defines how many levels deep transitive dependencies should be analyzed. Integer value (default = 1)
+                                             Default value is: 1.
   -u|--upgrade[:<TYPE>]                      Specifies whether outdated packages should be upgraded. Possible values for <TYPE> is Auto (default) or Prompt.
+                                             Allowed values are: Auto, Prompt.
   -f|--fail-on-updates                       Specifies whether it should return a non-zero exit code when updates are found.
   -inc|--include <FILTER_INCLUDE>            Specifies to only look at packages where the name contains the provided string. Culture and case insensitive. If provided multiple times, a single match is enough to include a package.
   -exc|--exclude <FILTER_EXCLUDE>            Specifies to only look at packages where the name does not contain the provided string. Culture and case insensitive. If provided multiple times, a single match is enough to exclude a package.
   -o|--output <OUTPUT_FILENAME>              Specifies the filename for a generated report. (Use the -of|--output-format option to specify the format. JSON by default.)
   -of|--output-format <OUTPUT_FILE_FORMAT>   Specifies the output format for the generated report. Possible values: json (default) or csv.
-  -ot|--older-than <NUMBER_OF_DAYS>          Only include package versions that are older than the specified number of days.
-  --ignore-failed-sources                    Treat package source failures as warnings.
+                                             Allowed values are: Json, Csv, Markdown.
+                                             Default value is: Json.
+  -ot|--older-than <OLDER_THAN_DAYS>         Only include package versions that are older than the specified number of days.
+                                             Default value is: 0.
+  -n|--no-restore                            Add the reference without performing restore preview and compatibility check.
+  -r|--recursive                             Recursively search for all projects within the provided directory.
+  -ifs|--ignore-failed-sources               Treat package source failures as warnings.
 ```
 
 ![Screenshot of dotnet-outdated](screenshot.png)
