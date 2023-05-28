@@ -79,5 +79,22 @@ namespace DotNetOutdated.Tests
             var secondDot = latest.IndexOf(".", latest.IndexOf(".", System.StringComparison.Ordinal) + 1, System.StringComparison.Ordinal) + 1;
             Assert.Equal($"{resolved} -> {latest[..secondDot]}[Green]{latest[secondDot..]}[White]", console.WrittenOut);
         }
+
+        [Theory]
+        [InlineData("1.2.3    ", "1.2.3    ")]
+        [InlineData("2.0.0    ", "2.0.0    ")]
+        public void NoColors(string resolved, string latest)
+        {
+            ArgumentNullException.ThrowIfNull(resolved);
+            ArgumentNullException.ThrowIfNull(latest);
+
+            var resolvedVersion = new NuGetVersion(resolved);
+            var latestVersion = new NuGetVersion(latest);
+
+            using var console = new MockConsole();
+
+            Program.WriteColoredUpgrade(DependencyUpgradeSeverity.None, resolvedVersion, latestVersion, 9, 9, console);
+            Assert.Equal($"{resolved} -> {latest}", console.WrittenOut);
+        }
     }
 }

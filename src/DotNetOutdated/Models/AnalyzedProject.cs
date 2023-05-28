@@ -103,6 +103,11 @@ namespace DotNetOutdated.Models
             }
         }
 
+        [JsonProperty(Order = 4)]
+        public bool IsOutdated => _dependency.ResolvedVersion == null ||
+                                  LatestVersion == null ||
+                                  _dependency.ResolvedVersion < LatestVersion;
+
         public AnalyzedDependency(Dependency dependency)
         {
             _dependency = dependency;
