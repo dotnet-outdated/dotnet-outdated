@@ -500,7 +500,7 @@ namespace DotNetOutdated
                     NuGetVersion absoluteLatestVersion = await _nugetService.ResolvePackageVersions(dependency.Name, referencedVersion, project.Sources, dependency.VersionRange,
                         VersionLock, Prerelease, targetFramework.Name, project.FilePath, dependency.IsDevelopmentDependency).ConfigureAwait(false);
 
-                    if (absoluteLatestVersion == null || referencedVersion > absoluteLatestVersion || All)
+                    if (absoluteLatestVersion == null || referencedVersion > absoluteLatestVersion)
                     {
                         outdatedDependencies.Add(new AnalyzedDependency(dependency, latestVersion));
                     }
