@@ -108,6 +108,10 @@ namespace DotNetOutdated
         [Option(CommandOptionType.NoValue, Description = "Treat package source failures as warnings.", ShortName = "ifs", LongName = "ignore-failed-sources")]
         public bool IgnoreFailedSources { get; set; } = false;
 
+        [Option(CommandOptionType.NoValue, Description = "Include all dependencies in the report even the ones not outdated",
+            ShortName = "a", LongName = "all")]
+        public bool All { get; set; } = false;
+
         public static int Main(string[] args)
         {
             using var services = new ServiceCollection()
@@ -319,8 +323,9 @@ namespace DotNetOutdated
                 console.Write("".PadRight(resolvedWidth));
                 return;
             }
+
             var latestString = latestVersion.ToString().PadRight(latestWidth);
-            if (resolvedVersion == null)
+            if (resolvedVersion == null || resolvedVersion.Equals(latestVersion))
             {
                 console.Write(latestString);
                 return;
@@ -487,7 +492,7 @@ namespace DotNetOutdated
                     VersionLock, Prerelease, targetFramework.Name, project.FilePath, dependency.IsDevelopmentDependency, OlderThanDays, IgnoreFailedSources).ConfigureAwait(false);
             }
 
-            if (referencedVersion == null || latestVersion == null || referencedVersion != latestVersion)
+            if (referencedVersion == null || latestVersion == null || referencedVersion != latestVersion || All)
             {
                 // special case when there is version installed which is not older than "OlderThan" days makes "latestVersion" to be null
                 if (OlderThanDays > 0 && latestVersion == null)
@@ -495,7 +500,7 @@ namespace DotNetOutdated
                     NuGetVersion absoluteLatestVersion = await _nugetService.ResolvePackageVersions(dependency.Name, referencedVersion, project.Sources, dependency.VersionRange,
                         VersionLock, Prerelease, targetFramework.Name, project.FilePath, dependency.IsDevelopmentDependency).ConfigureAwait(false);
 
-                    if (absoluteLatestVersion == null || referencedVersion > absoluteLatestVersion)
+                    if (absoluteLatestVersion == null || referencedVersion > absoluteLatestVersion || All)
                     {
                         outdatedDependencies.Add(new AnalyzedDependency(dependency, latestVersion));
                     }
