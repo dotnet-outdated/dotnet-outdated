@@ -94,7 +94,7 @@ namespace DotNetOutdated.Tests
             using var console = new MockConsole();
 
             Program.WriteColoredUpgrade(DependencyUpgradeSeverity.None, resolvedVersion, latestVersion, 9, 9, console);
-            Assert.Equal($"{resolved} -> {latest}", console.WrittenOut);
+            Assert.Equal($"{resolved} == {latest}", console.WrittenOut);
         }
     }
 }
