@@ -315,7 +315,7 @@ namespace DotNetOutdated
         public static void WriteColoredUpgrade(DependencyUpgradeSeverity? upgradeSeverity, NuGetVersion resolvedVersion, NuGetVersion latestVersion, int resolvedWidth, int latestWidth, IConsole console)
         {
             console.Write((resolvedVersion?.ToString() ?? "").PadRight(resolvedWidth));
-            console.Write(" -> ");
+            console.Write(resolvedVersion?.Equals(latestVersion) ?? false ? " == " : " -> ");
 
             // Exit early to avoid having to handle nulls later
             if (latestVersion == null)
