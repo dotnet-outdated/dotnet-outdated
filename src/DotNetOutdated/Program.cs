@@ -108,9 +108,9 @@ namespace DotNetOutdated
         [Option(CommandOptionType.NoValue, Description = "Treat package source failures as warnings.", ShortName = "ifs", LongName = "ignore-failed-sources")]
         public bool IgnoreFailedSources { get; set; } = false;
 
-        [Option(CommandOptionType.NoValue, Description = "Include all dependencies in the report even the ones not outdated",
-            ShortName = "a", LongName = "all")]
-        public bool All { get; set; } = false;
+        [Option(CommandOptionType.NoValue, Description = "Include all dependencies in the report even the ones not outdated.",
+            ShortName = "utd", LongName = "include-up-to-date")]
+        public bool IncludeUpToDate { get; set; } = false;
 
         public static int Main(string[] args)
         {
@@ -492,7 +492,7 @@ namespace DotNetOutdated
                     VersionLock, Prerelease, targetFramework.Name, project.FilePath, dependency.IsDevelopmentDependency, OlderThanDays, IgnoreFailedSources).ConfigureAwait(false);
             }
 
-            if (referencedVersion == null || latestVersion == null || referencedVersion != latestVersion || All)
+            if (referencedVersion == null || latestVersion == null || referencedVersion != latestVersion || IncludeUpToDate)
             {
                 // special case when there is version installed which is not older than "OlderThan" days makes "latestVersion" to be null
                 if (OlderThanDays > 0 && latestVersion == null)

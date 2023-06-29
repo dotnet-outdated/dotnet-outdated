@@ -86,6 +86,7 @@ Options:
   -n|--no-restore                            Add the reference without performing restore preview and compatibility check.
   -r|--recursive                             Recursively search for all projects within the provided directory.
   -ifs|--ignore-failed-sources               Treat package source failures as warnings.
+  -utd|--include-up-to-date                  Include all dependencies in the report even the ones not outdated.
 ```
 
 ![Screenshot of dotnet-outdated](screenshot.png)
