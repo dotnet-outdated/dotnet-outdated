@@ -20,9 +20,6 @@ namespace DotNetOutdated
             Directory.Delete(DirectoryPath, true);
         }
 
-        public string DirectoryPath
-        {
-            get => Path.Combine(_tempPath, _tempDirName);
-        }
+        public string DirectoryPath => Path.Combine(_tempPath, _tempDirName);
     }
 }
