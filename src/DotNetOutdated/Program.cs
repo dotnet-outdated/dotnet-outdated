@@ -108,6 +108,10 @@ namespace DotNetOutdated
         [Option(CommandOptionType.NoValue, Description = "Treat package source failures as warnings.", ShortName = "ifs", LongName = "ignore-failed-sources")]
         public bool IgnoreFailedSources { get; set; } = false;
 
+        [Option(CommandOptionType.NoValue, Description = "Include all dependencies in the report even the ones not outdated.",
+            ShortName = "utd", LongName = "include-up-to-date")]
+        public bool IncludeUpToDate { get; set; } = false;
+
         public static int Main(string[] args)
         {
             using var services = new ServiceCollection()
@@ -191,7 +195,7 @@ namespace DotNetOutdated
                 if (outdatedProjects.Any())
                 {
                     // Report on the outdated dependencies
-                    Program.ReportOutdatedDependencies(outdatedProjects, console);
+                    ReportOutdatedDependencies(outdatedProjects, console);
 
                     // Upgrade the packages
                     var success = UpgradePackages(outdatedProjects, console);
@@ -311,7 +315,7 @@ namespace DotNetOutdated
         public static void WriteColoredUpgrade(DependencyUpgradeSeverity? upgradeSeverity, NuGetVersion resolvedVersion, NuGetVersion latestVersion, int resolvedWidth, int latestWidth, IConsole console)
         {
             console.Write((resolvedVersion?.ToString() ?? "").PadRight(resolvedWidth));
-            console.Write(" -> ");
+            console.Write(resolvedVersion?.Equals(latestVersion) ?? false ? " == " : " -> ");
 
             // Exit early to avoid having to handle nulls later
             if (latestVersion == null)
@@ -319,8 +323,9 @@ namespace DotNetOutdated
                 console.Write("".PadRight(resolvedWidth));
                 return;
             }
+
             var latestString = latestVersion.ToString().PadRight(latestWidth);
-            if (resolvedVersion == null)
+            if (resolvedVersion == null || resolvedVersion.Equals(latestVersion))
             {
                 console.Write(latestString);
                 return;
@@ -387,7 +392,7 @@ namespace DotNetOutdated
                 console.WriteLine();
             }
 
-            Program.PrintColorLegend(console);
+            PrintColorLegend(console);
         }
 
         private async Task<List<AnalyzedProject>> AnalyzeDependencies(List<Project> projects, IConsole console)
@@ -418,10 +423,10 @@ namespace DotNetOutdated
         }
 
         private bool AnyIncludeFilterMatches(Dependency dep) =>
-            FilterInclude.Any(f => Program.NameContains(dep, f));
+            FilterInclude.Any(f => NameContains(dep, f));
 
         private bool NoExcludeFilterMatches(Dependency dep) =>
-            !FilterExclude.Any(f => Program.NameContains(dep, f));
+            !FilterExclude.Any(f => NameContains(dep, f));
 
         private static bool NameContains(Dependency dep, string part) =>
             dep.Name.Contains(part, StringComparison.InvariantCultureIgnoreCase);
@@ -487,7 +492,7 @@ namespace DotNetOutdated
                     VersionLock, Prerelease, targetFramework.Name, project.FilePath, dependency.IsDevelopmentDependency, OlderThanDays, IgnoreFailedSources).ConfigureAwait(false);
             }
 
-            if (referencedVersion == null || latestVersion == null || referencedVersion != latestVersion)
+            if (referencedVersion == null || latestVersion == null || referencedVersion != latestVersion || IncludeUpToDate)
             {
                 // special case when there is version installed which is not older than "OlderThan" days makes "latestVersion" to be null
                 if (OlderThanDays > 0 && latestVersion == null)
