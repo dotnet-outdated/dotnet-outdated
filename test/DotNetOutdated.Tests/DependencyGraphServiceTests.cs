@@ -30,7 +30,7 @@ namespace DotNetOutdated.Tests
                     ArgumentNullException.ThrowIfNull(directory);
 
                     // Grab the temp filename that was passed...
-                    string tempFileName = arguments[3].Replace("/p:RestoreGraphOutputPath=", string.Empty, System.StringComparison.OrdinalIgnoreCase).Trim('"');
+                    string tempFileName = arguments[6].Replace("/p:RestoreGraphOutputPath=", string.Empty, System.StringComparison.OrdinalIgnoreCase).Trim('"');
 
                     // ... and stuff it with our dummy dependency graph
                     mockFileSystem.AddFileFromEmbeddedResource(tempFileName, GetType().Assembly, "DotNetOutdated.Tests.TestData.test.dg");
@@ -79,7 +79,7 @@ namespace DotNetOutdated.Tests
                     ArgumentNullException.ThrowIfNull(directory);
 
                     // Grab the temp filename that was passed...
-                    string tempFileName = arguments[3].Replace("/p:RestoreGraphOutputPath=", string.Empty, System.StringComparison.OrdinalIgnoreCase).Trim('"');
+                    string tempFileName = arguments[6].Replace("/p:RestoreGraphOutputPath=", string.Empty, System.StringComparison.OrdinalIgnoreCase).Trim('"');
 
                     // ... and stuff it with our dummy dependency graph
                     mockFileSystem.AddFileFromEmbeddedResource(tempFileName, GetType().Assembly, "DotNetOutdated.Tests.TestData.empty.dg");
