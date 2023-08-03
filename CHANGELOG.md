@@ -1,5 +1,9 @@
 # Changelog
 
+## [v2.0.4-yextly]
+
+- Maintenance release
+
 ## [v2.0.3-yextly]
 
 - Maintenance release
