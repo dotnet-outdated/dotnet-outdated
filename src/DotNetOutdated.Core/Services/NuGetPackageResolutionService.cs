@@ -1,14 +1,14 @@
 ﻿using NuGet.Frameworks;
 using NuGet.Versioning;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Globalization;
+using System.Linq;
 using System.Threading.Tasks;
 
 namespace DotNetOutdated.Core.Services
 {
-    using System.Collections.Concurrent;
-    using System.Linq;
-
     public class NuGetPackageResolutionService : INuGetPackageResolutionService
     {
         private readonly INuGetPackageInfoService _nugetService;
@@ -18,6 +18,8 @@ namespace DotNetOutdated.Core.Services
         {
             _nugetService = nugetService;
         }
+
+        internal int? PrereleaseLabelPartsValue { get; set; }
 
         public async Task<NuGetVersion> ResolvePackageVersions(string packageName, NuGetVersion referencedVersion, IEnumerable<Uri> sources, VersionRange currentVersionRange,
             VersionLock versionLock, PrereleaseReporting prerelease, NuGetFramework targetFrameworkName, string projectFilePath, bool isDevelopmentDependency)
@@ -54,7 +56,10 @@ namespace DotNetOutdated.Core.Services
 
             string releasePrefix = string.Empty;
             if (referencedVersion.IsPrerelease)
-                releasePrefix = referencedVersion.ReleaseLabels.First(); // TODO Not sure exactly what to do for this bit
+            {
+                var prereleaseParts = PrereleaseLabelPartsValue ?? PrereleaseLabelParts();
+                releasePrefix = string.Join('.', referencedVersion.ReleaseLabels.Take(prereleaseParts));
+            }
 
             // Create a new version range for comparison
             var latestVersionRange = new VersionRange(currentVersionRange, new FloatRange(floatingBehaviour, referencedVersion, releasePrefix));
@@ -63,6 +68,20 @@ namespace DotNetOutdated.Core.Services
             NuGetVersion latestVersion = latestVersionRange.FindBestMatch(allVersions);
 
             return latestVersion;
+        }
+
+        private static int PrereleaseLabelParts()
+        {
+            // TODO What's the best way to make this configurable without introducing a breaking change to INuGetPackageResolutionService?
+            // TODO What's the best name for this concept?
+            string value = Environment.GetEnvironmentVariable("DOTNET_OUTDATED_PRERELEASE_LABEL_PARTS");
+
+            if (!int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var parts) || parts < 1)
+            {
+                parts = 1;
+            }
+
+            return parts;
         }
     }
 }
