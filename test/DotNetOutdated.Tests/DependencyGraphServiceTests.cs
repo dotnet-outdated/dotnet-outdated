@@ -30,7 +30,7 @@ namespace DotNetOutdated.Tests
                     ArgumentNullException.ThrowIfNull(directory);
 
                     // Grab the temp filename that was passed...
-                    string tempFileName = arguments[3].Replace("/p:RestoreGraphOutputPath=", string.Empty, System.StringComparison.OrdinalIgnoreCase).Trim('"');
+                    string tempFileName = arguments[3].Replace("/p:RestoreGraphOutputPath=", string.Empty, StringComparison.OrdinalIgnoreCase).Trim('"');
 
                     // ... and stuff it with our dummy dependency graph
                     mockFileSystem.AddFileFromEmbeddedResource(tempFileName, GetType().Assembly, "DotNetOutdated.Tests.TestData.test.dg");
@@ -92,7 +92,7 @@ namespace DotNetOutdated.Tests
 
             // Assert
             Assert.NotNull(dependencyGraph);
-            Assert.Equal(0, dependencyGraph.Projects.Count);
+            Assert.Empty(dependencyGraph.Projects);
 
             dotNetRunner.Verify(runner => runner.Run(_path, It.Is<string[]>(a => a[0] == "msbuild" && a[1] == '\"' + _solutionPath + '\"' && a[2] == "/t:Restore,GenerateRestoreGraphFile")));
         }
