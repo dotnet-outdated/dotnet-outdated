@@ -19,7 +19,7 @@
   <ItemGroup>
     <PackageReference Include="NuGet.Configuration" Version="6.6.1" />
     <PackageReference Include="NuGet.Credentials" Version="6.6.1" />
-    <PackageReference Include="NuGet.ProjectModel" Version="6.6.1" />
+    <PackageReference Include="NuGet.ProjectModel" Version="6.7.0" />
     <PackageReference Include="NuGet.Protocol" Version="6.6.1" />
     <PackageReference Include="NuGet.Versioning" Version="6.6.1" />
     <PackageReference Include="System.IO.Abstractions" Version="19.2.61" />
