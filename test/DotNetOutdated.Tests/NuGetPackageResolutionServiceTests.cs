@@ -1,11 +1,11 @@
 ﻿using DotNetOutdated.Core;
 using DotNetOutdated.Core.Services;
-using Moq;
 using NuGet.Frameworks;
 using NuGet.Versioning;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using NSubstitute;
 using Xunit;
 
 namespace DotNetOutdated.Tests
@@ -35,11 +35,11 @@ namespace DotNetOutdated.Tests
                 new NuGetVersion("4.0.0-pre.1")
             };
 
-            var nuGetPackageInfoService = new Mock<INuGetPackageInfoService>();
-            nuGetPackageInfoService.Setup(service => service.GetAllVersions(_packageName, It.IsAny<List<Uri>>(), It.IsAny<bool>(), It.IsAny<NuGetFramework>(), It.IsAny<string>(), It.IsAny<bool>(), 0, It.IsAny<bool>()))
-                .ReturnsAsync(availableVersions);
+            var nuGetPackageInfoService = Substitute.For<INuGetPackageInfoService>();
+            nuGetPackageInfoService.GetAllVersions(_packageName, Arg.Any<List<Uri>>(), Arg.Any<bool>(), Arg.Any<NuGetFramework>(), Arg.Any<string>(), Arg.Any<bool>(), 0, Arg.Any<bool>())
+                .Returns(availableVersions);
 
-            _nuGetPackageResolutionService = new NuGetPackageResolutionService(nuGetPackageInfoService.Object);
+            _nuGetPackageResolutionService = new NuGetPackageResolutionService(nuGetPackageInfoService);
         }
 
         [Theory]
