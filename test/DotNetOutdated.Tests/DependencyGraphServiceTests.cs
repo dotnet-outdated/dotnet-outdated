@@ -98,7 +98,7 @@ namespace DotNetOutdated.Tests
 
             // Assert
             Assert.NotNull(dependencyGraph);
-            Assert.Equal(0, dependencyGraph.Projects.Count);
+            Assert.Empty(dependencyGraph.Projects);
 
             dotNetRunner.Received().Run(_path, Arg.Is<string[]>(a => a[0] == "msbuild" && a[1] == '\"' + _solutionPath + '\"' && a[2] == "/t:Restore,GenerateRestoreGraphFile"));
         }
