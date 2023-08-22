@@ -1,6 +1,7 @@
 ﻿using System.Diagnostics;
 using System.IO;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace DotNetOutdated.Core.Services
@@ -32,10 +33,28 @@ namespace DotNetOutdated.Core.Services
 
                 var output = new StringBuilder();
                 var errors = new StringBuilder();
-                var outputTask = ConsumeStreamReaderAsync(p.StandardOutput, output);
-                var errorTask = ConsumeStreamReaderAsync(p.StandardError, errors);
+                var timeSinceLastOutput = Stopwatch.StartNew();
+                var outputTask = ConsumeStreamReaderAsync(p.StandardOutput, timeSinceLastOutput, output);
+                var errorTask = ConsumeStreamReaderAsync(p.StandardError, timeSinceLastOutput, errors);
+                bool processExited = false;
+                const int Timeout = 20000;
 
-                var processExited = p.WaitForExit(20000);
+                while (true) {
+                    if (p.HasExited) {
+                        processExited = true;
+                        break;
+                    }
+
+                    // If output has not been received for a while, then
+                    // assume that the process has hung and stop waiting.
+                    lock(timeSinceLastOutput) {
+                        if (timeSinceLastOutput.ElapsedMilliseconds > Timeout) {
+                            break;
+                        }
+                    }
+
+                    Thread.Sleep(100);
+                }
 
                 if (!processExited)
                 {
@@ -54,13 +73,17 @@ namespace DotNetOutdated.Core.Services
             }
         }
 
-        private static async Task ConsumeStreamReaderAsync(StreamReader reader, StringBuilder lines)
+        private static async Task ConsumeStreamReaderAsync(StreamReader reader, Stopwatch timeSinceLastOutput, StringBuilder lines)
         {
             await Task.Yield();
 
             string line;
             while ((line = await reader.ReadLineAsync().ConfigureAwait(false)) != null)
             {
+                lock (timeSinceLastOutput) {
+                    timeSinceLastOutput.Restart();
+                }
+
                 lines.AppendLine(line);
             }
         }
