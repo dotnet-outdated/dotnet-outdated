@@ -126,7 +126,7 @@ namespace DotNetOutdated
          ShortName = "rt", LongName = "runtime")]
       public string Runtime { get; set; } = string.Empty;
       
-        [Option(CommandOptionType.SingleValue, Description = "Specifies how many seconds can each operation run for. " +
+        [Option(CommandOptionType.SingleValue, Description = "Specifies how many seconds each operation can run for. " +
             "By default 30 seconds.", ShortName = "tmo", LongName = "timeout")]
         public int Timeout { get; set; } = 30;
 
