@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO.Abstractions.TestingHelpers;
 using NSubstitute;
 using Xunit;
+using System;
 
 namespace DotNetOutdated.Tests
 {
@@ -73,7 +74,7 @@ namespace DotNetOutdated.Tests
         private void SetupCommonMocks(out IDotNetRestoreService mockRestoreService, out MockFileSystem mockFileSystem, out string projectPath, out string projectFileContent)
         {
             mockRestoreService = Substitute.For<IDotNetRestoreService>();
-            mockRestoreService.Restore(Arg.Any<string>(), Arg.Any<int>()).Returns(new RunStatus(string.Empty, string.Empty, 0));
+            mockRestoreService.Restore(Arg.Any<string>(), Arg.Any<TimeSpan>()).Returns(new RunStatus(string.Empty, string.Empty, 0));
 
             mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>());
 

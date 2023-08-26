@@ -1,7 +1,9 @@
-﻿namespace DotNetOutdated.Tests
+﻿using System;
+
+namespace DotNetOutdated.Tests
 {
     internal static class TestConstants
     {
-        internal static int Timeout = 30;
+        internal static TimeSpan Timeout = TimeSpan.FromSeconds(30);
     }
 }

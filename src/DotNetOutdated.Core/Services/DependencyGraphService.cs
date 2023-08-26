@@ -23,7 +23,7 @@ namespace DotNetOutdated.Core.Services
             _fileSystem = fileSystem;
         }
 
-        public async Task<DependencyGraphSpec> GenerateDependencyGraphAsync(string projectPath, string runtime, int timeout)
+        public async Task<DependencyGraphSpec> GenerateDependencyGraphAsync(string projectPath, string runtime, TimeSpan timeout)
         {
             var dgOutput = _fileSystem.Path.Combine(_fileSystem.Path.GetTempPath(), _fileSystem.Path.GetTempFileName());
             string[] arguments =

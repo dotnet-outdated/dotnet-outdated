@@ -195,7 +195,8 @@ namespace DotNetOutdated
             // Analyze the projects
             console.WriteLine("Analyzing project(s)...");
 
-            var projectLists = await Task.WhenAll(projectPaths.Select(path => _projectAnalysisService.AnalyzeProjectAsync(path, false, Transitive, TransitiveDepth, Runtime, Timeout)));
+			TimeSpan timeout = TimeSpan.FromSeconds(Timeout);
+            var projectLists = await Task.WhenAll(projectPaths.Select(path => _projectAnalysisService.AnalyzeProjectAsync(path, false, Transitive, TransitiveDepth, Runtime, timeout)));
             var projects = projectLists.SelectMany(p => p).ToList();
 
             // Analyze the dependencies
@@ -207,7 +208,7 @@ namespace DotNetOutdated
                ReportOutdatedDependencies(outdatedProjects, console);
 
                // Upgrade the packages
-               var success = UpgradePackages(outdatedProjects, console);
+               var success = UpgradePackages(outdatedProjects, console, timeout);
 
                if (!Upgrade.HasValue)
                {
@@ -241,7 +242,7 @@ namespace DotNetOutdated
          }
       }
 
-      private bool UpgradePackages(List<AnalyzedProject> projects, IConsole console)
+      private bool UpgradePackages(List<AnalyzedProject> projects, IConsole console, TimeSpan timeout)
       {
          bool success = true;
 
@@ -292,8 +293,8 @@ namespace DotNetOutdated
 
                   if (status is null || status.IsSuccess)
                      status = package.IsVersionCentrallyManaged
-                        ? _centralPackageVersionManagementService.AddPackage(project.ProjectFilePath, package.Name, package.LatestVersion, NoRestore, Timeout)
-                        : _dotNetPackageService.AddPackage(project.ProjectFilePath, package.Name, project.Framework.ToString(), package.LatestVersion, NoRestore, IgnoreFailedSources, Timeout);
+                        ? _centralPackageVersionManagementService.AddPackage(project.ProjectFilePath, package.Name, package.LatestVersion, NoRestore, timeout)
+                        : _dotNetPackageService.AddPackage(project.ProjectFilePath, package.Name, project.Framework.ToString(), package.LatestVersion, NoRestore, IgnoreFailedSources, timeout);
 
                   if (status.IsSuccess)
                   {
