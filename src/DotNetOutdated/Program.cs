@@ -185,8 +185,9 @@ namespace DotNetOutdated
 
                 // Analyze the projects
                 console.Write("Analyzing project(s)...");
-                
-                var projects = projectPaths.SelectMany(path => _projectAnalysisService.AnalyzeProject(path, false, Transitive, TransitiveDepth, Timeout)).ToList();
+
+                TimeSpan timeout = TimeSpan.FromSeconds(Timeout);
+                var projects = projectPaths.SelectMany(path => _projectAnalysisService.AnalyzeProject(path, false, Transitive, TransitiveDepth, timeout)).ToList();
 
                 if (!console.IsOutputRedirected)
                     ClearCurrentConsoleLine();
@@ -202,7 +203,7 @@ namespace DotNetOutdated
                     ReportOutdatedDependencies(outdatedProjects, console);
 
                     // Upgrade the packages
-                    var success = UpgradePackages(outdatedProjects, console);
+                    var success = UpgradePackages(outdatedProjects, console, timeout);
 
                     if (!Upgrade.HasValue)
                     {
@@ -236,7 +237,7 @@ namespace DotNetOutdated
             }
         }
 
-        private bool UpgradePackages(List<AnalyzedProject> projects, IConsole console)
+        private bool UpgradePackages(List<AnalyzedProject> projects, IConsole console, TimeSpan timeout)
         {
             bool success = true;
 
@@ -278,8 +279,8 @@ namespace DotNetOutdated
                         foreach (var project in package.Projects)
                         {
                             RunStatus status = package.IsVersionCentrallyManaged
-                                ? _centralPackageVersionManagementService.AddPackage(project.ProjectFilePath, package.Name, package.LatestVersion, NoRestore, Timeout)
-                                : _dotNetAddPackageService.AddPackage(project.ProjectFilePath, package.Name, project.Framework.ToString(), package.LatestVersion, NoRestore, Timeout, IgnoreFailedSources);
+                                ? _centralPackageVersionManagementService.AddPackage(project.ProjectFilePath, package.Name, package.LatestVersion, NoRestore, timeout)
+                                : _dotNetAddPackageService.AddPackage(project.ProjectFilePath, package.Name, project.Framework.ToString(), package.LatestVersion, NoRestore, timeout, IgnoreFailedSources);
 
                             if (status.IsSuccess)
                             {

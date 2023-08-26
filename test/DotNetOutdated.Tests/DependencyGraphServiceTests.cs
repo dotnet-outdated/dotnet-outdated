@@ -48,7 +48,7 @@ namespace DotNetOutdated.Tests
             Assert.NotNull(dependencyGraph);
             Assert.Equal(3, dependencyGraph.Projects.Count);
 
-            dotNetRunner.Received().Run(XFS.Path(@"c:\"), Arg.Is<string[]>(a => a[0] == "msbuild" && a[1] == '\"' + _path + '\"'), Arg.Any<int>());
+            dotNetRunner.Received().Run(XFS.Path(@"c:\"), Arg.Is<string[]>(a => a[0] == "msbuild" && a[1] == '\"' + _path + '\"'), Arg.Any<TimeSpan>());
         }
 
         [Fact]
@@ -58,7 +58,7 @@ namespace DotNetOutdated.Tests
 
             // Arrange
             var dotNetRunner = Substitute.For<IDotNetRunner>();
-            dotNetRunner.Run(Arg.Any<string>(), Arg.Any<string[]>(), Arg.Any<int>())
+            dotNetRunner.Run(Arg.Any<string>(), Arg.Any<string[]>(), Arg.Any<TimeSpan>())
                 .Returns(new RunStatus(string.Empty, string.Empty, 1));
 
             var graphService = new DependencyGraphService(dotNetRunner, mockFileSystem);
@@ -75,7 +75,7 @@ namespace DotNetOutdated.Tests
             // Arrange
             var dotNetRunner = Substitute.For<IDotNetRunner>();
 
-            dotNetRunner.Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[0] == "msbuild" && a[2] == "/t:Restore,GenerateRestoreGraphFile"), Arg.Any<int>())
+            dotNetRunner.Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[0] == "msbuild" && a[2] == "/t:Restore,GenerateRestoreGraphFile"), Arg.Any<TimeSpan>())
                 .Returns(new RunStatus(string.Empty, string.Empty, 0))
                 .AndDoes(x =>
                 {
@@ -100,7 +100,7 @@ namespace DotNetOutdated.Tests
             Assert.NotNull(dependencyGraph);
             Assert.Empty(dependencyGraph.Projects);
 
-            dotNetRunner.Received().Run(_path, Arg.Is<string[]>(a => a[0] == "msbuild" && a[1] == '\"' + _solutionPath + '\"' && a[2] == "/t:Restore,GenerateRestoreGraphFile"), Arg.Any<int>());
+            dotNetRunner.Received().Run(_path, Arg.Is<string[]>(a => a[0] == "msbuild" && a[1] == '\"' + _solutionPath + '\"' && a[2] == "/t:Restore,GenerateRestoreGraphFile"), Arg.Any<TimeSpan>());
         }
     }
 }

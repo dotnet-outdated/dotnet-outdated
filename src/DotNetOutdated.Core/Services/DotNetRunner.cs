@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+﻿using System;
+using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Threading;
@@ -14,7 +15,7 @@ namespace DotNetOutdated.Core.Services
     /// </remarks>
     public class DotNetRunner : IDotNetRunner
     {
-        public RunStatus Run(string workingDirectory, string[] arguments, int timeout)
+        public RunStatus Run(string workingDirectory, string[] arguments, TimeSpan timeout)
         {
             var psi = new ProcessStartInfo("dotnet", string.Join(" ", arguments))
             {
@@ -50,7 +51,7 @@ namespace DotNetOutdated.Core.Services
                     // assume that the process has hung and stop waiting.
                     lock (timeSinceLastOutput)
                     {
-                        if (timeSinceLastOutput.ElapsedMilliseconds > timeout)
+                        if (timeSinceLastOutput.ElapsedMilliseconds > timeout.TotalMilliseconds)
                         {
                             break;
                         }

@@ -22,7 +22,7 @@ namespace DotNetOutdated.Core.Services
             _fileSystem = fileSystem;
         }
 
-        public DependencyGraphSpec GenerateDependencyGraph(string projectPath, int timeout)
+        public DependencyGraphSpec GenerateDependencyGraph(string projectPath, TimeSpan timeout)
         {
             var dgOutput = _fileSystem.Path.Combine(_fileSystem.Path.GetTempPath(), _fileSystem.Path.GetTempFileName());
 

@@ -18,7 +18,7 @@ namespace DotNetOutdated.Core.Services
             _dotNetRestoreService = dotNetRestoreService;
         }
 
-        public RunStatus AddPackage(string projectFilePath, string packageName, NuGetVersion version, bool noRestore, int timeout)
+        public RunStatus AddPackage(string projectFilePath, string packageName, NuGetVersion version, bool noRestore, TimeSpan timeout)
         {
             RunStatus status = new RunStatus(string.Empty, string.Empty, 0);
 

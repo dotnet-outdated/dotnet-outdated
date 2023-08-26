@@ -1,4 +1,5 @@
-﻿using System.IO.Abstractions;
+﻿using System;
+using System.IO.Abstractions;
 
 namespace DotNetOutdated.Core.Services
 {
@@ -13,7 +14,7 @@ namespace DotNetOutdated.Core.Services
             _fileSystem = fileSystem;
         }
 
-        public RunStatus Restore(string projectPath, int timeout)
+        public RunStatus Restore(string projectPath, TimeSpan timeout)
         {
             string[] arguments = new[] { "restore", $"\"{projectPath}\"" };
 

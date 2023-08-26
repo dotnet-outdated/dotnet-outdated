@@ -1,7 +1,9 @@
-﻿namespace DotNetOutdated.Core.Services
+﻿using System;
+
+namespace DotNetOutdated.Core.Services
 {
     public interface IDotNetRestoreService
     {
-        RunStatus Restore(string projectPath, int timeout);
+        RunStatus Restore(string projectPath, TimeSpan timeout);
     }
 }
