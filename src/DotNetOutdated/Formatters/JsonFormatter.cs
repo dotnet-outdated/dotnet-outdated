@@ -1,15 +1,23 @@
 ﻿using DotNetOutdated.Models;
+using McMaster.Extensions.CommandLineUtils;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.IO.Abstractions;
 
 namespace DotNetOutdated.Formatters;
 
-internal class JsonFormatter : IOutputFormatter
+internal class JsonFormatter : FileFormatter
 {
-    public void Format(IReadOnlyList<AnalyzedProject> projects, TextWriter writer)
+    public JsonFormatter(IFileSystem fileSystem, IConsole console) : base(fileSystem, console)
+    {
+    }
+
+    protected override string Extension => ".json";
+
+    protected override void Format(IReadOnlyList<AnalyzedProject> projects, IDictionary<string, string> options, TextWriter writer)
     {
         var report = new Report
         {
