@@ -30,7 +30,7 @@ internal abstract class FileFormatter : IOutputFormatter
     {
         Console.WriteLine();
         Console.Write($"Generating {GetType().Name.Replace("Formatter", "", System.StringComparison.OrdinalIgnoreCase).ToLowerInvariant()} report ...");
-        if (options.TryGetValue("outputFile", out var outputFile))
+        if (options.TryGetValue("outputFile", out var outputFile) && !string.IsNullOrWhiteSpace(outputFile))
         {
             outputFile = _fileSystem.Path.ChangeExtension(outputFile, Extension);
             using var stream = _fileSystem.File.Create(outputFile);
