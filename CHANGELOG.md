@@ -1,5 +1,9 @@
 # Changelog
 
+## [v2.0.5-yextly]
+
+- Upgrade from the upstream project (which includes .NET 8 assemblies)
+
 ## [v2.0.4-yextly]
 
 - Maintenance release
