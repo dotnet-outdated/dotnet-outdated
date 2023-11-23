@@ -42,7 +42,7 @@ When using an IDE such as Visual Studio, it is easy to find out whether newer ve
 
 ## Installation
 
-Download and install the [.NET Core 3.1, 5 , 6 or 7 SDK](https://www.microsoft.com/net/download). Once installed, run the following command:
+Download and install the one of the currently supported [.NET SDKs](https://www.microsoft.com/net/download). Once installed, run the following command:
 
 ```bash
 dotnet tool install --global dotnet-outdated-tool

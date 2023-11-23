@@ -1,7 +1,7 @@
 ﻿using DotNetOutdated.Core.Services;
-using Moq;
 using System.Collections.Generic;
 using System.IO.Abstractions.TestingHelpers;
+using NSubstitute;
 using Xunit;
 
 namespace DotNetOutdated.Tests
@@ -11,9 +11,9 @@ namespace DotNetOutdated.Tests
         [Fact]
         public void UpgradingCPVMEnabledPackageUpdatesNearestCPVMFile()
         {
-            SetupCPVMMocks(out Mock<IDotNetRestoreService> mockRestoreService, out MockFileSystem mockFileSystem, out string path, out string nearestCPVMFilePath, out string rootCPVMFilePath, out string rootCPVMFileContent, out string _, out string _);
+            SetupCPVMMocks(out IDotNetRestoreService mockRestoreService, out MockFileSystem mockFileSystem, out string path, out string nearestCPVMFilePath, out string rootCPVMFilePath, out string rootCPVMFileContent, out string _, out string _);
 
-            var subject = new CentralPackageVersionManagementService(mockFileSystem, mockRestoreService.Object);
+            var subject = new CentralPackageVersionManagementService(mockFileSystem, mockRestoreService);
             RunStatus status = subject.AddPackage(path, "FakePackage", new NuGet.Versioning.NuGetVersion(2, 0, 0), false);
 
             Assert.NotNull(status);
@@ -26,9 +26,9 @@ namespace DotNetOutdated.Tests
         [Fact]
         public void UpgradingCPVMEnabledPackageDoesNotModifyProjectFile()
         {
-            SetupCPVMMocks(out Mock<IDotNetRestoreService> mockRestoreService, out MockFileSystem mockFileSystem, out string path, out string _, out string _, out string _, out string _, out string projectFileContent);
+            SetupCPVMMocks(out IDotNetRestoreService mockRestoreService, out MockFileSystem mockFileSystem, out string path, out string _, out string _, out string _, out string _, out string projectFileContent);
 
-            var subject = new CentralPackageVersionManagementService(mockFileSystem, mockRestoreService.Object);
+            var subject = new CentralPackageVersionManagementService(mockFileSystem, mockRestoreService);
             RunStatus status = subject.AddPackage(path, "FakePackage", new NuGet.Versioning.NuGetVersion(2, 0, 0), false);
 
             Assert.Equal(0, status.ExitCode);
@@ -40,22 +40,22 @@ namespace DotNetOutdated.Tests
         [InlineData(false)]
         public void UpgradingCPVMEnabledPackageRespectsNoRestoreFlag(bool noRestore)
         {
-            SetupCommonMocks(out Mock<IDotNetRestoreService> mockRestoreService, out MockFileSystem mockFileSystem, out string projectPath, out string _);
+            SetupCommonMocks(out IDotNetRestoreService mockRestoreService, out MockFileSystem mockFileSystem, out string projectPath, out string _);
 
-            var subject = new CentralPackageVersionManagementService(mockFileSystem, mockRestoreService.Object);
+            var subject = new CentralPackageVersionManagementService(mockFileSystem, mockRestoreService);
             RunStatus status = subject.AddPackage(projectPath, "FakePackage", new NuGet.Versioning.NuGetVersion(1, 0, 0), noRestore);
 
             if (noRestore)
             {
-                Assert.Empty(mockRestoreService.Invocations);
+                mockRestoreService.DidNotReceiveWithAnyArgs().Restore(default);
             }
             else
             {
-                mockRestoreService.Verify(x => x.Restore(projectPath));
+                mockRestoreService.Received().Restore(projectPath);
             }
         }
 
-        private void SetupCPVMMocks(out Mock<IDotNetRestoreService> mockRestoreService, out MockFileSystem mockFileSystem, out string projectPath, out string nearestCPVMFilePath, out string rootCPVMFilePath, out string rootCPVMFileContent, out string nearestCPVMFileContent, out string projectFileContent)
+        private void SetupCPVMMocks(out IDotNetRestoreService mockRestoreService, out MockFileSystem mockFileSystem, out string projectPath, out string nearestCPVMFilePath, out string rootCPVMFilePath, out string rootCPVMFileContent, out string nearestCPVMFileContent, out string projectFileContent)
         {
             SetupCommonMocks(out mockRestoreService, out mockFileSystem, out projectPath, out projectFileContent);
 
@@ -68,10 +68,10 @@ namespace DotNetOutdated.Tests
             rootCPVMFileContent = mockFileSystem.GetFile(rootCPVMFilePath).TextContents;
         }
 
-        private void SetupCommonMocks(out Mock<IDotNetRestoreService> mockRestoreService, out MockFileSystem mockFileSystem, out string projectPath, out string projectFileContent)
+        private void SetupCommonMocks(out IDotNetRestoreService mockRestoreService, out MockFileSystem mockFileSystem, out string projectPath, out string projectFileContent)
         {
-            mockRestoreService = new Mock<IDotNetRestoreService>();
-            mockRestoreService.Setup(x => x.Restore(It.IsAny<string>())).Returns(new RunStatus(string.Empty, string.Empty, 0));
+            mockRestoreService = Substitute.For<IDotNetRestoreService>();
+            mockRestoreService.Restore(Arg.Any<string>()).Returns(new RunStatus(string.Empty, string.Empty, 0));
 
             mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>());
 
