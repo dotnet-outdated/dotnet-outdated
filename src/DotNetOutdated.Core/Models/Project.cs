@@ -32,6 +32,8 @@ namespace DotNetOutdated.Core.Models
 
         public NuGetFramework Name { get; set; }
 
+        public ICollection<DependencyNode> Nodes { get; } = new HashSet<DependencyNode>();
+
         public TargetFramework(NuGetFramework name)
         {
             Name = name;
