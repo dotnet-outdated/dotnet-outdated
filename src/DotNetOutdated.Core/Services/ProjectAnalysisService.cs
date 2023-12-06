@@ -73,10 +73,12 @@ namespace DotNetOutdated.Core.Services
                             var dependency = new Dependency(projectDependency.Name, projectDependency.LibraryRange.VersionRange, projectLibrary?.Version,
                                 projectDependency.AutoReferenced, false, isDevelopmentDependency, projectDependency.VersionCentrallyManaged);
                             targetFramework.Dependencies.Add(dependency);
+                            var node = new DependencyNode(dependency.Name, dependency);
+                            targetFramework.Nodes.Add(node);
 
                             // Process transitive dependencies for the library
                             if (includeTransitiveDependencies)
-                                AddDependencies(targetFramework, projectLibrary, target, 1, transitiveDepth);
+                                AddDependencies(targetFramework, projectLibrary, target, 1, transitiveDepth, node);
                         }
                     }
                 }
@@ -85,7 +87,7 @@ namespace DotNetOutdated.Core.Services
             return projects;
         }
 
-        private void AddDependencies(TargetFramework targetFramework, LockFileTargetLibrary parentLibrary, LockFileTarget target, int level, int transitiveDepth)
+        private void AddDependencies(TargetFramework targetFramework, LockFileTargetLibrary parentLibrary, LockFileTarget target, int level, int transitiveDepth, DependencyNode node)
         {
             if (parentLibrary?.Dependencies != null)
             {
@@ -99,9 +101,22 @@ namespace DotNetOutdated.Core.Services
                         var childDependency = new Dependency(packageDependency.Id, packageDependency.VersionRange, childLibrary?.Version, false, true, false, false);
                         targetFramework.Dependencies.Add(childDependency);
 
+                        var newNode = new DependencyNode(childDependency.Name, childDependency);
+                        targetFramework.Nodes.Add(node);
+
                         // Process the dependency for this project dependency
                         if (level < transitiveDepth)
-                            AddDependencies(targetFramework, childLibrary, target, level + 1, transitiveDepth);
+                            AddDependencies(targetFramework, childLibrary, target, level + 1, transitiveDepth, newNode);
+                    }
+                    else
+                    {
+                        var childDependency = new Dependency(packageDependency.Id, packageDependency.VersionRange, childLibrary?.Version, false, true, false, false);
+
+                        var newNode = new DependencyNode(childDependency.Name, childDependency);
+                        targetFramework.Nodes.Add(node);
+
+                        if (level < transitiveDepth)
+                            AddDependencies(targetFramework, childLibrary, target, level + 1, transitiveDepth, newNode);
                     }
                 }
             }
