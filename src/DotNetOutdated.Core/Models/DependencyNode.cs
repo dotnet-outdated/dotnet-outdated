@@ -1,8 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 
 namespace DotNetOutdated.Core.Models
 {
+    [DebuggerDisplay("{" + nameof(GetDebuggerDisplay) + "(),nq}")]
     public sealed class DependencyNode : IEquatable<DependencyNode>
     {
         private readonly HashSet<DependencyNode> _nodes;
@@ -49,6 +51,11 @@ namespace DotNetOutdated.Core.Models
         public override int GetHashCode()
         {
             return Id.GetHashCode(StringComparison.OrdinalIgnoreCase);
+        }
+
+        private string GetDebuggerDisplay()
+        {
+            return $"{Id}/{DependencyItem.ResolvedVersion.ToNormalizedString()}";
         }
     }
 }
