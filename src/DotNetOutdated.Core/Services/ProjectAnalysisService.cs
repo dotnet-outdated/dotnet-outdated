@@ -102,7 +102,7 @@ namespace DotNetOutdated.Core.Services
                         targetFramework.Dependencies.Add(childDependency);
 
                         var newNode = new DependencyNode(childDependency.Name, childDependency);
-                        targetFramework.Nodes.Add(node);
+                        node.AddNode(node);
 
                         // Process the dependency for this project dependency
                         if (level < transitiveDepth)
@@ -113,7 +113,7 @@ namespace DotNetOutdated.Core.Services
                         var childDependency = new Dependency(packageDependency.Id, packageDependency.VersionRange, childLibrary?.Version, false, true, false, false);
 
                         var newNode = new DependencyNode(childDependency.Name, childDependency);
-                        targetFramework.Nodes.Add(node);
+                        node.AddNode(node);
 
                         if (level < transitiveDepth)
                             AddDependencies(targetFramework, childLibrary, target, level + 1, transitiveDepth, newNode);
