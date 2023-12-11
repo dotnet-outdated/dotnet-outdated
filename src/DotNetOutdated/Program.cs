@@ -112,6 +112,10 @@ namespace DotNetOutdated
             ShortName = "utd", LongName = "include-up-to-date")]
         public bool IncludeUpToDate { get; set; } = false;
 
+        [Option(CommandOptionType.SingleValue, Description = "MSBuild configuration. Generally Debug or Release, but configurable at the solution and project levels.",
+            ShortName = "bc", LongName = "ms-build-configuration")]
+        public string MsBuildConfiguration { get; set; } = "Debug";
+
         public static int Main(string[] args)
         {
             using var services = new ServiceCollection()
@@ -182,7 +186,7 @@ namespace DotNetOutdated
                 // Analyze the projects
                 console.Write("Analyzing project(s)...");
 
-                var projects = projectPaths.SelectMany(path => _projectAnalysisService.AnalyzeProject(path, false, Transitive, TransitiveDepth)).ToList();
+                var projects = projectPaths.SelectMany(path => _projectAnalysisService.AnalyzeProject(path, false, Transitive, TransitiveDepth, MsBuildConfiguration)).ToList();
 
                 if (!console.IsOutputRedirected)
                     ClearCurrentConsoleLine();

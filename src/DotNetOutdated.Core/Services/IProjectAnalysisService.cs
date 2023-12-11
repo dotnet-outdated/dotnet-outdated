@@ -5,6 +5,6 @@ namespace DotNetOutdated.Core.Services
 {
     public interface IProjectAnalysisService
     {
-        List<Project> AnalyzeProject(string projectPath, bool runRestore, bool includeTransitiveDependencies, int transitiveDepth);
+        List<Project> AnalyzeProject(string projectPath, bool runRestore, bool includeTransitiveDependencies, int transitiveDepth, string msBuildConfiguration);
     }
 }

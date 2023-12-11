@@ -23,9 +23,9 @@ namespace DotNetOutdated.Core.Services
             _fileSystem = fileSystem;
         }
 
-        public List<Project> AnalyzeProject(string projectPath, bool runRestore, bool includeTransitiveDependencies, int transitiveDepth)
+        public List<Project> AnalyzeProject(string projectPath, bool runRestore, bool includeTransitiveDependencies, int transitiveDepth, string msBuildConfiguration)
         {
-            var dependencyGraph = _dependencyGraphService.GenerateDependencyGraph(projectPath);
+            var dependencyGraph = _dependencyGraphService.GenerateDependencyGraph(projectPath, msBuildConfiguration);
             if (dependencyGraph == null)
                 return null;
 

@@ -29,7 +29,7 @@ namespace DotNetOutdated.Tests
                 {
                     var directory = x.ArgAt<string>(0);
                     var arguments = x.ArgAt<string[]>(1);
-                    
+
                     ArgumentNullException.ThrowIfNull(directory);
 
                     // Grab the temp filename that was passed...
@@ -42,7 +42,7 @@ namespace DotNetOutdated.Tests
             var graphService = new DependencyGraphService(dotNetRunner, mockFileSystem);
 
             // Act
-            var dependencyGraph = graphService.GenerateDependencyGraph(_path);
+            var dependencyGraph = graphService.GenerateDependencyGraph(_path, "Debug");
 
             // Assert
             Assert.NotNull(dependencyGraph);
@@ -64,7 +64,7 @@ namespace DotNetOutdated.Tests
             var graphService = new DependencyGraphService(dotNetRunner, mockFileSystem);
 
             // Assert
-            Assert.Throws<CommandValidationException>(() => graphService.GenerateDependencyGraph(_path));
+            Assert.Throws<CommandValidationException>(() => graphService.GenerateDependencyGraph(_path, "Debug"));
         }
 
         [Fact]
@@ -94,7 +94,7 @@ namespace DotNetOutdated.Tests
             var graphService = new DependencyGraphService(dotNetRunner, mockFileSystem);
 
             // Act
-            var dependencyGraph = graphService.GenerateDependencyGraph(_solutionPath);
+            var dependencyGraph = graphService.GenerateDependencyGraph(_solutionPath, "Debug");
 
             // Assert
             Assert.NotNull(dependencyGraph);
