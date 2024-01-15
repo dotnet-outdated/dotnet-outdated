@@ -2,6 +2,7 @@
 using NuGet.ProjectModel;
 using System;
 using System.IO.Abstractions;
+using System.Text.Json;
 
 namespace DotNetOutdated.Core.Services
 {
@@ -32,22 +33,12 @@ namespace DotNetOutdated.Core.Services
 
             if (runStatus.IsSuccess)
             {
-                /*
-                    TempDirectory is a hacky workaround for DependencyGraphSpec(JObject)
-                    being deprecated. Unfortunately it looks like the only alternative
-                    is to load the file locally. Which is ok normally, but complicates
-                    testing.
-                */
-
-                using var tempDirectory = new TempDirectory();
-                var dependencyGraphFilename = System.IO.Path.Combine(tempDirectory.DirectoryPath, "DependencyGraph.json");
                 var dependencyGraphText = _fileSystem.File.ReadAllText(dgOutput);
-                System.IO.File.WriteAllText(dependencyGraphFilename, dependencyGraphText);
-                return DependencyGraphSpec.Load(dependencyGraphFilename);
+                return new ExtendedDependencyGraphSpec(dependencyGraphText);
             }
 
             throw new CommandValidationException($"Unable to process the project `{projectPath}. Are you sure this is a valid .NET Core or .NET Standard project type?" +
-                                                 $"{Environment.NewLine}{Environment.NewLine}Here is the full error message returned from the Microsoft Build Engine:{Environment.NewLine}{Environment.NewLine}{runStatus.Output} - {runStatus.Errors} - exit code: {runStatus.ExitCode}");
+                                                $"{Environment.NewLine}{Environment.NewLine}Here is the full error message returned from the Microsoft Build Engine:{Environment.NewLine}{Environment.NewLine}{runStatus.Output} - {runStatus.Errors} - exit code: {runStatus.ExitCode}");
         }
     }
 }
