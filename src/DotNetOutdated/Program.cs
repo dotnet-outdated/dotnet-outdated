@@ -182,7 +182,8 @@ namespace DotNetOutdated
                 // Analyze the projects
                 console.Write("Analyzing project(s)...");
 
-                var projects = projectPaths.SelectMany(path => _projectAnalysisService.AnalyzeProject(path, false, Transitive, TransitiveDepth)).ToList();
+                var projectLists = await Task.WhenAll(projectPaths.Select(path => _projectAnalysisService.AnalyzeProjectAsync(path, false, Transitive, TransitiveDepth)));
+                var projects = projectLists.SelectMany(p => p).ToList();
 
                 if (!console.IsOutputRedirected)
                     ClearCurrentConsoleLine();

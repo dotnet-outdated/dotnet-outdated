@@ -3,6 +3,7 @@ using NuGet.ProjectModel;
 using System;
 using System.IO.Abstractions;
 using System.Text.Json;
+using System.Threading.Tasks;
 
 namespace DotNetOutdated.Core.Services
 {
@@ -23,7 +24,7 @@ namespace DotNetOutdated.Core.Services
             _fileSystem = fileSystem;
         }
 
-        public DependencyGraphSpec GenerateDependencyGraph(string projectPath)
+        public async Task<DependencyGraphSpec> GenerateDependencyGraphAsync(string projectPath)
         {
             var dgOutput = _fileSystem.Path.Combine(_fileSystem.Path.GetTempPath(), _fileSystem.Path.GetTempFileName());
 
@@ -33,7 +34,7 @@ namespace DotNetOutdated.Core.Services
 
             if (runStatus.IsSuccess)
             {
-                var dependencyGraphText = _fileSystem.File.ReadAllText(dgOutput);
+                var dependencyGraphText = await _fileSystem.File.ReadAllTextAsync(dgOutput);
                 return new ExtendedDependencyGraphSpec(dependencyGraphText);
             }
 
