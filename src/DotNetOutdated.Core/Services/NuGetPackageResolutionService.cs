@@ -20,14 +20,14 @@ namespace DotNetOutdated.Core.Services
         }
 
         public async Task<NuGetVersion> ResolvePackageVersions(string packageName, NuGetVersion referencedVersion, IEnumerable<Uri> sources, VersionRange currentVersionRange,
-            VersionLock versionLock, PrereleaseReporting prerelease, NuGetFramework targetFrameworkName, string projectFilePath, bool isDevelopmentDependency)
+            VersionLock versionLock, PrereleaseReporting prerelease, NuGetFramework targetFrameworkName, string projectFilePath, bool shouldReduceByTargetFrameworkVersion)
         {
             return await ResolvePackageVersions(packageName, referencedVersion, sources, currentVersionRange, versionLock, prerelease, targetFrameworkName, projectFilePath,
-                isDevelopmentDependency, 0).ConfigureAwait(false);
+                shouldReduceByTargetFrameworkVersion, 0).ConfigureAwait(false);
         }
 
         public async Task<NuGetVersion> ResolvePackageVersions(string packageName, NuGetVersion referencedVersion, IEnumerable<Uri> sources, VersionRange currentVersionRange,
-            VersionLock versionLock, PrereleaseReporting prerelease, NuGetFramework targetFrameworkName, string projectFilePath, bool isDevelopmentDependency, int olderThanDays, bool ignoreFailedSources = false)
+            VersionLock versionLock, PrereleaseReporting prerelease, NuGetFramework targetFrameworkName, string projectFilePath, bool shouldReduceByTargetFrameworkVersion, int olderThanDays, bool ignoreFailedSources = false)
         {
             if (referencedVersion == null)
                 throw new ArgumentNullException(nameof(referencedVersion));
@@ -42,7 +42,7 @@ namespace DotNetOutdated.Core.Services
             string cacheKey = (packageName + "-" + includePrerelease + "-" + targetFrameworkName + "-" + olderThanDays).ToUpperInvariant();
 
             // Get all the available versions
-            var allVersionsRequest = new Lazy<Task<IReadOnlyList<NuGetVersion>>>(() => this._nugetService.GetAllVersions(packageName, sources, includePrerelease, targetFrameworkName, projectFilePath, isDevelopmentDependency, olderThanDays, ignoreFailedSources));
+            var allVersionsRequest = new Lazy<Task<IReadOnlyList<NuGetVersion>>>(() => this._nugetService.GetAllVersions(packageName, sources, includePrerelease, targetFrameworkName, projectFilePath, shouldReduceByTargetFrameworkVersion, olderThanDays, ignoreFailedSources));
             var allVersions = await _cache.GetOrAdd(cacheKey, allVersionsRequest).Value.ConfigureAwait(false);
 
             // Determine the floating behaviour

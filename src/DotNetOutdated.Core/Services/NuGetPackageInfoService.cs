@@ -67,13 +67,13 @@ namespace DotNetOutdated.Core.Services
         }
 
         public async Task<IReadOnlyList<NuGetVersion>> GetAllVersions(string package, IEnumerable<Uri> sources, bool includePrerelease, NuGetFramework targetFramework,
-            string projectFilePath, bool isDevelopmentDependency)
+            string projectFilePath, bool shouldReduceByTargetFrameworkVersion)
         {
-            return await GetAllVersions(package, sources, includePrerelease, targetFramework, projectFilePath, isDevelopmentDependency, 0).ConfigureAwait(false);
+            return await GetAllVersions(package, sources, includePrerelease, targetFramework, projectFilePath, shouldReduceByTargetFrameworkVersion, 0).ConfigureAwait(false);
         }
 
         public async Task<IReadOnlyList<NuGetVersion>> GetAllVersions(string package, IEnumerable<Uri> sources, bool includePrerelease, NuGetFramework targetFramework,
-            string projectFilePath, bool isDevelopmentDependency, int olderThanDays, bool ignoreFailedSources = false)
+            string projectFilePath, bool shouldReduceByTargetFrameworkVersion, int olderThanDays, bool ignoreFailedSources = false)
         {
             if (sources == null)
                 throw new ArgumentNullException(nameof(sources));
@@ -94,9 +94,7 @@ namespace DotNetOutdated.Core.Services
                                                                                        c.Published <= DateTimeOffset.UtcNow.AddDays(-olderThanDays)).ToList();
                         }
 
-                        // We need to ensure that we only get package versions which are compatible with the requested target framework.
-                        // For development dependencies, we do not perform this check
-                        if (!isDevelopmentDependency)
+                        if (shouldReduceByTargetFrameworkVersion)
                         {
                             var reducer = new FrameworkReducer();
 
