@@ -112,6 +112,10 @@ namespace DotNetOutdated
             ShortName = "utd", LongName = "include-up-to-date")]
         public bool IncludeUpToDate { get; set; } = false;
 
+        [Option(CommandOptionType.SingleValue, Description = "Specifies how many seconds each operation can run for. " +
+            "By default 30 seconds.", ShortName = "tmo", LongName = "timeout")]
+        public int Timeout { get; set; } = 30;
+
         public static int Main(string[] args)
         {
             using var services = new ServiceCollection()
@@ -182,7 +186,8 @@ namespace DotNetOutdated
                 // Analyze the projects
                 console.Write("Analyzing project(s)...");
 
-                var projects = projectPaths.SelectMany(path => _projectAnalysisService.AnalyzeProject(path, false, Transitive, TransitiveDepth)).ToList();
+                TimeSpan timeout = TimeSpan.FromSeconds(Timeout);
+                var projects = projectPaths.SelectMany(path => _projectAnalysisService.AnalyzeProject(path, false, Transitive, TransitiveDepth, timeout)).ToList();
 
                 if (!console.IsOutputRedirected)
                     ClearCurrentConsoleLine();
@@ -198,7 +203,7 @@ namespace DotNetOutdated
                     ReportOutdatedDependencies(outdatedProjects, console);
 
                     // Upgrade the packages
-                    var success = UpgradePackages(outdatedProjects, console);
+                    var success = UpgradePackages(outdatedProjects, console, timeout);
 
                     if (!Upgrade.HasValue)
                     {
@@ -232,7 +237,7 @@ namespace DotNetOutdated
             }
         }
 
-        private bool UpgradePackages(List<AnalyzedProject> projects, IConsole console)
+        private bool UpgradePackages(List<AnalyzedProject> projects, IConsole console, TimeSpan timeout)
         {
             bool success = true;
 
@@ -274,8 +279,8 @@ namespace DotNetOutdated
                         foreach (var project in package.Projects)
                         {
                             RunStatus status = package.IsVersionCentrallyManaged
-                                ? _centralPackageVersionManagementService.AddPackage(project.ProjectFilePath, package.Name, package.LatestVersion, NoRestore)
-                                : _dotNetAddPackageService.AddPackage(project.ProjectFilePath, package.Name, project.Framework.ToString(), package.LatestVersion, NoRestore, IgnoreFailedSources);
+                                ? _centralPackageVersionManagementService.AddPackage(project.ProjectFilePath, package.Name, package.LatestVersion, NoRestore, timeout)
+                                : _dotNetAddPackageService.AddPackage(project.ProjectFilePath, package.Name, project.Framework.ToString(), package.LatestVersion, NoRestore, timeout, IgnoreFailedSources);
 
                             if (status.IsSuccess)
                             {
