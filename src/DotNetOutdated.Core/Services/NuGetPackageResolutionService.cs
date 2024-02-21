@@ -1,11 +1,10 @@
-﻿using NuGet.Frameworks;
-using NuGet.Versioning;
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
+using NuGet.Frameworks;
+using NuGet.Versioning;
 
 namespace DotNetOutdated.Core.Services
 {
@@ -19,17 +18,45 @@ namespace DotNetOutdated.Core.Services
             _nugetService = nugetService;
         }
 
-        internal int? PrereleaseLabelPartsValue { get; set; }
-
-        public async Task<NuGetVersion> ResolvePackageVersions(string packageName, NuGetVersion referencedVersion, IEnumerable<Uri> sources, VersionRange currentVersionRange,
-            VersionLock versionLock, PrereleaseReporting prerelease, NuGetFramework targetFrameworkName, string projectFilePath, bool isDevelopmentDependency)
+        public async Task<NuGetVersion> ResolvePackageVersions(
+            string packageName,
+            NuGetVersion referencedVersion,
+            IEnumerable<Uri> sources,
+            VersionRange currentVersionRange,
+            VersionLock versionLock,
+            PrereleaseReporting prerelease,
+            string prereleaseLabel,
+            NuGetFramework targetFrameworkName,
+            string projectFilePath,
+            bool isDevelopmentDependency)
         {
-            return await ResolvePackageVersions(packageName, referencedVersion, sources, currentVersionRange, versionLock, prerelease, targetFrameworkName, projectFilePath,
-                isDevelopmentDependency, 0).ConfigureAwait(false);
+            return await ResolvePackageVersions(
+                packageName,
+                referencedVersion,
+                sources,
+                currentVersionRange,
+                versionLock,
+                prerelease,
+                prereleaseLabel,
+                targetFrameworkName,
+                projectFilePath,
+                isDevelopmentDependency,
+                0).ConfigureAwait(false);
         }
 
-        public async Task<NuGetVersion> ResolvePackageVersions(string packageName, NuGetVersion referencedVersion, IEnumerable<Uri> sources, VersionRange currentVersionRange,
-            VersionLock versionLock, PrereleaseReporting prerelease, NuGetFramework targetFrameworkName, string projectFilePath, bool isDevelopmentDependency, int olderThanDays, bool ignoreFailedSources = false)
+        public async Task<NuGetVersion> ResolvePackageVersions(
+            string packageName,
+            NuGetVersion referencedVersion,
+            IEnumerable<Uri> sources,
+            VersionRange currentVersionRange,
+            VersionLock versionLock,
+            PrereleaseReporting prerelease,
+            string prereleaseLabel,
+            NuGetFramework targetFrameworkName,
+            string projectFilePath,
+            bool isDevelopmentDependency,
+            int olderThanDays,
+            bool ignoreFailedSources = false)
         {
             if (referencedVersion == null)
                 throw new ArgumentNullException(nameof(referencedVersion));
@@ -57,8 +84,14 @@ namespace DotNetOutdated.Core.Services
             string releasePrefix = string.Empty;
             if (referencedVersion.IsPrerelease)
             {
-                var prereleaseParts = PrereleaseLabelPartsValue ?? PrereleaseLabelParts();
-                releasePrefix = string.Join('.', referencedVersion.ReleaseLabels.Take(prereleaseParts));
+                if (!string.IsNullOrWhiteSpace(prereleaseLabel))
+                {
+                    releasePrefix = prereleaseLabel;
+                }
+                else
+                {
+                    releasePrefix = referencedVersion.ReleaseLabels.First();
+                }
             }
 
             // Create a new version range for comparison
@@ -68,20 +101,6 @@ namespace DotNetOutdated.Core.Services
             NuGetVersion latestVersion = latestVersionRange.FindBestMatch(allVersions);
 
             return latestVersion;
-        }
-
-        private static int PrereleaseLabelParts()
-        {
-            // TODO What's the best way to make this configurable without introducing a breaking change to INuGetPackageResolutionService?
-            // TODO What's the best name for this concept?
-            string value = Environment.GetEnvironmentVariable("DOTNET_OUTDATED_PRERELEASE_LABEL_PARTS");
-
-            if (!int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var parts) || parts < 1)
-            {
-                parts = 1;
-            }
-
-            return parts;
         }
     }
 }

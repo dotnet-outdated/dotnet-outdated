@@ -112,6 +112,11 @@ namespace DotNetOutdated
             ShortName = "utd", LongName = "include-up-to-date")]
         public bool IncludeUpToDate { get; set; } = false;
 
+        [Option(CommandOptionType.SingleValue, Description = "Specifies an optional label to restrict matches to when looking for pre-release versions of packages. " +
+                                                             "For example, a label of 'rc.1' would only match pre-release packages with a pre-release label that starts with that prefix.",
+            ShortName = "prl", LongName = "pre-release-label")]
+        public string PrereleaseLabel { get; set; } = string.Empty;
+
         public static int Main(string[] args)
         {
             using var services = new ServiceCollection()
@@ -488,8 +493,19 @@ namespace DotNetOutdated
 
             if (referencedVersion != null)
             {
-                latestVersion = await _nugetService.ResolvePackageVersions(dependency.Name, referencedVersion, project.Sources, dependency.VersionRange,
-                    VersionLock, Prerelease, targetFramework.Name, project.FilePath, dependency.IsDevelopmentDependency, OlderThanDays, IgnoreFailedSources).ConfigureAwait(false);
+                latestVersion = await _nugetService.ResolvePackageVersions(
+                    dependency.Name,
+                    referencedVersion,
+                    project.Sources,
+                    dependency.VersionRange,
+                    VersionLock,
+                    Prerelease,
+                    PrereleaseLabel,
+                    targetFramework.Name,
+                    project.FilePath,
+                    dependency.IsDevelopmentDependency,
+                    OlderThanDays,
+                    IgnoreFailedSources).ConfigureAwait(false);
             }
 
             if (referencedVersion == null || latestVersion == null || referencedVersion != latestVersion || IncludeUpToDate)
@@ -497,8 +513,17 @@ namespace DotNetOutdated
                 // special case when there is version installed which is not older than "OlderThan" days makes "latestVersion" to be null
                 if (OlderThanDays > 0 && latestVersion == null)
                 {
-                    NuGetVersion absoluteLatestVersion = await _nugetService.ResolvePackageVersions(dependency.Name, referencedVersion, project.Sources, dependency.VersionRange,
-                        VersionLock, Prerelease, targetFramework.Name, project.FilePath, dependency.IsDevelopmentDependency).ConfigureAwait(false);
+                    NuGetVersion absoluteLatestVersion = await _nugetService.ResolvePackageVersions(
+                        dependency.Name,
+                        referencedVersion,
+                        project.Sources,
+                        dependency.VersionRange,
+                        VersionLock,
+                        Prerelease,
+                        PrereleaseLabel,
+                        targetFramework.Name,
+                        project.FilePath,
+                        dependency.IsDevelopmentDependency).ConfigureAwait(false);
 
                     if (absoluteLatestVersion == null || referencedVersion > absoluteLatestVersion)
                     {
