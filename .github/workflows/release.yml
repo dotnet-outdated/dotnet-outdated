@@ -28,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v3.5.3
+      - uses: actions/checkout@v4
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v3.2.0
@@ -36,6 +36,7 @@ jobs:
           dotnet-version: | 
             6.0.x
             7.0.x
+            8.0.x
 
       # The tests should have already been run during the PR workflow, so this is really just a sanity check
       - name: Tests
