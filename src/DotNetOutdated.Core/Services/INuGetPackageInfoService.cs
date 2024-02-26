@@ -9,9 +9,9 @@ namespace DotNetOutdated.Core.Services
     public interface INuGetPackageInfoService
     {
         Task<IReadOnlyList<NuGetVersion>> GetAllVersions(string package, IEnumerable<Uri> sources, bool includePrerelease, NuGetFramework targetFramework, string projectFilePath,
-            bool isDevelopmentDependency);
+            bool shouldReduceByTargetFrameworkVersion);
 
         Task<IReadOnlyList<NuGetVersion>> GetAllVersions(string package, IEnumerable<Uri> sources, bool includePrerelease, NuGetFramework targetFramework, string projectFilePath,
-            bool isDevelopmentDependency, int olderThanDays, bool ignoreFailedSources);
+            bool shouldReduceByTargetFrameworkVersion, int olderThanDays, bool ignoreFailedSources);
     }
 }

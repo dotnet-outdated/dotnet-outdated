@@ -112,6 +112,10 @@ namespace DotNetOutdated
             ShortName = "utd", LongName = "include-up-to-date")]
         public bool IncludeUpToDate { get; set; } = false;
 
+        [Option(CommandOptionType.NoValue, Description = "Default behavior is to not filter version by target framework version for development dependencies.  Specify this option if you would like to override this and filter development dependencies by target framework version.",
+            ShortName = "fddbtfv", LongName = "filter-dev-deps-by-target-framework-version")]
+        public bool? FilterDevelopmentDependenciesByTargetFramework { get; set; }
+
         public static int Main(string[] args)
         {
             using var services = new ServiceCollection()
@@ -488,8 +492,10 @@ namespace DotNetOutdated
 
             if (referencedVersion != null)
             {
+                var filterDevelopmentDependenciesByTargetFramework = FilterDevelopmentDependenciesByTargetFramework.GetValueOrDefault(!dependency.IsDevelopmentDependency);
+                
                 latestVersion = await _nugetService.ResolvePackageVersions(dependency.Name, referencedVersion, project.Sources, dependency.VersionRange,
-                    VersionLock, Prerelease, targetFramework.Name, project.FilePath, dependency.IsDevelopmentDependency, OlderThanDays, IgnoreFailedSources).ConfigureAwait(false);
+                    VersionLock, Prerelease, targetFramework.Name, project.FilePath, filterDevelopmentDependenciesByTargetFramework, OlderThanDays, IgnoreFailedSources).ConfigureAwait(false);
             }
 
             if (referencedVersion == null || latestVersion == null || referencedVersion != latestVersion || IncludeUpToDate)
