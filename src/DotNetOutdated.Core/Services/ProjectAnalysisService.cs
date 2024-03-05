@@ -7,6 +7,7 @@ using System;
 using System.Collections.Generic;
 using System.IO.Abstractions;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace DotNetOutdated.Core.Services
 {
@@ -23,9 +24,9 @@ namespace DotNetOutdated.Core.Services
             _fileSystem = fileSystem;
         }
 
-        public List<Project> AnalyzeProject(string projectPath, bool runRestore, bool includeTransitiveDependencies, int transitiveDepth)
+        public async Task<List<Project>> AnalyzeProjectAsync(string projectPath, bool runRestore, bool includeTransitiveDependencies, int transitiveDepth)
         {
-            var dependencyGraph = _dependencyGraphService.GenerateDependencyGraph(projectPath);
+            var dependencyGraph = await _dependencyGraphService.GenerateDependencyGraphAsync(projectPath);
             if (dependencyGraph == null)
                 return null;
 

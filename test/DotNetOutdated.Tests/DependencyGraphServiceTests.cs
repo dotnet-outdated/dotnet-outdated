@@ -6,6 +6,7 @@ using System.IO.Abstractions.TestingHelpers;
 using NSubstitute;
 using Xunit;
 using XFS = System.IO.Abstractions.TestingHelpers.MockUnixSupport;
+using System.Threading.Tasks;
 
 namespace DotNetOutdated.Tests
 {
@@ -17,7 +18,7 @@ namespace DotNetOutdated.Tests
         //private readonly string _project2Path = XFS.Path(@"c:\path\proj2\proj2.csproj");
 
         [Fact]
-        public void SuccessfulDotNetRunnerExecutionReturnsDependencyGraph()
+        public async Task SuccessfulDotNetRunnerExecutionReturnsDependencyGraph()
         {
             var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>());
 
@@ -42,7 +43,7 @@ namespace DotNetOutdated.Tests
             var graphService = new DependencyGraphService(dotNetRunner, mockFileSystem);
 
             // Act
-            var dependencyGraph = graphService.GenerateDependencyGraph(_path);
+            var dependencyGraph = await graphService.GenerateDependencyGraphAsync(_path);
 
             // Assert
             Assert.NotNull(dependencyGraph);
@@ -52,7 +53,7 @@ namespace DotNetOutdated.Tests
         }
 
         [Fact]
-        public void UnsuccessfulDotNetRunnerExecutionThrows()
+        public async Task UnsuccessfulDotNetRunnerExecutionThrows()
         {
             var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>());
 
@@ -64,11 +65,11 @@ namespace DotNetOutdated.Tests
             var graphService = new DependencyGraphService(dotNetRunner, mockFileSystem);
 
             // Assert
-            Assert.Throws<CommandValidationException>(() => graphService.GenerateDependencyGraph(_path));
+            await Assert.ThrowsAsync<CommandValidationException>(() => graphService.GenerateDependencyGraphAsync(_path));
         }
 
         [Fact]
-        public void EmptySolutionReturnsEmptyDependencyGraph()
+        public async Task EmptySolutionReturnsEmptyDependencyGraph()
         {
             var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>());
 
@@ -94,7 +95,7 @@ namespace DotNetOutdated.Tests
             var graphService = new DependencyGraphService(dotNetRunner, mockFileSystem);
 
             // Act
-            var dependencyGraph = graphService.GenerateDependencyGraph(_solutionPath);
+            var dependencyGraph = await graphService.GenerateDependencyGraphAsync(_solutionPath);
 
             // Assert
             Assert.NotNull(dependencyGraph);
