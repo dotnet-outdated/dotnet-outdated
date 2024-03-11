@@ -1,13 +1,15 @@
 ﻿#nullable enable
 using DotNetOutdated.Models;
+using McMaster.Extensions.CommandLineUtils;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Abstractions;
 using System.Linq;
 using System.Text.RegularExpressions;
 
 namespace DotNetOutdated.Formatters;
 
-internal class MarkdownFormatter : IOutputFormatter
+internal class MarkdownFormatter : FileFormatter
 {
     static readonly Dictionary<DependencyUpgradeSeverity, string?> _colorMaps = new()
     {
@@ -18,11 +20,17 @@ internal class MarkdownFormatter : IOutputFormatter
         {DependencyUpgradeSeverity.Unknown,default},
     };
 
-    public void Format(IReadOnlyList<AnalyzedProject> projects, TextWriter writer)
+    protected override string Extension => ".md";
+
+    public MarkdownFormatter(IFileSystem fileSystem, IConsole console) : base(fileSystem, console)
+    {
+    }
+
+    protected override void Format(IReadOnlyList<AnalyzedProject> projects, IDictionary<string, string> options, TextWriter writer)
     {
         writer.WriteLine("# Outdated Packages");
         writer.WriteLine();
-        foreach (var project in projects.OrderBy(p=>p.Name))
+        foreach (var project in projects.OrderBy(p => p.Name))
         {
             writer.WriteLine($"## {project.Name}");
             writer.WriteLine();
