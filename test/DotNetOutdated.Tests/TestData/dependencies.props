@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project>
+  <PropertyGroup>
+    <NetCoreVersion>8.0.3</NetCoreVersion>
+    <NetAnalyzersVersion>8.0.0</NetAnalyzersVersion>
+    <RoslynatorVersion>4.11.0</RoslynatorVersion>
+    <OpenTelemetryVersion>1.7.0</OpenTelemetryVersion>
+    <OpenTelemetryInstrumentationVersion>$(OpenTelemetryVersion)</OpenTelemetryInstrumentationVersion>
+  </PropertyGroup>
+  <ItemGroup Label="Microsoft">
+    <PackageReference Update="Microsoft.Extensions.DependencyInjection.Abstractions" Version="$(NetCoreVersion)" />
+    <PackageReference Update="Microsoft.AspNetCore.Mvc.Versioning" Version="5.0.0" />
+  </ItemGroup>
+  <ItemGroup Label="Others">
+    <PackageReference Update="Swashbuckle.AspNetCore" Version="6.5.0" />
+    <PackageReference Update="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Update="Mediatr" Version="12.2.0" />
+    <PackageReference Update="OpenTelemetry" Version="$(OpenTelemetryVersion)" />
+    <PackageReference Update="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="$(OpenTelemetryVersion)" />
+    <PackageReference Update="OpenTelemetry.Exporter.Console" Version="$(OpenTelemetryVersion)" />
+    <PackageReference Update="OpenTelemetry.Extensions.Hosting" Version="$(OpenTelemetryVersion)" />
+    <PackageReference Update="OpenTelemetry.Instrumentation.Http" Version="$(OpenTelemetryInstrumentationVersion)" />
+    <PackageReference Update="OpenTelemetry.Instrumentation.AspNetCore" Version="$(OpenTelemetryInstrumentationVersion)" />
+  </ItemGroup>
+</Project>
