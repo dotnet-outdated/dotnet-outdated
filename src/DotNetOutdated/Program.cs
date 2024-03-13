@@ -24,6 +24,7 @@ namespace DotNetOutdated
     using System.Collections.Concurrent;
     using System.Diagnostics;
     using System.IO;
+    using DotNetOutdated.Services;
 
     [Command(
         Name = "dotnet outdated",
@@ -117,9 +118,27 @@ namespace DotNetOutdated
             ShortName = "prl", LongName = "pre-release-label")]
         public string PrereleaseLabel { get; set; } = string.Empty;
 
+        [Option(CommandOptionType.SingleValue, Description = "Use a dependencies update file. csproj files will remain unmodified",
+            ShortName = "dpf", LongName = "dependency-file")]
+        public string DependencyFile { get; set; } = string.Empty;
+
         public static int Main(string[] args)
         {
-            using var services = new ServiceCollection()
+            using var app = new CommandLineApplication<Program>();
+            using var services = CreateServiceCollection(app).BuildServiceProvider();
+
+
+            app.Conventions
+                .UseDefaultConventions()
+                .UseConstructorInjection(services);
+
+            return app.Execute(args);
+        }
+
+        public static IServiceCollection CreateServiceCollection(CommandLineApplication<Program> app)
+        {
+            return new ServiceCollection()
+                    .AddSingleton(app)
                     .AddSingleton<IConsole>(PhysicalConsole.Singleton)
                     .AddSingleton<IReporter>(provider => new ConsoleReporter(provider.GetService<IConsole>()))
                     .AddSingleton<IFileSystem, FileSystem>()
@@ -128,18 +147,11 @@ namespace DotNetOutdated
                     .AddSingleton<IDotNetRunner, DotNetRunner>()
                     .AddSingleton<IDependencyGraphService, DependencyGraphService>()
                     .AddSingleton<IDotNetRestoreService, DotNetRestoreService>()
-                    .AddSingleton<IDotNetAddPackageService, DotNetAddPackageService>()
+                    .AddSingleton<DotNetAddPackageService>()
+                    .AddSingleton<IDotNetAddPackageService, ConfiguredAddPackageService>()
                     .AddSingleton<INuGetPackageInfoService, NuGetPackageInfoService>()
                     .AddSingleton<INuGetPackageResolutionService, NuGetPackageResolutionService>()
-                    .AddSingleton<ICentralPackageVersionManagementService, CentralPackageVersionManagementService>()
-                    .BuildServiceProvider();
-
-            using var app = new CommandLineApplication<Program>();
-            app.Conventions
-                .UseDefaultConventions()
-                .UseConstructorInjection(services);
-
-            return app.Execute(args);
+                    .AddSingleton<ICentralPackageVersionManagementService, CentralPackageVersionManagementService>();
         }
 
         public static string GetVersion() => typeof(Program)
