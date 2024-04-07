@@ -319,7 +319,7 @@ namespace DotNetOutdated
             {
                var xml = XDocument.Load(projectFilePath);
                return xml.Descendants("Project")
-                  .Any(e => e.Attribute("Sdk")?.Value.StartsWith("Microsoft.NET.Sdk", StringComparison.OrdinalIgnoreCase) is true);
+                  .Any(e => !string.IsNullOrEmpty(e.Attribute("Sdk")?.Value));
             }
             catch (Exception ex)
             {
