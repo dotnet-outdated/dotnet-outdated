@@ -1,15 +1,23 @@
 ﻿using CsvHelper;
 using DotNetOutdated.Models;
+using McMaster.Extensions.CommandLineUtils;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.IO.Abstractions;
 
 namespace DotNetOutdated.Formatters;
 
-internal class CsvFormatter : IOutputFormatter
+internal class CsvFormatter : FileFormatter
 {
-    public void Format(IReadOnlyList<AnalyzedProject> projects, TextWriter writer)
+    public CsvFormatter(IFileSystem fileSystem, IConsole console) : base(fileSystem, console)
+    {
+    }
+
+    protected override string Extension => ".csv";
+
+    protected override void Format(IReadOnlyList<AnalyzedProject> projects, IDictionary<string, string> options, TextWriter writer)
     {
         using var csv = new CsvWriter(writer, CultureInfo.CurrentCulture);
         foreach (var project in projects)
@@ -33,6 +41,5 @@ internal class CsvFormatter : IOutputFormatter
                 }
             }
         }
-
     }
 }

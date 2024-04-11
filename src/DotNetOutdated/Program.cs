@@ -37,6 +37,14 @@ namespace DotNetOutdated
       private readonly IProjectDiscoveryService _projectDiscoveryService;
       private readonly IDotNetPackageService _dotNetPackageService;
       private readonly ICentralPackageVersionManagementService _centralPackageVersionManagementService;
+      private readonly OutputFormatterFactory _outputFormatterFactory;
+      private static readonly Dictionary<string, Type> _formatters =
+         new(StringComparer.OrdinalIgnoreCase)
+         {
+               {nameof(OutputFormat.Json), typeof(Formatters.JsonFormatter)},
+               {nameof(OutputFormat.Csv), typeof(Formatters.CsvFormatter)},
+               {nameof(OutputFormat.Markdown), typeof(Formatters.MarkdownFormatter)},
+         };
 
       [Option(CommandOptionType.NoValue, Description = "Specifies whether to include auto-referenced packages.",
           LongName = "include-auto-references")]
@@ -87,10 +95,10 @@ namespace DotNetOutdated
           ShortName = "o", LongName = "output")]
       public string OutputFilename { get; set; } = null;
 
-      [Option(CommandOptionType.SingleValue, Description = "Specifies the output format for the generated report. " +
+      [Option(CommandOptionType.MultipleValue, Description = "Specifies the output format for the generated report. " +
                                                            "Possible values: json (default) or csv.",
           ShortName = "of", LongName = "output-format")]
-      public OutputFormat OutputFileFormat { get; set; } = OutputFormat.Json;
+      public List<string> OutputFileFormat { get; set; } = [nameof(OutputFormat.Json)];
 
       [Option(CommandOptionType.SingleValue, Description = "Only include package versions that are older than the specified number of days.",
           ShortName = "ot", LongName = "older-than")]
@@ -131,6 +139,19 @@ namespace DotNetOutdated
                  .AddSingleton<INuGetPackageInfoService, NuGetPackageInfoService>()
                  .AddSingleton<INuGetPackageResolutionService, NuGetPackageResolutionService>()
                  .AddSingleton<ICentralPackageVersionManagementService, CentralPackageVersionManagementService>()
+                 .AddSingleton<Formatters.JsonFormatter>()
+                 .AddSingleton<Formatters.CsvFormatter>()
+                 .AddSingleton<Formatters.MarkdownFormatter>()
+                 .AddSingleton<OutputFormatterFactory>(provider => (string name, out IOutputFormatter formatter) =>
+                    {
+                       formatter = default;
+                       if (_formatters.TryGetValue(name, out var formatterType))
+                       {
+                          formatter = provider.GetService(formatterType) as IOutputFormatter;
+                          return formatter is not null;
+                       }
+                       return false;
+                    })
                  .BuildServiceProvider();
 
          using var app = new CommandLineApplication<Program>();
@@ -146,8 +167,15 @@ namespace DotNetOutdated
           .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
           .InformationalVersion;
 
-      public Program(IFileSystem fileSystem, IReporter reporter, INuGetPackageResolutionService nugetService, IProjectAnalysisService projectAnalysisService,
-          IProjectDiscoveryService projectDiscoveryService, IDotNetPackageService dotNetPackageService, ICentralPackageVersionManagementService centralPackageVersionManagementService)
+      public Program(IFileSystem fileSystem
+         , IReporter reporter
+         , INuGetPackageResolutionService nugetService
+         , IProjectAnalysisService projectAnalysisService
+         , IProjectDiscoveryService projectDiscoveryService
+         , IDotNetPackageService dotNetPackageService
+         , ICentralPackageVersionManagementService centralPackageVersionManagementService
+         , OutputFormatterFactory outputFormatterFactory
+         )
       {
          _fileSystem = fileSystem;
          _reporter = reporter;
@@ -156,6 +184,7 @@ namespace DotNetOutdated
          _projectDiscoveryService = projectDiscoveryService;
          _dotNetPackageService = dotNetPackageService;
          _centralPackageVersionManagementService = centralPackageVersionManagementService;
+         _outputFormatterFactory = outputFormatterFactory;
       }
 
       public async Task<int> OnExecute(CommandLineApplication app, IConsole console)
@@ -558,21 +587,63 @@ namespace DotNetOutdated
 
       private void GenerateOutputFile(List<AnalyzedProject> projects)
       {
-         if (OutputFilename != null)
+         // Get list of formatters
+         var outputFileFormats = OutputFileFormat;
+         foreach (var outputFileFormat in outputFileFormats)
          {
-            Console.WriteLine();
-            Console.WriteLine($"Generating {OutputFileFormat.ToString().ToUpperInvariant()} report...");
-            using var stream = _fileSystem.File.Create(OutputFilename);
-            using var sw = new StreamWriter(stream);
-            IOutputFormatter formatter = OutputFileFormat switch
-            {
-               OutputFormat.Csv => new Formatters.CsvFormatter(),
-               OutputFormat.Markdown => new Formatters.MarkdownFormatter(),
-               _ => new Formatters.JsonFormatter(),
-            };
-            formatter.Format(projects, sw);
-            Console.WriteLine($"Report written to {OutputFilename}");
-            Console.WriteLine();
+               var context = GetFormatterTypeAndOptions(outputFileFormat);
+               Format(projects, context);
+         }
+
+         void Format(List<AnalyzedProject> projects, (string formatterType, IDictionary<string, string> options) context)
+         {
+               if (!context.options.TryGetValue("outputFile", out var outputFile))
+               {
+                  outputFile = OutputFilename;
+                  context.options["outputFile"] = outputFile;
+               }
+               if (_outputFormatterFactory(context.formatterType, out var formatter))
+               {
+                  formatter.Format(projects, context.options);
+               }
+               else
+               {
+                  Console.Error.Write($"The formatter {context.formatterType} is invalid.", Constants.ReportingColors.Error);
+                  Console.WriteLine();
+               }
+         }
+
+         // this function parse OutputFileFormat arg and extract formatterType and its oprions.
+         // the format is <formatterType[;[<option>[=<optionValue>,];...>
+         // eg: csv;separator=\t;outputfile=./pippo.csv
+         (string formatterType, IDictionary<string, string> options) GetFormatterTypeAndOptions(string arguments)
+         {
+               Dictionary<string, string> options = new(StringComparer.OrdinalIgnoreCase);
+               string formatterType = default;
+               if (!string.IsNullOrEmpty(arguments))
+               {
+                  if (arguments.Split(';') is { Length: >= 1 } segments)
+                  {
+                     formatterType = segments[0];
+                     for (int i = 1; i < segments.Length; i++)
+                     {
+                           var segment = segments[i];
+                           if (!string.IsNullOrEmpty(segment))
+                           {
+                              var index = segment.IndexOf('=');
+                              if (index > -1)
+                              {
+                                 options[segment.Substring(0, index - 1)] = segment.Substring(index + 1);
+                              }
+                              else
+                              {
+                                 options[segment] = segment;
+                              }
+                           }
+                     }
+                  }
+               }
+               return (formatterType, options);
          }
       }
 
