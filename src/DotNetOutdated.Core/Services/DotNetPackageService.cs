@@ -5,12 +5,12 @@ using System.IO.Abstractions;
 
 namespace DotNetOutdated.Core.Services
 {
-    public class DotNetAddPackageService : IDotNetAddPackageService
+    public class DotNetPackageService : IDotNetPackageService
     {
         private readonly IDotNetRunner _dotNetRunner;
         private readonly IFileSystem _fileSystem;
 
-        public DotNetAddPackageService(IDotNetRunner dotNetRunner, IFileSystem fileSystem)
+        public DotNetPackageService(IDotNetRunner dotNetRunner, IFileSystem fileSystem)
         {
             _dotNetRunner = dotNetRunner;
             _fileSystem = fileSystem;
@@ -39,6 +39,14 @@ namespace DotNetOutdated.Core.Services
             }
 
             return _dotNetRunner.Run(_fileSystem.Path.GetDirectoryName(projectPath), arguments.ToArray());
+        }
+
+        public RunStatus RemovePackage(string projectPath, string packageName)
+        {
+           var projectName = _fileSystem.Path.GetFileName(projectPath);
+           var arguments = new[] { "remove", $"\"{projectName}\"", "package", packageName };
+
+           return _dotNetRunner.Run(_fileSystem.Path.GetDirectoryName(projectPath), arguments);
         }
     }
 }
