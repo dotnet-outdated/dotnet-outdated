@@ -319,7 +319,17 @@ namespace DotNetOutdated
             try
             {
                var xml = XDocument.Load(projectFilePath);
-               return xml.Descendants("Project")
+
+               // If the project file declares the xmlns attribute, we need to account for it in queries for elements.
+               // Otherwise the query will return no results and the project type will be misidentified.
+               // e.g. <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" Sdk="Microsoft.NET.Sdk">
+               XNamespace ns = string.Empty;
+               if (xml.Root != null)
+               {
+                  ns = xml.Root.GetDefaultNamespace();
+               }
+
+               return xml.Descendants(ns + "Project")
                   .Any(e => !string.IsNullOrEmpty(e.Attribute("Sdk")?.Value));
             }
             catch (Exception ex)
