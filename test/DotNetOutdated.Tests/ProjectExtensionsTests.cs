@@ -150,7 +150,5 @@ public static class ProjectExtensionsTests
                 // Ignore
             }
         }
-
-        public bool Exists() => File.Exists(Path);
     }
 }
