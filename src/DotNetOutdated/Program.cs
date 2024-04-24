@@ -1,12 +1,14 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
 using System.IO.Abstractions;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
-using System.Xml.Linq;
 using DotNetOutdated.Core;
 using DotNetOutdated.Core.Exceptions;
 using DotNetOutdated.Core.Models;
@@ -22,11 +24,7 @@ using NuGet.Versioning;
 
 namespace DotNetOutdated
 {
-   using System.Collections.Concurrent;
-   using System.Diagnostics;
-   using System.IO;
-
-   [Command(
+    [Command(
        Name = "dotnet outdated",
        FullName = "A .NET Core global tool to list outdated Nuget packages.")]
    [VersionOptionFromMember(MemberName = nameof(GetVersion))]
@@ -282,7 +280,7 @@ namespace DotNetOutdated
                {
                   RunStatus status = null;
 
-                  if (!IsProjectSdkStyle(project.ProjectFilePath))
+                  if (!project.IsProjectSdkStyle())
                   {
                      console.WriteLine("Project format not SDK style, removing package before upgrade.");
                      status = _dotNetPackageService.RemovePackage(project.ProjectFilePath, package.Name);
@@ -313,31 +311,6 @@ namespace DotNetOutdated
          }
 
          return success;
-
-         static bool IsProjectSdkStyle(string projectFilePath)
-         {
-            try
-            {
-               var xml = XDocument.Load(projectFilePath);
-
-               // If the project file declares the xmlns attribute, we need to account for it in queries for elements.
-               // Otherwise the query will return no results and the project type will be misidentified.
-               // e.g. <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" Sdk="Microsoft.NET.Sdk">
-               XNamespace ns = string.Empty;
-               if (xml.Root != null)
-               {
-                  ns = xml.Root.GetDefaultNamespace();
-               }
-
-               return xml.Descendants(ns + "Project")
-                  .Any(e => !string.IsNullOrEmpty(e.Attribute("Sdk")?.Value));
-            }
-            catch (Exception ex)
-            {
-               Console.WriteLine($"An error occurred while reading project file: {ex.Message}", Constants.ReportingColors.UpgradeFailure);
-               return false;
-            }
-         }
       }
 
       private static void PrintColorLegend(IConsole console)
