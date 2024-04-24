@@ -86,6 +86,32 @@ public static class ProjectExtensionsTests
             """,
             false);
 
+        testCases.Add(
+            """
+            <Foo></Foo>
+            """,
+            false);
+
+        testCases.Add(
+            """
+            <Foo Sdk="Microsoft.NET.Sdk"></Foo>
+            """,
+            false);
+
+        testCases.Add(
+            """
+            <?xml version="1.0" encoding="utf-8"?>
+            <Foo>
+            </Foo>
+            """,
+            false);
+
+        testCases.Add(
+            """
+            Not XML
+            """,
+            false);
+
         return testCases;
     }
 
