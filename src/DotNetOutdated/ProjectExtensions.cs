@@ -67,18 +67,16 @@ namespace DotNetOutdated
             {
                 var xml = XDocument.Load(project.ProjectFilePath);
 
+                if (xml.Root == null)
+                {
+                    return false;
+                }
+
                 // If the project file declares the xmlns attribute, we need to account for it in queries for elements.
                 // Otherwise the query will return no results and the project type will be misidentified.
                 // e.g. <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" Sdk="Microsoft.NET.Sdk">
-                XNamespace ns = string.Empty;
-                if (xml.Root != null)
-                {
-                    ns = xml.Root.GetDefaultNamespace();
-                }
-
-                return xml
-                    .Descendants(ns + "Project")
-                    .Any(e => !string.IsNullOrEmpty(e.Attribute("Sdk")?.Value));
+                XNamespace ns = xml.Root.GetDefaultNamespace();
+                return xml.Root.Name == (ns + "Project") && !string.IsNullOrEmpty(xml.Root.Attribute("Sdk")?.Value);
             }
             catch (Exception ex)
             {
