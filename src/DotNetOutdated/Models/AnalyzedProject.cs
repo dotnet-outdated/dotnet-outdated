@@ -2,23 +2,19 @@
 using System.Linq;
 using DotNetOutdated.Core.Models;
 using DotNetOutdated.Services;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Converters;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using NuGet.Frameworks;
 using NuGet.Versioning;
 
 namespace DotNetOutdated.Models
 {
-    [JsonObject(MemberSerialization.OptIn)]
     public class AnalyzedProject
     {
-        [JsonProperty(Order = 2)]
         public IReadOnlyList<AnalyzedTargetFramework> TargetFrameworks { get; }
 
-        [JsonProperty(Order = 0)]
         public string Name { get; set; }
 
-        [JsonProperty(Order = 1)]
         public string FilePath { get; set; }
 
         public AnalyzedProject(string name, string filePath, IEnumerable<AnalyzedTargetFramework> targetFrameworks)
@@ -29,13 +25,10 @@ namespace DotNetOutdated.Models
         }
     }
 
-    [JsonObject(MemberSerialization.OptIn)]
     public class AnalyzedTargetFramework
     {
-        [JsonProperty(Order = 1)]
         public IReadOnlyList<AnalyzedDependency> Dependencies { get; }
 
-        [JsonProperty(Order = 0)]
         [JsonConverter(typeof(ToStringJsonConverter))]
         public NuGetFramework Name { get; set; }
 
@@ -46,11 +39,11 @@ namespace DotNetOutdated.Models
         }
     }
 
-    [JsonObject(MemberSerialization.OptIn)]
     public class AnalyzedDependency
     {
         private readonly Dependency _dependency;
 
+        [JsonIgnore]
         public string Description
         {
             get
@@ -66,25 +59,24 @@ namespace DotNetOutdated.Models
             }
         }
 
+        [JsonIgnore]
         public bool IsAutoReferenced => _dependency.IsAutoReferenced;
 
+        [JsonIgnore]
         public bool IsTransitive => _dependency.IsTransitive;
 
+        [JsonIgnore]
         public bool IsVersionCentrallyManaged => _dependency.IsVersionCentrallyManaged;
 
-        [JsonProperty(Order = 0)]
         public string Name => _dependency.Name;
 
-        [JsonProperty(Order = 1)]
         [JsonConverter(typeof(ToStringJsonConverter))]
         public NuGetVersion ResolvedVersion => _dependency.ResolvedVersion;
 
-        [JsonProperty(Order = 2)]
         [JsonConverter(typeof(ToStringJsonConverter))]
         public NuGetVersion LatestVersion { get; set; }
 
-        [JsonProperty(Order = 3)]
-        [JsonConverter(typeof(StringEnumConverter))]
+        [JsonConverter(typeof(JsonStringEnumConverter))]
         public DependencyUpgradeSeverity UpgradeSeverity
         {
             get
