@@ -26,4 +26,7 @@
     <None Remove="TestData\*.*" />
     <EmbeddedResource Include="TestData\*.*" />
   </ItemGroup>
+  <ItemGroup>
+    <AssemblyMetadata Include="SolutionRoot" Value="$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)\..\..'))" />
+  </ItemGroup>
 </Project>
