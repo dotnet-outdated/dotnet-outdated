@@ -18,7 +18,8 @@ public static class EndToEndTests
             .GetCustomAttributes<AssemblyMetadataAttribute>().First((p) => p.Key is "SolutionRoot")
             .Value;
 
-        var projectPath = Path.Combine(solutionRoot, "test-projects", name, $"{name}.csproj");
+        var projectPath = Path.Combine(solutionRoot, "test-projects", name);
+        var projectFile = Path.Combine(projectPath, $"{name}.csproj");
 
         using var temp = new TemporaryDirectory();
 
@@ -28,7 +29,7 @@ public static class EndToEndTests
             File.Copy(source, destination);
         }
 
-        var actual = Program.Main([temp.Path]);
+        var actual = Program.Main([projectFile]);
         Assert.Equal(0, actual);
     }
 
