@@ -18,7 +18,7 @@ public static class EndToEndTests
             .GetCustomAttributes<AssemblyMetadataAttribute>().First((p) => p.Key is "SolutionRoot")
             .Value;
 
-        var projectPath = Path.Combine(solutionRoot, "test-projects", name);
+        var projectPath = Path.Combine(solutionRoot, "test-projects", name, $"{name}.csproj");
 
         using var temp = new TemporaryDirectory();
 
