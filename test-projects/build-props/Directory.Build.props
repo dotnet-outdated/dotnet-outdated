@@ -3,6 +3,7 @@
   <PropertyGroup>
     <Version>1.0.0</Version>
     <Authors>Jerrie Pelser</Authors>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
  
   <ItemGroup>

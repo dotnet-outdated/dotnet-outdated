@@ -7,6 +7,7 @@
     <Description>The core functionality of DotNet Outdated as a library which allows you to embed it into your own applications</Description>
     <Authors>dotnet-outdated Team &amp; Contributors</Authors>
     <Copyright>Copyright (c) Jerrie Pelser</Copyright>
+    <LangVersion>latest</LangVersion>
     <PackageId>DotNetOutdatedTool.Core</PackageId>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/dotnet-outdated/dotnet-outdated</PackageProjectUrl>
