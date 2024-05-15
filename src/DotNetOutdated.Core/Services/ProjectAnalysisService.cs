@@ -24,7 +24,7 @@ namespace DotNetOutdated.Core.Services
             _fileSystem = fileSystem;
         }
 
-        public async Task<List<Project>> AnalyzeProjectAsync(string projectPath, bool runRestore, bool includeTransitiveDependencies, int transitiveDepth)
+        public async Task<List<Project>?> AnalyzeProjectAsync(string projectPath, bool runRestore, bool includeTransitiveDependencies, int transitiveDepth)
         {
             var dependencyGraph = await _dependencyGraphService.GenerateDependencyGraphAsync(projectPath);
             if (dependencyGraph == null)
@@ -86,7 +86,7 @@ namespace DotNetOutdated.Core.Services
             return projects;
         }
 
-        private void AddDependencies(TargetFramework targetFramework, LockFileTargetLibrary parentLibrary, LockFileTarget target, int level, int transitiveDepth)
+        private void AddDependencies(TargetFramework targetFramework, LockFileTargetLibrary? parentLibrary, LockFileTarget target, int level, int transitiveDepth)
         {
             if (parentLibrary?.Dependencies != null)
             {

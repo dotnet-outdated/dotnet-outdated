@@ -38,7 +38,11 @@ namespace DotNetOutdated.Core.Services
                 arguments.Add("--ignore-failed-sources");
             }
 
-            return _dotNetRunner.Run(_fileSystem.Path.GetDirectoryName(projectPath), arguments.ToArray());
+           var directoryName = _fileSystem.Path.GetDirectoryName(projectPath);
+
+           ArgumentNullException.ThrowIfNull(directoryName);
+
+            return _dotNetRunner.Run(directoryName, arguments.ToArray());
         }
 
         public RunStatus RemovePackage(string projectPath, string packageName)
@@ -46,7 +50,11 @@ namespace DotNetOutdated.Core.Services
            var projectName = _fileSystem.Path.GetFileName(projectPath);
            var arguments = new[] { "remove", $"\"{projectName}\"", "package", packageName };
 
-           return _dotNetRunner.Run(_fileSystem.Path.GetDirectoryName(projectPath), arguments);
+           var directoryName = _fileSystem.Path.GetDirectoryName(projectPath);
+
+           ArgumentNullException.ThrowIfNull(directoryName);
+
+           return _dotNetRunner.Run(directoryName, arguments);
         }
     }
 }

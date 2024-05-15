@@ -50,11 +50,11 @@ namespace DotNetOutdated.Core.Models
 
         public string Name { get; }
 
-        public NuGetVersion ResolvedVersion { get; }
+        public NuGetVersion? ResolvedVersion { get; }
 
         public VersionRange VersionRange { get; }
 
-        public Dependency(string name, VersionRange versionRange, NuGetVersion resolvedVersion, bool isAutoReferenced, bool isTransitive, bool isDevelopmentDependency, bool isVersionCentrallyManaged)
+        public Dependency(string name, VersionRange versionRange, NuGetVersion? resolvedVersion, bool isAutoReferenced, bool isTransitive, bool isDevelopmentDependency, bool isVersionCentrallyManaged)
         {
             Name = name;
             VersionRange = versionRange;

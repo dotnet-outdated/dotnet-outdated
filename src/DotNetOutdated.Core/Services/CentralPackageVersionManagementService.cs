@@ -26,12 +26,12 @@ namespace DotNetOutdated.Core.Services
             {
                 IFileInfo projectFile = _fileSystem.FileInfo.New(projectFilePath);
                 bool foundCPVMFile = false;
-                IDirectoryInfo directoryInfo = projectFile.Directory;
+                IDirectoryInfo? directoryInfo = projectFile.Directory;
 
                 while (!foundCPVMFile && directoryInfo != null)
                 {
                     IFileInfo[] files = directoryInfo.GetFiles("*", SearchOption.TopDirectoryOnly);
-                    IFileInfo cpvmFile = files.SingleOrDefault(f => f.Name.Equals("Directory.Packages.Props", StringComparison.OrdinalIgnoreCase));
+                    IFileInfo? cpvmFile = files.SingleOrDefault(f => f.Name.Equals("Directory.Packages.Props", StringComparison.OrdinalIgnoreCase));
 
                     if (cpvmFile != null)
                     {

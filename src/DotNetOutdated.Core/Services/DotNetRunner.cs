@@ -77,7 +77,7 @@ namespace DotNetOutdated.Core.Services
         {
             await Task.Yield();
 
-            string line;
+            string? line;
             while ((line = await reader.ReadLineAsync().ConfigureAwait(false)) != null)
             {
                 lock (timeSinceLastOutput) {

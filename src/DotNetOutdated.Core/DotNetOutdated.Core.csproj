@@ -3,6 +3,7 @@
   <PropertyGroup>
     <TargetFrameworks>net6.0;net7.0;net8.0</TargetFrameworks>
     <IsPackable>true</IsPackable>
+    <Nullable>enable</Nullable>
     <PackageTags>dotnet;outdated;core;lib</PackageTags>
     <Description>The core functionality of DotNet Outdated as a library which allows you to embed it into your own applications</Description>
     <Authors>dotnet-outdated Team &amp; Contributors</Authors>

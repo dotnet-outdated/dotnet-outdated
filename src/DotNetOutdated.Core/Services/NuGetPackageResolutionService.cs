@@ -18,7 +18,7 @@ namespace DotNetOutdated.Core.Services
             _nugetService = nugetService;
         }
 
-        public async Task<NuGetVersion> ResolvePackageVersions(
+        public async Task<NuGetVersion?> ResolvePackageVersions(
             string packageName,
             NuGetVersion referencedVersion,
             IEnumerable<Uri> sources,
@@ -44,7 +44,7 @@ namespace DotNetOutdated.Core.Services
                 0).ConfigureAwait(false);
         }
 
-        public async Task<NuGetVersion> ResolvePackageVersions(
+        public async Task<NuGetVersion?> ResolvePackageVersions(
             string packageName,
             NuGetVersion referencedVersion,
             IEnumerable<Uri> sources,
@@ -98,7 +98,7 @@ namespace DotNetOutdated.Core.Services
             var latestVersionRange = new VersionRange(currentVersionRange, new FloatRange(floatingBehaviour, referencedVersion, releasePrefix));
 
             // Use new version range to determine latest version
-            NuGetVersion latestVersion = latestVersionRange.FindBestMatch(allVersions);
+            NuGetVersion? latestVersion = latestVersionRange.FindBestMatch(allVersions);
 
             return latestVersion;
         }

@@ -38,7 +38,11 @@ namespace DotNetOutdated.Core.Services
                 $"/p:RestoreGraphOutputPath=\"{dgOutput}\"",
             ];
 
-            var runStatus = _dotNetRunner.Run(_fileSystem.Path.GetDirectoryName(projectPath), arguments);
+            var directoryName = _fileSystem.Path.GetDirectoryName(projectPath);
+
+            ArgumentNullException.ThrowIfNull(directoryName);
+
+            var runStatus = _dotNetRunner.Run(directoryName, arguments);
 
             if (runStatus.IsSuccess)
             {
