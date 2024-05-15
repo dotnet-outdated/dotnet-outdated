@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -212,7 +212,7 @@ namespace DotNetOutdated
                }
 
                // Output report file
-               GenerateOutputFile(outdatedProjects);
+               await GenerateOutputFile(outdatedProjects);
 
                if (FailOnUpdates)
                   return 2;
@@ -556,23 +556,25 @@ namespace DotNetOutdated
          };
       }
 
-      private void GenerateOutputFile(List<AnalyzedProject> projects)
+      private async Task GenerateOutputFile(List<AnalyzedProject> projects)
       {
          if (OutputFilename != null)
          {
             Console.WriteLine();
             Console.WriteLine($"Generating {OutputFileFormat.ToString().ToUpperInvariant()} report...");
-            using var stream = _fileSystem.File.Create(OutputFilename);
-            using var sw = new StreamWriter(stream);
-            IOutputFormatter formatter = OutputFileFormat switch
+            var sw = _fileSystem.File.CreateText(OutputFilename);
+            await using (sw.ConfigureAwait(false))
             {
-               OutputFormat.Csv => new Formatters.CsvFormatter(),
-               OutputFormat.Markdown => new Formatters.MarkdownFormatter(),
-               _ => new Formatters.JsonFormatter(),
-            };
-            formatter.Format(projects, sw);
-            Console.WriteLine($"Report written to {OutputFilename}");
-            Console.WriteLine();
+               IOutputFormatter formatter = OutputFileFormat switch
+               {
+                  OutputFormat.Csv => new Formatters.CsvFormatter(),
+                  OutputFormat.Markdown => new Formatters.MarkdownFormatter(),
+                  _ => new Formatters.JsonFormatter(),
+               };
+               await formatter.FormatAsync(projects, sw).ConfigureAwait(false);
+               Console.WriteLine($"Report written to {OutputFilename}");
+               Console.WriteLine();
+            }
          }
       }
 

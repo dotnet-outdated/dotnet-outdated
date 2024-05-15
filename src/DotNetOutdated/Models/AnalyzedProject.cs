@@ -105,4 +105,14 @@ namespace DotNetOutdated.Models
             LatestVersion = latestVersion;
         }
     }
+
+    public class CsvDependency
+    {
+        public string ProjectName { get; set; }
+        public string TargetFrameworkName { get; set; }
+        public string DependencyName { get; set; }
+        public string ResolvedVersion { get; set; }
+        public string LatestVersion { get; set; }
+        public string UpgradeSeverity { get; set; }
+    }
 }
