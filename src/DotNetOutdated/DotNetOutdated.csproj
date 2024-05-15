@@ -5,6 +5,7 @@
     <TargetFrameworks>net6.0;net7.0;net8.0</TargetFrameworks>
     <IsPackable>true</IsPackable>
     <PackAsTool>true</PackAsTool>
+    <Nullable>enable</Nullable>
     <ToolCommandName>dotnet-outdated</ToolCommandName>
     <AssemblyName>dotnet-outdated</AssemblyName>
     <Authors>dotnet-outdated Team &amp; Contributors</Authors>

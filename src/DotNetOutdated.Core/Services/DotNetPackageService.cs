@@ -16,17 +16,17 @@ namespace DotNetOutdated.Core.Services
             _fileSystem = fileSystem;
         }
 
-        public RunStatus AddPackage(string projectPath, string packageName, string frameworkName, NuGetVersion version)
+        public RunStatus AddPackage(string? projectPath, string? packageName, string frameworkName, NuGetVersion? version)
         {
             return AddPackage(projectPath, packageName, frameworkName, version, false);
         }
 
-        public RunStatus AddPackage(string projectPath, string packageName, string frameworkName, NuGetVersion version, bool noRestore, bool ignoreFailedSources = false)
+        public RunStatus AddPackage(string? projectPath, string? packageName, string? frameworkName, NuGetVersion? version, bool noRestore, bool ignoreFailedSources = false)
         {
-            if (version == null)
-                throw new ArgumentNullException(nameof(version));
+            ArgumentNullException.ThrowIfNull(version);
+            ArgumentNullException.ThrowIfNull(packageName);
 
-            string projectName = _fileSystem.Path.GetFileName(projectPath);
+            string? projectName = _fileSystem.Path.GetFileName(projectPath);
 
             List<string> arguments = new List<string> { "add", $"\"{projectName}\"", "package", packageName, "-v", version.ToString(), "-f", $"\"{frameworkName}\"" };
             if (noRestore)
@@ -38,23 +38,25 @@ namespace DotNetOutdated.Core.Services
                 arguments.Add("--ignore-failed-sources");
             }
 
-           var directoryName = _fileSystem.Path.GetDirectoryName(projectPath);
+            var directoryName = _fileSystem.Path.GetDirectoryName(projectPath);
 
-           ArgumentNullException.ThrowIfNull(directoryName);
+            ArgumentNullException.ThrowIfNull(directoryName);
 
             return _dotNetRunner.Run(directoryName, arguments.ToArray());
         }
 
-        public RunStatus RemovePackage(string projectPath, string packageName)
+        public RunStatus RemovePackage(string? projectPath, string? packageName)
         {
-           var projectName = _fileSystem.Path.GetFileName(projectPath);
-           var arguments = new[] { "remove", $"\"{projectName}\"", "package", packageName };
+            ArgumentNullException.ThrowIfNull(packageName);
 
-           var directoryName = _fileSystem.Path.GetDirectoryName(projectPath);
+            var projectName = _fileSystem.Path.GetFileName(projectPath);
+            var arguments = new[] { "remove", $"\"{projectName}\"", "package", packageName };
 
-           ArgumentNullException.ThrowIfNull(directoryName);
+            var directoryName = _fileSystem.Path.GetDirectoryName(projectPath);
 
-           return _dotNetRunner.Run(directoryName, arguments);
+            ArgumentNullException.ThrowIfNull(directoryName);
+
+            return _dotNetRunner.Run(directoryName, arguments);
         }
     }
 }

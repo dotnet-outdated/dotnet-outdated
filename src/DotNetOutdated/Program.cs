@@ -44,7 +44,7 @@ namespace DotNetOutdated
 
       [Argument(0, Description = "The path to a .sln, .slnf, .csproj or .fsproj file, or to a directory containing a .NET Core solution/project. " +
                                  "If none is specified, the current directory will be used.")]
-      public string Path { get; set; }
+      public string? Path { get; set; }
 
       [Option(CommandOptionType.SingleValue, Description = "Specifies whether to look for pre-release versions of packages. " +
                                                            "Possible values: Auto (default), Always or Never.",
@@ -85,7 +85,7 @@ namespace DotNetOutdated
       [Option(CommandOptionType.SingleValue, Description = "Specifies the filename for a generated report. " +
                                                            "(Use the -of|--output-format option to specify the format. JSON by default.)",
           ShortName = "o", LongName = "output")]
-      public string OutputFilename { get; set; } = null;
+      public string? OutputFilename { get; set; } = null;
 
       [Option(CommandOptionType.SingleValue, Description = "Specifies the output format for the generated report. " +
                                                            "Possible values: json (default) or csv.",
@@ -120,7 +120,7 @@ namespace DotNetOutdated
       {
          using var services = new ServiceCollection()
                  .AddSingleton<IConsole>(PhysicalConsole.Singleton)
-                 .AddSingleton<IReporter>(provider => new ConsoleReporter(provider.GetService<IConsole>()))
+                 .AddSingleton<IReporter>(provider => new ConsoleReporter(provider.GetRequiredService<IConsole>()))
                  .AddSingleton<IFileSystem, FileSystem>()
                  .AddSingleton<IProjectDiscoveryService, ProjectDiscoveryService>()
                  .AddSingleton<IProjectAnalysisService, ProjectAnalysisService>()
@@ -143,8 +143,8 @@ namespace DotNetOutdated
 
       public static string GetVersion() => typeof(Program)
           .Assembly
-          .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
-          .InformationalVersion;
+          .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
+          .InformationalVersion ?? throw new ArgumentNullException(nameof(GetVersion));
 
       public Program(IFileSystem fileSystem, IReporter reporter, INuGetPackageResolutionService nugetService, IProjectAnalysisService projectAnalysisService,
           IProjectDiscoveryService projectDiscoveryService, IDotNetPackageService dotNetPackageService, ICentralPackageVersionManagementService centralPackageVersionManagementService)
@@ -187,7 +187,7 @@ namespace DotNetOutdated
             console.Write("Analyzing project(s)...");
 
             var projectLists = await Task.WhenAll(projectPaths.Select(path => _projectAnalysisService.AnalyzeProjectAsync(path, false, Transitive, TransitiveDepth)));
-            var projects = projectLists.SelectMany(p => p).ToList();
+            var projects = projectLists.Where(p => p != null).SelectMany(p => p!).ToList();
 
             if (!console.IsOutputRedirected)
                ClearCurrentConsoleLine();
@@ -278,7 +278,7 @@ namespace DotNetOutdated
 
                foreach (var project in package.Projects)
                {
-                  RunStatus status = null;
+                  RunStatus? status = null;
 
                   if (!project.IsProjectSdkStyle())
                   {
@@ -289,7 +289,7 @@ namespace DotNetOutdated
                   if (status is null || status.IsSuccess)
                      status = package.IsVersionCentrallyManaged
                         ? _centralPackageVersionManagementService.AddPackage(project.ProjectFilePath, package.Name, package.LatestVersion, NoRestore)
-                        : _dotNetPackageService.AddPackage(project.ProjectFilePath, package.Name, project.Framework.ToString(), package.LatestVersion, NoRestore, IgnoreFailedSources);
+                        : _dotNetPackageService.AddPackage(project.ProjectFilePath, package.Name, project.Framework?.ToString(), package.LatestVersion, NoRestore, IgnoreFailedSources);
 
                   if (status.IsSuccess)
                   {
@@ -325,7 +325,7 @@ namespace DotNetOutdated
          console.WriteLine(": Patch version update. Backwards-compatible bug fixes.");
       }
 
-      public static void WriteColoredUpgrade(DependencyUpgradeSeverity? upgradeSeverity, NuGetVersion resolvedVersion, NuGetVersion latestVersion, int resolvedWidth, int latestWidth, IConsole console)
+      public static void WriteColoredUpgrade(DependencyUpgradeSeverity? upgradeSeverity, NuGetVersion? resolvedVersion, NuGetVersion? latestVersion, int resolvedWidth, int latestWidth, IConsole console)
       {
          console.Write((resolvedVersion?.ToString() ?? "").PadRight(resolvedWidth));
          console.Write(resolvedVersion?.Equals(latestVersion) ?? false ? " == " : " -> ");
@@ -379,7 +379,10 @@ namespace DotNetOutdated
                foreach (var dependency in dependencies)
                {
                   console.WriteIndent();
-                  console.Write(dependency.Description?.PadRight(columnWidths[0] + 2));
+
+                  var description = dependency.Description.PadRight(columnWidths[0] + 2);
+
+                  console.Write(description);
 
                   WriteColoredUpgrade(dependency.UpgradeSeverity, dependency.ResolvedVersion, dependency.LatestVersion, columnWidths[1], columnWidths[2], console);
 
@@ -496,14 +499,14 @@ namespace DotNetOutdated
 
       private async Task AddOutdatedDependencyIfNeeded(Project project, TargetFramework targetFramework, Dependency dependency, ConcurrentBag<AnalyzedDependency> outdatedDependencies)
       {
-         var referencedVersion = dependency.ResolvedVersion;
-         NuGetVersion latestVersion = null;
+         var resolvedVersion = dependency.ResolvedVersion;
+         NuGetVersion? latestVersion = null;
 
-         if (referencedVersion != null)
+         if (resolvedVersion != null)
          {
             latestVersion = await _nugetService.ResolvePackageVersions(
                 dependency.Name,
-                referencedVersion,
+                resolvedVersion,
                 project.Sources,
                 dependency.VersionRange,
                 VersionLock,
@@ -516,14 +519,14 @@ namespace DotNetOutdated
                 IgnoreFailedSources).ConfigureAwait(false);
          }
 
-         if (referencedVersion == null || latestVersion == null || referencedVersion != latestVersion || IncludeUpToDate)
+         if (resolvedVersion == null || latestVersion == null || resolvedVersion != latestVersion || IncludeUpToDate)
          {
             // special case when there is version installed which is not older than "OlderThan" days makes "latestVersion" to be null
             if (OlderThanDays > 0 && latestVersion == null)
             {
-               NuGetVersion absoluteLatestVersion = await _nugetService.ResolvePackageVersions(
+               NuGetVersion? absoluteLatestVersion = await _nugetService.ResolvePackageVersions(
                    dependency.Name,
-                   referencedVersion,
+                   resolvedVersion,
                    project.Sources,
                    dependency.VersionRange,
                    VersionLock,
@@ -533,7 +536,7 @@ namespace DotNetOutdated
                    project.FilePath,
                    dependency.IsDevelopmentDependency).ConfigureAwait(false);
 
-               if (absoluteLatestVersion == null || referencedVersion > absoluteLatestVersion)
+               if (absoluteLatestVersion == null || dependency.ResolvedVersionOrDefault > absoluteLatestVersion)
                {
                   outdatedDependencies.Add(new AnalyzedDependency(dependency, latestVersion));
                }

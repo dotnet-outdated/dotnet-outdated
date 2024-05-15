@@ -10,7 +10,7 @@ namespace DotNetOutdated
         {
             get
             {
-                string title = Name;
+                string title = Name ?? "[blank name]";
 
                 if (IsAutoReferenced)
                     title += " [A]";
@@ -27,13 +27,13 @@ namespace DotNetOutdated
 
         public bool IsVersionCentrallyManaged { get; set; }
 
-        public NuGetVersion LatestVersion { get; set; }
+        public NuGetVersion? LatestVersion { get; set; }
 
-        public string Name { get; set; }
+        public string? Name { get; set; }
 
         public List<PackageProjectReference> Projects { get; set; } = new();
 
-        public NuGetVersion ResolvedVersion { get; set; }
+        public NuGetVersion? ResolvedVersion { get; set; }
 
         public DependencyUpgradeSeverity? UpgradeSeverity { get; set; }
     }

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Xml.Linq;
 using DotNetOutdated.Models;
+using NuGet.Versioning;
 
 namespace DotNetOutdated
 {
@@ -14,7 +15,7 @@ namespace DotNetOutdated
             var outdated = from p in projects
                            from f in p.TargetFrameworks
                            from d in f.Dependencies
-                           where d.LatestVersion > d.ResolvedVersion
+                           where d.LatestVersionOrDefault > d.ResolvedVersionOrDefault
                            select new
                            {
                                Project = p.Name,
@@ -49,10 +50,9 @@ namespace DotNetOutdated
                     IsAutoReferenced = gp.Key.IsAutoReferenced,
                     IsVersionCentrallyManaged = gp.Key.IsVersionCentrallyManaged,
                     UpgradeSeverity = gp.Key.UpgradeSeverity,
-                    Projects = gp.Select(v => new PackageProjectReference
+                    Projects = gp.Select(v => new PackageProjectReference(v.ProjectFilePath)
                     {
                         Project = v.Project,
-                        ProjectFilePath = v.ProjectFilePath,
                         Framework = v.TargetFramework
                     }).ToList()
                 })

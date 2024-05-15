@@ -20,7 +20,7 @@ namespace DotNetOutdated.Core.Services
 
         public async Task<NuGetVersion?> ResolvePackageVersions(
             string packageName,
-            NuGetVersion referencedVersion,
+            NuGetVersion? referencedVersion,
             IEnumerable<Uri> sources,
             VersionRange currentVersionRange,
             VersionLock versionLock,
@@ -46,7 +46,7 @@ namespace DotNetOutdated.Core.Services
 
         public async Task<NuGetVersion?> ResolvePackageVersions(
             string packageName,
-            NuGetVersion referencedVersion,
+            NuGetVersion? referencedVersion,
             IEnumerable<Uri> sources,
             VersionRange currentVersionRange,
             VersionLock versionLock,

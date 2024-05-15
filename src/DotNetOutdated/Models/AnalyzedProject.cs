@@ -41,6 +41,10 @@ namespace DotNetOutdated.Models
 
     public class AnalyzedDependency
     {
+        private static readonly NuGetVersion Min = new(0, 0, 0);
+
+        private static readonly NuGetVersion Max = new(int.MaxValue, int.MaxValue, int.MaxValue);
+
         private readonly Dependency _dependency;
 
         [JsonIgnore]
@@ -71,10 +75,14 @@ namespace DotNetOutdated.Models
         public string Name => _dependency.Name;
 
         [JsonConverter(typeof(ToStringJsonConverter))]
-        public NuGetVersion ResolvedVersion => _dependency.ResolvedVersion;
+        public NuGetVersion? ResolvedVersion => _dependency.ResolvedVersion;
 
         [JsonConverter(typeof(ToStringJsonConverter))]
-        public NuGetVersion LatestVersion { get; set; }
+        public NuGetVersion? LatestVersion { get; set; }
+
+        public NuGetVersion LatestVersionOrDefault => LatestVersion ?? Max;
+
+        public NuGetVersion ResolvedVersionOrDefault => ResolvedVersion ?? Min;
 
         [JsonConverter(typeof(JsonStringEnumConverter))]
         public DependencyUpgradeSeverity UpgradeSeverity
@@ -100,7 +108,7 @@ namespace DotNetOutdated.Models
             _dependency = dependency;
         }
 
-        public AnalyzedDependency(Dependency dependency, NuGetVersion latestVersion) : this(dependency)
+        public AnalyzedDependency(Dependency dependency, NuGetVersion? latestVersion) : this(dependency)
         {
             LatestVersion = latestVersion;
         }

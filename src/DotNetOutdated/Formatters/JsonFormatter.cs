@@ -11,18 +11,15 @@ internal class JsonFormatter : IOutputFormatter
 {
     public void Format(IReadOnlyList<AnalyzedProject> projects, TextWriter writer)
     {
-        var report = new Report
-        {
-            Projects = projects
-        };
+        var report = new Report(projects);
         JsonSerializer serializer = JsonSerializer.CreateDefault(default);
         serializer.Formatting = Formatting.Indented;
         serializer.Serialize(writer, report);
     }
 
-    private class Report
+    private class Report(IReadOnlyList<AnalyzedProject> projects)
     {
-        public IReadOnlyList<AnalyzedProject> Projects { get; set; }
+        public IReadOnlyList<AnalyzedProject> Projects { get; set; } = projects;
 
         internal static string GetTextReportLine(AnalyzedProject project, AnalyzedTargetFramework targetFramework, AnalyzedDependency dependency)
         {

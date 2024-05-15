@@ -40,6 +40,8 @@ namespace DotNetOutdated.Core.Models
 
     public class Dependency
     {
+        private static readonly NuGetVersion Min = new(0, 0, 0);
+
         public bool IsAutoReferenced { get; }
 
         public bool IsDevelopmentDependency { get; }
@@ -51,6 +53,8 @@ namespace DotNetOutdated.Core.Models
         public string Name { get; }
 
         public NuGetVersion? ResolvedVersion { get; }
+
+        public NuGetVersion ResolvedVersionOrDefault => ResolvedVersion ?? Min;
 
         public VersionRange VersionRange { get; }
 
