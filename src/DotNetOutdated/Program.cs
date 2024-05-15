@@ -116,9 +116,9 @@ namespace DotNetOutdated
           ShortName = "prl", LongName = "pre-release-label")]
       public string PrereleaseLabel { get; set; } = string.Empty;
 
-      public static int Main(string[] args)
+      public static async Task<int> Main(string[] args)
       {
-         using var services = new ServiceCollection()
+         var services = new ServiceCollection()
                  .AddSingleton<IConsole>(PhysicalConsole.Singleton)
                  .AddSingleton<IReporter>(provider => new ConsoleReporter(provider.GetService<IConsole>()))
                  .AddSingleton<IFileSystem, FileSystem>()
@@ -133,12 +133,15 @@ namespace DotNetOutdated
                  .AddSingleton<ICentralPackageVersionManagementService, CentralPackageVersionManagementService>()
                  .BuildServiceProvider();
 
-         using var app = new CommandLineApplication<Program>();
-         app.Conventions
-             .UseDefaultConventions()
-             .UseConstructorInjection(services);
+         await using (services.ConfigureAwait(false))
+         {
+            using var app = new CommandLineApplication<Program>();
+            app.Conventions
+               .UseDefaultConventions()
+               .UseConstructorInjection(services);
 
-         return app.Execute(args);
+            return app.Execute(args);
+         }
       }
 
       public static string GetVersion() => typeof(Program)

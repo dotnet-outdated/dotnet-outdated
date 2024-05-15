@@ -17,7 +17,8 @@ namespace DotNetOutdated.Services
     {
         public async Task WriteReport(string filename, List<Project> projects)
         {
-            using (FileStream createStream = File.Create(filename))
+            var createStream = File.Create(filename);
+            await using (createStream.ConfigureAwait(false))
             {
                 await JsonSerializer.SerializeAsync(createStream, projects).ConfigureAwait(false);
             }

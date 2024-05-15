@@ -2,6 +2,7 @@
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Threading.Tasks;
 using Xunit;
 
 namespace DotNetOutdated.Tests;
@@ -12,7 +13,7 @@ public static class EndToEndTests
     [InlineData("build-props")]
     [InlineData("development-dependencies")]
     [InlineData("multi-target", Skip = "Fails on Windows in GitHub Actions for some reason.")]
-    public static void Can_Upgrade_Project(string name)
+    public static async Task Can_Upgrade_Project(string name)
     {
         var solutionRoot = typeof(EndToEndTests).Assembly
             .GetCustomAttributes<AssemblyMetadataAttribute>().First((p) => p.Key is "SolutionRoot")
@@ -28,7 +29,7 @@ public static class EndToEndTests
             File.Copy(source, destination);
         }
 
-        var actual = Program.Main([projectPath]);
+        var actual = await Program.Main([projectPath]);
         Assert.Equal(0, actual);
     }
 
