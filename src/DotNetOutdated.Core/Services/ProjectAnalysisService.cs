@@ -26,7 +26,7 @@ namespace DotNetOutdated.Core.Services
 
         public async Task<List<Project>> AnalyzeProjectAsync(string projectPath, bool runRestore, bool includeTransitiveDependencies, int transitiveDepth)
         {
-            var dependencyGraph = await _dependencyGraphService.GenerateDependencyGraphAsync(projectPath);
+            var dependencyGraph = await _dependencyGraphService.GenerateDependencyGraphAsync(projectPath).ConfigureAwait(false);
             if (dependencyGraph == null)
                 return null;
 

@@ -19,7 +19,7 @@ namespace DotNetOutdated.Services
         {
             using (FileStream createStream = File.Create(filename))
             {
-                await JsonSerializer.SerializeAsync(createStream, projects);
+                await JsonSerializer.SerializeAsync(createStream, projects).ConfigureAwait(false);
             }
         }
     }
