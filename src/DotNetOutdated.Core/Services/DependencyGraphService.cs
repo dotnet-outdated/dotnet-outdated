@@ -33,7 +33,7 @@ namespace DotNetOutdated.Core.Services
                 "msbuild",
                 $"\"{projectPath}\"",
                 "/p:NoWarn=NU1605",
-                "/p:NuGetAudit=false",
+                "/p:TreatWarningsAsErrors=false",
                 "/t:Restore,GenerateRestoreGraphFile",
                 $"/p:RestoreGraphOutputPath=\"{dgOutput}\"",
             ];
