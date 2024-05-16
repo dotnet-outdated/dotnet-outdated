@@ -2,6 +2,7 @@
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text;
 using Xunit;
 
 namespace DotNetOutdated.Tests;
@@ -57,7 +58,9 @@ public class EndToEndTests : IDisposable
         foreach (var source in Directory.GetFiles(projectPath, "*", SearchOption.TopDirectoryOnly))
         {
             string destination = Path.Combine(_tempDirectory.Path, Path.GetFileName(source));
-            File.Copy(source, destination);
+            // Copy the file as UTF-8
+            var fileContent = File.ReadAllText(source, Encoding.UTF8);
+            File.WriteAllText(destination, fileContent, Encoding.UTF8);
         }
     }
 
