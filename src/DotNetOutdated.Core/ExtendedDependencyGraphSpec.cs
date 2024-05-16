@@ -14,7 +14,8 @@ namespace DotNetOutdated
             {
                 foreach (var project in projects.EnumerateObject())
                 {
-                    var packageSpec = JsonPackageSpecReader.GetPackageSpec(project.Value.GetRawText(), project.Name, project.Name);
+                    var projectName = project.Value.GetProperty("restore").GetProperty("projectName").GetString();
+                    var packageSpec = JsonPackageSpecReader.GetPackageSpec(project.Value.GetRawText(), projectName, project.Name);
                     this.AddProject(packageSpec);
                     this.AddRestore(packageSpec.RestoreMetadata.ProjectUniqueName);
                 }
