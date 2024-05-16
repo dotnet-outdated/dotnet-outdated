@@ -124,13 +124,13 @@ namespace DotNetOutdated.Models
         }
     }
 
-    public class CsvDependency
+    public class CsvDependency(string projectName, string targetFrameworkName, string dependencyName)
     {
-        public string ProjectName { get; set; }
-        public string TargetFrameworkName { get; set; }
-        public string DependencyName { get; set; }
-        public string ResolvedVersion { get; set; }
-        public string LatestVersion { get; set; }
-        public string UpgradeSeverity { get; set; }
+        public string ProjectName { get; set; } = projectName;
+        public string TargetFrameworkName { get; set; } = targetFrameworkName;
+        public string DependencyName { get; set; } = dependencyName;
+        public string? ResolvedVersion { get; set; }
+        public string? LatestVersion { get; set; }
+        public string? UpgradeSeverity { get; set; }
     }
 }
