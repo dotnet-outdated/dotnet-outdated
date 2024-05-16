@@ -2,7 +2,6 @@
 using System.Linq;
 using DotNetOutdated.Core.Models;
 using DotNetOutdated.Services;
-using System.Text.Json;
 using System.Text.Json.Serialization;
 using NuGet.Frameworks;
 using NuGet.Versioning;
@@ -11,10 +10,13 @@ namespace DotNetOutdated.Models
 {
     public class AnalyzedProject
     {
+        [JsonPropertyOrder(2)]
         public IReadOnlyList<AnalyzedTargetFramework> TargetFrameworks { get; }
 
+        [JsonPropertyOrder(0)]
         public string Name { get; set; }
 
+        [JsonPropertyOrder(1)]
         public string FilePath { get; set; }
 
         public AnalyzedProject(string name, string filePath, IEnumerable<AnalyzedTargetFramework> targetFrameworks)
@@ -27,8 +29,10 @@ namespace DotNetOutdated.Models
 
     public class AnalyzedTargetFramework
     {
+        [JsonPropertyOrder(1)]
         public IReadOnlyList<AnalyzedDependency> Dependencies { get; }
 
+        [JsonPropertyOrder(0)]
         [JsonConverter(typeof(ToStringJsonConverter))]
         public NuGetFramework Name { get; set; }
 
@@ -72,11 +76,14 @@ namespace DotNetOutdated.Models
         [JsonIgnore]
         public bool IsVersionCentrallyManaged => _dependency.IsVersionCentrallyManaged;
 
+        [JsonPropertyOrder(0)]
         public string Name => _dependency.Name;
 
+        [JsonPropertyOrder(1)]
         [JsonConverter(typeof(ToStringJsonConverter))]
         public NuGetVersion? ResolvedVersion => _dependency.ResolvedVersion;
 
+        [JsonPropertyOrder(2)]
         [JsonConverter(typeof(ToStringJsonConverter))]
         public NuGetVersion? LatestVersion { get; set; }
 
@@ -84,6 +91,7 @@ namespace DotNetOutdated.Models
 
         public NuGetVersion ResolvedVersionOrDefault => ResolvedVersion ?? Min;
 
+        [JsonPropertyOrder(3)]
         [JsonConverter(typeof(JsonStringEnumConverter))]
         public DependencyUpgradeSeverity UpgradeSeverity
         {
@@ -112,5 +120,15 @@ namespace DotNetOutdated.Models
         {
             LatestVersion = latestVersion;
         }
+    }
+
+    public class CsvDependency
+    {
+        public string ProjectName { get; set; }
+        public string TargetFrameworkName { get; set; }
+        public string DependencyName { get; set; }
+        public string ResolvedVersion { get; set; }
+        public string LatestVersion { get; set; }
+        public string UpgradeSeverity { get; set; }
     }
 }

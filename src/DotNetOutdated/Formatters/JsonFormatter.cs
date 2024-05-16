@@ -1,20 +1,23 @@
 ﻿using DotNetOutdated.Models;
-using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Text.Json;
+using System.Threading.Tasks;
 
 namespace DotNetOutdated.Formatters;
 
 internal class JsonFormatter : IOutputFormatter
 {
-    public void Format(IReadOnlyList<AnalyzedProject> projects, TextWriter writer)
+    private static readonly JsonSerializerOptions jsonSerializerOptions = new() { WriteIndented = true };
+
+    public async Task FormatAsync(IReadOnlyList<AnalyzedProject> projects, TextWriter writer)
     {
         var report = new Report(projects);
-        JsonSerializer serializer = JsonSerializer.CreateDefault(default);
-        serializer.Formatting = Formatting.Indented;
-        serializer.Serialize(writer, report);
+
+        var json = JsonSerializer.Serialize(report, jsonSerializerOptions);
+        await writer.WriteAsync(json).ConfigureAwait(false);
     }
 
     private class Report(IReadOnlyList<AnalyzedProject> projects)

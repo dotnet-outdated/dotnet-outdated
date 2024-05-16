@@ -12,13 +12,35 @@ public static class EndToEndTests
     [InlineData("build-props")]
     [InlineData("development-dependencies")]
     [InlineData("multi-target", Skip = "Fails on Windows in GitHub Actions for some reason.")]
-    public static void Can_Upgrade_Project(string name)
+    public static void Can_Upgrade_Project(string testProjectName)
+    {
+        var projectPath = TestSetup(testProjectName);
+
+        var actual = Program.Main([projectPath]);
+        Assert.Equal(0, actual);
+    }
+
+    [Theory]
+    [InlineData(OutputFormat.Json)]
+    [InlineData(OutputFormat.Csv)]
+    [InlineData(OutputFormat.Markdown)]
+    public static void All_Formatters_Succeed(OutputFormat format)
+    {
+        var projectPath = TestSetup("development-dependencies");
+
+        var outputPath = Path.Combine(Environment.CurrentDirectory, "output");
+
+        var actual = Program.Main([projectPath, "--output", outputPath, "--output-format", format.ToString()]);
+        Assert.Equal(0, actual);
+    }
+
+    private static string TestSetup(string testProjectName)
     {
         var solutionRoot = typeof(EndToEndTests).Assembly
             .GetCustomAttributes<AssemblyMetadataAttribute>().First((p) => p.Key is "SolutionRoot")
             .Value;
 
-        var projectPath = Path.Combine(solutionRoot, "test-projects", name);
+        var projectPath = Path.Combine(solutionRoot, "test-projects", testProjectName);
 
         using var temp = new TemporaryDirectory();
 
@@ -28,8 +50,7 @@ public static class EndToEndTests
             File.Copy(source, destination);
         }
 
-        var actual = Program.Main([projectPath]);
-        Assert.Equal(0, actual);
+        return projectPath;
     }
 
     private sealed class TemporaryDirectory : IDisposable
