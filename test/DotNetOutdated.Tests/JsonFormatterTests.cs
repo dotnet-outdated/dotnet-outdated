@@ -20,6 +20,9 @@ public class JsonFormatterTests
       
         var stringBuilder = new StringBuilder();
         var textWriter = new StringWriter(stringBuilder);
+
+        var previewVersion = new NuGetVersion("9.0.0-preview.4.24261.1");
+        var newerPreviewVersion = new NuGetVersion("9.0.0-preview.4.24263.5");
         
         List<AnalyzedProject> analyzedProjects =
         [
@@ -27,9 +30,9 @@ public class JsonFormatterTests
             {
                 new AnalyzedTargetFramework(NuGetFramework.Parse("net9.0"), new List<AnalyzedDependency>
                 {
-                    new AnalyzedDependency(new Dependency("Microsoft.Extensions.Http.Diagnostics", new VersionRange(new NuGetVersion("9.0.0-preview.4.24261.1")), new NuGetVersion("9.0.0-preview.4.24261.1"), false, false, false, true), new NuGetVersion("9.0.0-preview.4.24263.5")),
-                    new AnalyzedDependency(new Dependency("Microsoft.Extensions.Http.Resilience", new VersionRange(new NuGetVersion("9.0.0-preview.4.24261.1")), new NuGetVersion("9.0.0-preview.4.24261.1"), false, false, false, true), new NuGetVersion("9.0.0-preview.4.24263.5")),
-                    new AnalyzedDependency(new Dependency("Microsoft.Extensions.Telemetry", new VersionRange(new NuGetVersion("9.0.0-preview.4.24261.1")), new NuGetVersion("9.0.0-preview.4.24261.1"), false, false, false, true), new NuGetVersion("9.0.0-preview.4.24263.5"))
+                    new AnalyzedDependency(new Dependency("Microsoft.Extensions.Http.Diagnostics", new VersionRange(previewVersion), previewVersion, false, false, false, true), newerPreviewVersion),
+                    new AnalyzedDependency(new Dependency("Microsoft.Extensions.Http.Resilience", new VersionRange(previewVersion), previewVersion, false, false, false, true), newerPreviewVersion),
+                    new AnalyzedDependency(new Dependency("Microsoft.Extensions.Telemetry", new VersionRange(previewVersion), previewVersion, false, false, false, true), newerPreviewVersion)
                 })
             })
         ];
