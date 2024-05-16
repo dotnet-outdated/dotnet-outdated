@@ -23,7 +23,7 @@ public class EndToEndTests : IDisposable
     [Theory]
     [InlineData("build-props")]
     [InlineData("development-dependencies")]
-    [InlineData("multi-target", Skip = "Fails on Windows in GitHub Actions for some reason.")]
+    [InlineData("multi-target")]
     public void Can_Upgrade_Project(string testProjectName)
     {
         TestSetup(testProjectName);
