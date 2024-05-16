@@ -88,7 +88,7 @@ namespace DotNetOutdated
       public string OutputFilename { get; set; } = null;
 
       [Option(CommandOptionType.SingleValue, Description = "Specifies the output format for the generated report. " +
-                                                           "Possible values: json (default), csv, or markdown. 0, 1, or 2 respectively",
+                                                           "Possible values: json (default), csv, or markdown.",
           ShortName = "of", LongName = "output-format")]
       public OutputFormat OutputFileFormat { get; set; } = OutputFormat.Json;
 
