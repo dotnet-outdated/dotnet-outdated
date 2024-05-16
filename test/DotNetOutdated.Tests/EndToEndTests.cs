@@ -14,9 +14,9 @@ public static class EndToEndTests
     [InlineData("multi-target", Skip = "Fails on Windows in GitHub Actions for some reason.")]
     public static void Can_Upgrade_Project(string testProjectName)
     {
-        var projectPath = TestSetup(testProjectName);
+        using var project = TestSetup(testProjectName);
 
-        var actual = Program.Main([projectPath]);
+        var actual = Program.Main([project.Path]);
         Assert.Equal(0, actual);
     }
 
@@ -26,15 +26,15 @@ public static class EndToEndTests
     [InlineData(OutputFormat.Markdown)]
     public static void All_Formatters_Succeed(OutputFormat format)
     {
-        var projectPath = TestSetup("development-dependencies");
+        using var project = TestSetup("development-dependencies");
 
-        var outputPath = Path.Combine(Environment.CurrentDirectory, "output");
+        var outputPath = Path.Combine(project.Path, "output");
 
-        var actual = Program.Main([projectPath, "--output", outputPath, "--output-format", format.ToString()]);
+        var actual = Program.Main([project.Path, "--output", outputPath, "--output-format", format.ToString()]);
         Assert.Equal(0, actual);
     }
 
-    private static string TestSetup(string testProjectName)
+    private static TemporaryDirectory TestSetup(string testProjectName)
     {
         var solutionRoot = typeof(EndToEndTests).Assembly
             .GetCustomAttributes<AssemblyMetadataAttribute>().First((p) => p.Key is "SolutionRoot")
@@ -42,7 +42,7 @@ public static class EndToEndTests
 
         var projectPath = Path.Combine(solutionRoot, "test-projects", testProjectName);
 
-        using var temp = new TemporaryDirectory();
+        var temp = new TemporaryDirectory();
 
         foreach (var source in Directory.GetFiles(projectPath, "*", SearchOption.TopDirectoryOnly))
         {
@@ -50,7 +50,7 @@ public static class EndToEndTests
             File.Copy(source, destination);
         }
 
-        return projectPath;
+        return temp;
     }
 
     private sealed class TemporaryDirectory : IDisposable
