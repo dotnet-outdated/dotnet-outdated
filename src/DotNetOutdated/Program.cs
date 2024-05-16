@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -88,7 +88,7 @@ namespace DotNetOutdated
       public string OutputFilename { get; set; } = null;
 
       [Option(CommandOptionType.SingleValue, Description = "Specifies the output format for the generated report. " +
-                                                           "Possible values: json (default) or csv.",
+                                                           "Possible values: json (default), csv, or markdown. 0, 1, or 2 respectively",
           ShortName = "of", LongName = "output-format")]
       public OutputFormat OutputFileFormat { get; set; } = OutputFormat.Json;
 
@@ -212,7 +212,7 @@ namespace DotNetOutdated
                }
 
                // Output report file
-               GenerateOutputFile(outdatedProjects);
+               await GenerateOutputFile(outdatedProjects);
 
                if (FailOnUpdates)
                   return 2;
@@ -556,23 +556,25 @@ namespace DotNetOutdated
          };
       }
 
-      private void GenerateOutputFile(List<AnalyzedProject> projects)
+      private async Task GenerateOutputFile(List<AnalyzedProject> projects)
       {
          if (OutputFilename != null)
          {
             Console.WriteLine();
             Console.WriteLine($"Generating {OutputFileFormat.ToString().ToUpperInvariant()} report...");
-            using var stream = _fileSystem.File.Create(OutputFilename);
-            using var sw = new StreamWriter(stream);
-            IOutputFormatter formatter = OutputFileFormat switch
+            var sw = _fileSystem.File.CreateText(OutputFilename);
+            await using (sw.ConfigureAwait(false))
             {
-               OutputFormat.Csv => new Formatters.CsvFormatter(),
-               OutputFormat.Markdown => new Formatters.MarkdownFormatter(),
-               _ => new Formatters.JsonFormatter(),
-            };
-            formatter.Format(projects, sw);
-            Console.WriteLine($"Report written to {OutputFilename}");
-            Console.WriteLine();
+               IOutputFormatter formatter = OutputFileFormat switch
+               {
+                  OutputFormat.Csv => new Formatters.CsvFormatter(),
+                  OutputFormat.Markdown => new Formatters.MarkdownFormatter(),
+                  _ => new Formatters.JsonFormatter(),
+               };
+               await formatter.FormatAsync(projects, sw).ConfigureAwait(false);
+               Console.WriteLine($"Report written to {OutputFilename}");
+               Console.WriteLine();
+            }
          }
       }
 
