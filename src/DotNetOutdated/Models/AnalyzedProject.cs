@@ -87,8 +87,10 @@ namespace DotNetOutdated.Models
         [JsonConverter(typeof(ToStringJsonConverter))]
         public NuGetVersion? LatestVersion { get; set; }
 
+        [JsonIgnore]
         public NuGetVersion LatestVersionOrDefault => LatestVersion ?? Max;
 
+        [JsonIgnore]
         public NuGetVersion ResolvedVersionOrDefault => ResolvedVersion ?? Min;
 
         [JsonPropertyOrder(3)]
