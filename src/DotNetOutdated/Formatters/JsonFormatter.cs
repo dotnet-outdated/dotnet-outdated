@@ -1,31 +1,33 @@
 ﻿using DotNetOutdated.Models;
 using McMaster.Extensions.CommandLineUtils;
-using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.IO.Abstractions;
+using System.Text.Json;
+using System.Threading.Tasks;
 
 namespace DotNetOutdated.Formatters;
 
-internal class JsonFormatter : FileFormatter
+internal class JsonFormatter(IFileSystem fileSystem, IConsole console)
+    : FileFormatter(fileSystem, console)
 {
-    public JsonFormatter(IFileSystem fileSystem, IConsole console) : base(fileSystem, console)
-    {
-    }
+    private static readonly JsonSerializerOptions jsonSerializerOptions = new() { WriteIndented = true };
 
     protected override string Extension => ".json";
 
-    protected override void Format(IReadOnlyList<AnalyzedProject> projects, IDictionary<string, string> options, TextWriter writer)
+    internal protected async override Task FormatAsync(IReadOnlyList<AnalyzedProject> projects
+        , IDictionary<string, string> options
+        , TextWriter writer)
     {
         var report = new Report
         {
             Projects = projects
         };
-        JsonSerializer serializer = JsonSerializer.CreateDefault(default);
-        serializer.Formatting = Formatting.Indented;
-        serializer.Serialize(writer, report);
+
+        var json = JsonSerializer.Serialize(report, jsonSerializerOptions);
+        await writer.WriteAsync(json).ConfigureAwait(false);
     }
 
     private class Report

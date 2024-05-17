@@ -5,11 +5,14 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Abstractions;
 using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 
 namespace DotNetOutdated.Formatters;
 
-internal class MarkdownFormatter : FileFormatter
+internal class MarkdownFormatter(IFileSystem fileSystem, IConsole console)
+    : FileFormatter(fileSystem, console)
 {
     static readonly Dictionary<DependencyUpgradeSeverity, string?> _colorMaps = new()
     {
@@ -22,73 +25,75 @@ internal class MarkdownFormatter : FileFormatter
 
     protected override string Extension => ".md";
 
-    public MarkdownFormatter(IFileSystem fileSystem, IConsole console) : base(fileSystem, console)
+    internal protected async override Task FormatAsync(IReadOnlyList<AnalyzedProject> projects
+        , IDictionary<string, string> options
+        , TextWriter writer)
     {
-    }
+        var sb = new StringBuilder();
 
-    protected override void Format(IReadOnlyList<AnalyzedProject> projects, IDictionary<string, string> options, TextWriter writer)
-    {
-        writer.WriteLine("# Outdated Packages");
-        writer.WriteLine();
+        sb.AppendLine("# Outdated Packages");
+        sb.AppendLine();
         foreach (var project in projects.OrderBy(p => p.Name))
         {
-            writer.WriteLine($"## {project.Name}");
-            writer.WriteLine();
+            sb.AppendLine($"## {project.Name}");
+            sb.AppendLine();
             foreach (var targetFramework in project.TargetFrameworks)
             {
-                writer.WriteLine($"### Target:{targetFramework.Name}");
-                writer.WriteLine();
-                writer.WriteLine("|Package|Transitive|Current|Last|Severity|");
-                writer.WriteLine("|-|-|-:|-:|-:|");
+                sb.AppendLine($"### Target:{targetFramework.Name}");
+                sb.AppendLine();
+                sb.AppendLine("|Package|Transitive|Current|Last|Severity|");
+                sb.AppendLine("|-|-|-:|-:|-:|");
                 foreach (var dependency in targetFramework.Dependencies)
                 {
-                    writer.Write('|');
-                    writer.Write(dependency.Name);
-                    writer.Write('|');
-                    writer.Write(dependency.IsTransitive.ToString());
-                    writer.Write('|');
-                    writer.Write(dependency.ResolvedVersion);
-                    writer.Write('|');
+                    sb.Append('|');
+                    sb.Append(dependency.Name);
+                    sb.Append('|');
+                    sb.Append(dependency.IsTransitive.ToString());
+                    sb.Append('|');
+                    sb.Append(dependency.ResolvedVersion);
+                    sb.Append('|');
                     if (GetFormattedLatestVersion(dependency) is { } latestVersion)
                     {
-                        writer.Write('$');
+                        sb.Append('$');
                         if (!string.IsNullOrWhiteSpace(latestVersion.matching))
                         {
-                            writer.Write(@"{\textsf{");
-                            writer.Write(latestVersion.matching);
-                            writer.Write('}');
-                            writer.Write('}');
+                            sb.Append(@"{\textsf{");
+                            sb.Append(latestVersion.matching);
+                            sb.Append('}');
+                            sb.Append('}');
                         }
                         if (!string.IsNullOrWhiteSpace(latestVersion.color))
                         {
-                            writer.Write(@"\textcolor{");
-                            writer.Write(latestVersion.color);
-                            writer.Write('}');
+                            sb.Append(@"\textcolor{");
+                            sb.Append(latestVersion.color);
+                            sb.Append('}');
                         }
                         if (!string.IsNullOrWhiteSpace(latestVersion.rest))
                         {
-                            writer.Write(@"{\textsf{");
-                            writer.Write(latestVersion.rest);
-                            writer.Write('}');
-                            writer.Write('}');
+                            sb.Append(@"{\textsf{");
+                            sb.Append(latestVersion.rest);
+                            sb.Append('}');
+                            sb.Append('}');
                         }
-                        writer.Write('$');
+                        sb.Append('$');
                     }
-                    writer.Write('|');
-                    writer.WriteLine(dependency.UpgradeSeverity);
+                    sb.Append('|');
+                    sb.AppendLine(dependency.UpgradeSeverity.ToString());
                 }
-                writer.WriteLine();
+                sb.AppendLine();
             }
         }
 
         // Note
-        writer.WriteLine("> __Note__");
-        writer.WriteLine('>');
-        writer.WriteLine("> 🔴: Major version update or pre-release version. Possible breaking changes.");
-        writer.WriteLine('>');
-        writer.WriteLine("> 🟡: Minor version update. Backwards-compatible features added.");
-        writer.WriteLine('>');
-        writer.WriteLine("> 🟢: Patch version update. Backwards-compatible bug fixes.");
+        sb.AppendLine("> __Note__");
+        sb.Append('>').AppendLine();
+        sb.AppendLine("> 🔴: Major version update or pre-release version. Possible breaking changes.");
+        sb.Append('>').AppendLine();
+        sb.AppendLine("> 🟡: Minor version update. Backwards-compatible features added.");
+        sb.Append('>').AppendLine();
+        sb.AppendLine("> 🟢: Patch version update. Backwards-compatible bug fixes.");
+
+        await writer.WriteAsync(sb).ConfigureAwait(false);
     }
 
     private static (string? color, string? matching, string? rest)? GetFormattedLatestVersion(AnalyzedDependency dependency)

@@ -1,6 +1,7 @@
 ﻿using DotNetOutdated.Models;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading.Tasks;
 
 namespace DotNetOutdated;
 
@@ -8,5 +9,5 @@ internal delegate bool OutputFormatterFactory(string name, out IOutputFormatter 
 
 internal interface IOutputFormatter
 {
-    void Format(IReadOnlyList<AnalyzedProject> projects, IDictionary<string,string> options);
+    Task FormatAsync(IReadOnlyList<AnalyzedProject> projects, IDictionary<string,string> options);
 }

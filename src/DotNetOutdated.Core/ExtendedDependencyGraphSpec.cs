@@ -1,4 +1,4 @@
-using Newtonsoft.Json.Linq;
+using System.Text.Json;
 using NuGet.ProjectModel;
 
 namespace DotNetOutdated
@@ -9,12 +9,16 @@ namespace DotNetOutdated
             : base()
         {
             // Parse the JSON and initialize the object.
-            var jObject = JObject.Parse(json);
-            foreach (var project in jObject["projects"].Children<JProperty>())
+            var jObject = JsonDocument.Parse(json).RootElement;
+            if (jObject.TryGetProperty("projects", out JsonElement projects))
             {
-                var packageSpec = JsonPackageSpecReader.GetPackageSpec(project.Value.ToString(), project.Name, project.Name);
-                this.AddProject(packageSpec);
-                this.AddRestore(packageSpec.RestoreMetadata.ProjectUniqueName);
+                foreach (var project in projects.EnumerateObject())
+                {
+                    var projectName = project.Value.GetProperty("restore").GetProperty("projectName").GetString();
+                    var packageSpec = JsonPackageSpecReader.GetPackageSpec(project.Value.GetRawText(), projectName, project.Name);
+                    this.AddProject(packageSpec);
+                    this.AddRestore(packageSpec.RestoreMetadata.ProjectUniqueName);
+                }
             }
         }
     }

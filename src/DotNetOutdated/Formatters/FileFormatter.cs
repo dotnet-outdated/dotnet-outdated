@@ -3,6 +3,7 @@ using McMaster.Extensions.CommandLineUtils;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Abstractions;
+using System.Threading.Tasks;
 
 namespace DotNetOutdated.Formatters;
 
@@ -26,7 +27,8 @@ internal abstract class FileFormatter : IOutputFormatter
     /// </summary>
     /// <param name="projects"></param>
     /// <param name="options"></param>
-    public void Format(IReadOnlyList<AnalyzedProject> projects, IDictionary<string, string> options)
+    public virtual async Task FormatAsync(IReadOnlyList<AnalyzedProject> projects
+        , IDictionary<string, string> options)
     {
         Console.WriteLine();
         Console.Write($"Generating {GetType().Name.Replace("Formatter", "", System.StringComparison.OrdinalIgnoreCase).ToLowerInvariant()} report ...");
@@ -35,7 +37,7 @@ internal abstract class FileFormatter : IOutputFormatter
             outputFile = _fileSystem.Path.ChangeExtension(outputFile, Extension);
             using var stream = _fileSystem.File.Create(outputFile);
             using var sw = new StreamWriter(stream);
-            Format(projects, options, sw);
+            await FormatAsync(projects, options, sw);
         }
         else
         {
@@ -45,7 +47,7 @@ internal abstract class FileFormatter : IOutputFormatter
         }
     }
 
-    protected abstract void Format(IReadOnlyList<AnalyzedProject> projects
+    internal protected abstract Task FormatAsync(IReadOnlyList<AnalyzedProject> projects
         , IDictionary<string, string> options
         , TextWriter writer);
 
