@@ -28,7 +28,14 @@ public static class EndToEndTests
     {
         using var project = TestSetup("development-dependencies");
 
-        var outputPath = Path.Combine(project.Path, "output");
+        var outputExtension = format switch
+        {
+            OutputFormat.Json => "json",
+            OutputFormat.Csv => "csv",
+            OutputFormat.Markdown => "md",
+            _ => throw new ArgumentOutOfRangeException(nameof(format))
+        };
+        var outputPath = Path.Combine(project.Path, Path.ChangeExtension("output", outputExtension));
 
         var actual = Program.Main([project.Path, "--output", outputPath, "--output-format", format.ToString()]);
         Assert.Equal(0, actual);
