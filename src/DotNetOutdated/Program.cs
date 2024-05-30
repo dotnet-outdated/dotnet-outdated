@@ -174,7 +174,7 @@ namespace DotNetOutdated
             // Get all the projects
             console.Write("Discovering projects...");
 
-            DefaultCredentialServiceUtility.SetupDefaultCredentialService(new NuGet.Common.NullLogger(), true);
+            DefaultCredentialServiceUtility.SetupDefaultCredentialService(new SimpleProblemLogger(), true);
 
             var projectPaths = _projectDiscoveryService.DiscoverProjects(Path, Recursive);
 
