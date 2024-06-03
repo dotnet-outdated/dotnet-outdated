@@ -18,20 +18,22 @@ namespace DotNetOutdated.Core.Services
             _dotNetRestoreService = dotNetRestoreService;
         }
 
-        public RunStatus AddPackage(string projectFilePath, string packageName, NuGetVersion version, bool noRestore)
+        public RunStatus AddPackage(string? projectFilePath, string? packageName, NuGetVersion? version, bool noRestore)
         {
+            ArgumentNullException.ThrowIfNull(projectFilePath);
+
             RunStatus status = new RunStatus(string.Empty, string.Empty, 0);
 
             try
             {
                 IFileInfo projectFile = _fileSystem.FileInfo.New(projectFilePath);
                 bool foundCPVMFile = false;
-                IDirectoryInfo directoryInfo = projectFile.Directory;
+                IDirectoryInfo? directoryInfo = projectFile.Directory;
 
                 while (!foundCPVMFile && directoryInfo != null)
                 {
                     IFileInfo[] files = directoryInfo.GetFiles("*", SearchOption.TopDirectoryOnly);
-                    IFileInfo cpvmFile = files.SingleOrDefault(f => f.Name.Equals("Directory.Packages.Props", StringComparison.OrdinalIgnoreCase));
+                    IFileInfo? cpvmFile = files.SingleOrDefault(f => f.Name.Equals("Directory.Packages.Props", StringComparison.OrdinalIgnoreCase));
 
                     if (cpvmFile != null)
                     {

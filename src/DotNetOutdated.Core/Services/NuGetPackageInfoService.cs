@@ -17,7 +17,7 @@ namespace DotNetOutdated.Core.Services
 
     public sealed class NuGetPackageInfoService : INuGetPackageInfoService, IDisposable
     {
-        private IEnumerable<PackageSource> _enabledSources;
+        private IEnumerable<PackageSource>? _enabledSources;
         private readonly SourceCacheContext _context;
 
         private readonly ConcurrentDictionary<string, Lazy<Task<PackageMetadataResource>>> _metadataResourceRequests = new ConcurrentDictionary<string, Lazy<Task<PackageMetadataResource>>>();
@@ -42,7 +42,7 @@ namespace DotNetOutdated.Core.Services
         }
 
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "This method is supposed to fail silently")]
-        private async Task<PackageMetadataResource> FindMetadataResourceForSource(Uri source, string projectFilePath)
+        private async Task<PackageMetadataResource?> FindMetadataResourceForSource(Uri source, string projectFilePath)
         {
             try
             {

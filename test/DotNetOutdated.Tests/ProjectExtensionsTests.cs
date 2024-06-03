@@ -121,10 +121,7 @@ public static class ProjectExtensionsTests
     {
         // Arrange
         using var file = new TemporaryFile();
-        var project = new PackageProjectReference()
-        {
-            ProjectFilePath = file.Path,
-        };
+        var project = new PackageProjectReference(file.Path);
 
         await File.WriteAllTextAsync(file.Path, contents);
 

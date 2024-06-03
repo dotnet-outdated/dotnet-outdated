@@ -1,4 +1,5 @@
-﻿using System.IO.Abstractions;
+﻿using System;
+using System.IO.Abstractions;
 
 namespace DotNetOutdated.Core.Services
 {
@@ -17,7 +18,11 @@ namespace DotNetOutdated.Core.Services
         {
             string[] arguments = new[] { "restore", $"\"{projectPath}\"" };
 
-            return _dotNetRunner.Run(_fileSystem.Path.GetDirectoryName(projectPath), arguments);
+            var directoryName = _fileSystem.Path.GetDirectoryName(projectPath);
+
+            ArgumentNullException.ThrowIfNull(directoryName);
+
+            return _dotNetRunner.Run(directoryName, arguments);
         }
     }
 }

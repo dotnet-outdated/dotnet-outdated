@@ -8,9 +8,9 @@ namespace DotNetOutdated.Core.Services
 {
     public interface INuGetPackageResolutionService
     {
-        Task<NuGetVersion> ResolvePackageVersions(
+        Task<NuGetVersion?> ResolvePackageVersions(
             string packageName,
-            NuGetVersion referencedVersion,
+            NuGetVersion? referencedVersion,
             IEnumerable<Uri> sources,
             VersionRange currentVersionRange,
             VersionLock versionLock,
@@ -20,9 +20,9 @@ namespace DotNetOutdated.Core.Services
             string projectFilePath,
             bool isDevelopmentDependency);
 
-        Task<NuGetVersion> ResolvePackageVersions(
+        Task<NuGetVersion?> ResolvePackageVersions(
             string packageName,
-            NuGetVersion referencedVersion,
+            NuGetVersion? referencedVersion,
             IEnumerable<Uri> sources,
             VersionRange currentVersionRange,
             VersionLock versionLock,

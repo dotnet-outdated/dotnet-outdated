@@ -23,15 +23,17 @@ internal class CsvFormatter : IOutputFormatter
                 {
                     foreach (var dependency in targetFramework.Dependencies)
                     {
+                        var projectName = project.Name;
+                        var targetFrameworkName = targetFramework.Name.DotNetFrameworkName;
+                        var dependencyName = dependency.Name;
+                        var resolvedVersion = dependency.ResolvedVersion?.ToString();
+                        var latestVersion = dependency.LatestVersion?.ToString();
                         var upgradeSeverity = Enum.GetName(dependency.UpgradeSeverity);
 
-                        records.Add(new CsvDependency
+                        records.Add(new CsvDependency(projectName, targetFrameworkName, dependencyName)
                         {
-                            ProjectName = project.Name,
-                            TargetFrameworkName = targetFramework.Name.DotNetFrameworkName,
-                            DependencyName = dependency.Name,
-                            ResolvedVersion = dependency.ResolvedVersion?.ToString(),
-                            LatestVersion = dependency.LatestVersion?.ToString(),
+                            ResolvedVersion = resolvedVersion,
+                            LatestVersion = latestVersion,
                             UpgradeSeverity = upgradeSeverity
                         });
                     }

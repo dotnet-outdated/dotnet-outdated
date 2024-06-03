@@ -45,6 +45,10 @@ namespace DotNetOutdated.Models
 
     public class AnalyzedDependency
     {
+        private static readonly NuGetVersion Min = new(0, 0, 0);
+
+        private static readonly NuGetVersion Max = new(int.MaxValue, int.MaxValue, int.MaxValue);
+
         private readonly Dependency _dependency;
 
         [JsonIgnore]
@@ -77,11 +81,17 @@ namespace DotNetOutdated.Models
 
         [JsonPropertyOrder(1)]
         [JsonConverter(typeof(ToStringJsonConverter))]
-        public NuGetVersion ResolvedVersion => _dependency.ResolvedVersion;
+        public NuGetVersion? ResolvedVersion => _dependency.ResolvedVersion;
 
         [JsonPropertyOrder(2)]
         [JsonConverter(typeof(ToStringJsonConverter))]
-        public NuGetVersion LatestVersion { get; set; }
+        public NuGetVersion? LatestVersion { get; set; }
+
+        [JsonIgnore]
+        public NuGetVersion LatestVersionOrDefault => LatestVersion ?? Max;
+
+        [JsonIgnore]
+        public NuGetVersion ResolvedVersionOrDefault => ResolvedVersion ?? Min;
 
         [JsonPropertyOrder(3)]
         [JsonConverter(typeof(JsonStringEnumConverter))]
@@ -108,19 +118,19 @@ namespace DotNetOutdated.Models
             _dependency = dependency;
         }
 
-        public AnalyzedDependency(Dependency dependency, NuGetVersion latestVersion) : this(dependency)
+        public AnalyzedDependency(Dependency dependency, NuGetVersion? latestVersion) : this(dependency)
         {
             LatestVersion = latestVersion;
         }
     }
 
-    public class CsvDependency
+    public class CsvDependency(string projectName, string targetFrameworkName, string dependencyName)
     {
-        public string ProjectName { get; set; }
-        public string TargetFrameworkName { get; set; }
-        public string DependencyName { get; set; }
-        public string ResolvedVersion { get; set; }
-        public string LatestVersion { get; set; }
-        public string UpgradeSeverity { get; set; }
+        public string ProjectName { get; set; } = projectName;
+        public string TargetFrameworkName { get; set; } = targetFrameworkName;
+        public string DependencyName { get; set; } = dependencyName;
+        public string? ResolvedVersion { get; set; }
+        public string? LatestVersion { get; set; }
+        public string? UpgradeSeverity { get; set; }
     }
 }
