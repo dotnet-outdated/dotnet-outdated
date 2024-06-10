@@ -24,6 +24,7 @@ public static class EndToEndTests
     [Theory]
     [InlineData("development-dependencies-lock",  "", 0)]
     [InlineData("development-dependencies-lock",  "linux-x64", 0)]
+    [InlineData("development-dependencies-lock",  "windows-x64", 1)]
     public static void Can_Upgrade_Lock_Project(string testProjectName, string runtime, int expectedExitCode)
     {
         using var project = TestSetup(testProjectName);
