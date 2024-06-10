@@ -2,7 +2,6 @@
 using NuGet.ProjectModel;
 using System;
 using System.IO.Abstractions;
-using System.Text.Json;
 using System.Threading.Tasks;
 
 namespace DotNetOutdated.Core.Services
@@ -24,18 +23,20 @@ namespace DotNetOutdated.Core.Services
             _fileSystem = fileSystem;
         }
 
-        public async Task<DependencyGraphSpec> GenerateDependencyGraphAsync(string projectPath)
+        public async Task<DependencyGraphSpec> GenerateDependencyGraphAsync(string projectPath, string runtime)
         {
             var dgOutput = _fileSystem.Path.Combine(_fileSystem.Path.GetTempPath(), _fileSystem.Path.GetTempFileName());
-
+            
+            
             string[] arguments =
             [
                 "msbuild",
                 $"\"{projectPath}\"",
                 "/p:NoWarn=NU1605",
                 "/p:TreatWarningsAsErrors=false",
-                "/t:Restore,GenerateRestoreGraphFile",
+                $"/t:Restore,GenerateRestoreGraphFile",
                 $"/p:RestoreGraphOutputPath=\"{dgOutput}\"",
+                $"/p:RuntimeIdentifiers={runtime}"
             ];
 
             var runStatus = _dotNetRunner.Run(_fileSystem.Path.GetDirectoryName(projectPath), arguments);
