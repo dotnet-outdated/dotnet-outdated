@@ -5,6 +5,7 @@ using DotNetOutdated.Core.Services;
 using DotNetOutdated.Models;
 using McMaster.Extensions.CommandLineUtils;
 using Microsoft.Extensions.DependencyInjection;
+using NuGet.Common;
 using NuGet.Credentials;
 using NuGet.Versioning;
 using System;
@@ -123,7 +124,12 @@ namespace DotNetOutdated
           ShortName = "prl", LongName = "pre-release-label")]
       public string PrereleaseLabel { get; set; } = string.Empty;
 
-      public static int Main(string[] args)
+      [Option(CommandOptionType.SingleValue, Description = "Specifies the minimum level of logs for NuGet Credential Service. " +
+                                                            "Possible values: debug, verbose, information, warning (default), or error",
+          ShortName = "ncll", LongName = "nuget-cred-log-level")]
+      public LogLevel NuGetCredLogLevel { get; set; } = LogLevel.Warning;
+
+        public static int Main(string[] args)
       {
          using var services = new ServiceCollection()
                  .AddSingleton<IConsole>(PhysicalConsole.Singleton)
@@ -200,27 +206,17 @@ namespace DotNetOutdated
                Path = _fileSystem.Directory.GetCurrentDirectory();
 
             // Get all the projects
-            console.Write("Discovering projects...");
+            console.WriteLine("Discovering projects...");
 
-            DefaultCredentialServiceUtility.SetupDefaultCredentialService(new SimpleProblemLogger(), true);
+            DefaultCredentialServiceUtility.SetupDefaultCredentialService(new ConsoleLogger(console, NuGetCredLogLevel), true);
 
             var projectPaths = _projectDiscoveryService.DiscoverProjects(Path, Recursive);
 
-            if (!console.IsOutputRedirected)
-               ClearCurrentConsoleLine();
-            else
-               console.WriteLine();
-
             // Analyze the projects
-            console.Write("Analyzing project(s)...");
+            console.WriteLine("Analyzing project(s)...");
 
             var projectLists = await Task.WhenAll(projectPaths.Select(path => _projectAnalysisService.AnalyzeProjectAsync(path, false, Transitive, TransitiveDepth)));
             var projects = projectLists.SelectMany(p => p).ToList();
-
-            if (!console.IsOutputRedirected)
-               ClearCurrentConsoleLine();
-            else
-               console.WriteLine();
 
             // Analyze the dependencies
             var outdatedProjects = await AnalyzeDependencies(projects, console).ConfigureAwait(false);
@@ -440,7 +436,7 @@ namespace DotNetOutdated
       {
          var outdatedProjects = new ConcurrentBag<AnalyzedProject>();
 
-         console.Write("Analyzing dependencies...");
+         console.WriteLine("Analyzing dependencies...");
 
          var tasks = new Task[projects.Count];
 
@@ -451,11 +447,6 @@ namespace DotNetOutdated
          }
 
          await Task.WhenAll(tasks).ConfigureAwait(false);
-
-         if (!console.IsOutputRedirected)
-            ClearCurrentConsoleLine();
-         else
-            console.WriteLine();
 
          return outdatedProjects
              .OrderBy(p => p.Name)
