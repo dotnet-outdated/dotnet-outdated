@@ -1,7 +1,9 @@
 ﻿#nullable enable
 using DotNetOutdated.Models;
+using McMaster.Extensions.CommandLineUtils;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Abstractions;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -9,7 +11,8 @@ using System.Threading.Tasks;
 
 namespace DotNetOutdated.Formatters;
 
-internal class MarkdownFormatter : IOutputFormatter
+internal class MarkdownFormatter(IFileSystem fileSystem, IConsole console)
+    : FileFormatter(fileSystem, console)
 {
     static readonly Dictionary<DependencyUpgradeSeverity, string?> _colorMaps = new()
     {
@@ -20,7 +23,11 @@ internal class MarkdownFormatter : IOutputFormatter
         {DependencyUpgradeSeverity.Unknown,default},
     };
 
-    public async Task FormatAsync(IReadOnlyList<AnalyzedProject> projects, TextWriter writer)
+    protected override string Extension => ".md";
+
+    internal protected async override Task FormatAsync(IReadOnlyList<AnalyzedProject> projects
+        , IDictionary<string, string> options
+        , TextWriter writer)
     {
         var sb = new StringBuilder();
 
@@ -86,7 +93,7 @@ internal class MarkdownFormatter : IOutputFormatter
         sb.Append('>').AppendLine();
         sb.AppendLine("> 🟢: Patch version update. Backwards-compatible bug fixes.");
 
-        await writer.WriteAsync(sb.ToString()).ConfigureAwait(false);
+        await writer.WriteAsync(sb).ConfigureAwait(false);
     }
 
     private static (string? color, string? matching, string? rest)? GetFormattedLatestVersion(AnalyzedDependency dependency)
