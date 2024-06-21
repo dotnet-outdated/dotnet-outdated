@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -18,6 +19,25 @@ public static class EndToEndTests
 
         var actual = Program.Main([project.Path]);
         Assert.Equal(0, actual);
+    }
+    
+    [Theory]
+    [InlineData("development-dependencies-lock",  "", 0)]
+    [InlineData("development-dependencies-lock",  "linux-x64", 0)]
+    [InlineData("development-dependencies-lock",  "windows-x64", 1)]
+    public static void Can_Upgrade_Lock_Project(string testProjectName, string runtime, int expectedExitCode)
+    {
+        using var project = TestSetup(testProjectName);
+
+        var list = new List<string> { project.Path };
+
+        if (!string.IsNullOrEmpty(runtime))
+        {
+            list.Add($"--runtime {runtime}");
+        }
+        
+        var actual = Program.Main(list.ToArray());
+        Assert.Equal(expectedExitCode, actual);
     }
 
     [Theory]

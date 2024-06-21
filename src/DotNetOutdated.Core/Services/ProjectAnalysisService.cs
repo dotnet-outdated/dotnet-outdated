@@ -24,9 +24,9 @@ namespace DotNetOutdated.Core.Services
             _fileSystem = fileSystem;
         }
 
-        public async Task<List<Project>> AnalyzeProjectAsync(string projectPath, bool runRestore, bool includeTransitiveDependencies, int transitiveDepth)
+        public async Task<List<Project>> AnalyzeProjectAsync(string projectPath, bool runRestore, bool includeTransitiveDependencies, int transitiveDepth,  string runtime)
         {
-            var dependencyGraph = await _dependencyGraphService.GenerateDependencyGraphAsync(projectPath);
+            var dependencyGraph = await _dependencyGraphService.GenerateDependencyGraphAsync(projectPath, runtime);
             if (dependencyGraph == null)
                 return null;
 
