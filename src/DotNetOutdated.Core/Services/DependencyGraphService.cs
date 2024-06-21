@@ -32,7 +32,7 @@ namespace DotNetOutdated.Core.Services
                 $"\"{projectPath}\"",
                 "/p:NoWarn=NU1605",
                 "/p:TreatWarningsAsErrors=false",
-                $"/t:Restore,GenerateRestoreGraphFile",
+                "/t:Restore,GenerateRestoreGraphFile",
                 $"/p:RestoreGraphOutputPath=\"{dgOutput}\"",
                 $"/p:RuntimeIdentifiers={runtime}"
             ];
