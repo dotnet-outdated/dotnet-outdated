@@ -34,7 +34,8 @@ namespace DotNetOutdated.Core.Services
                 "/p:TreatWarningsAsErrors=false",
                 "/t:Restore,GenerateRestoreGraphFile",
                 $"/p:RestoreGraphOutputPath=\"{dgOutput}\"",
-                $"/p:RuntimeIdentifiers={runtime}"
+                $"/p:RuntimeIdentifiers=\"{runtime}\""
+
             ];
 
             var runStatus = _dotNetRunner.Run(_fileSystem.Path.GetDirectoryName(projectPath), arguments);
