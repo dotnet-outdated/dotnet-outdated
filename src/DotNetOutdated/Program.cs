@@ -120,7 +120,12 @@ namespace DotNetOutdated
                                                             "Possible values: debug, verbose, information, warning (default), or error",
           ShortName = "ncll", LongName = "nuget-cred-log-level")]
       public LogLevel NuGetCredLogLevel { get; set; } = LogLevel.Warning;
-
+      
+      [Option(CommandOptionType.SingleValue, Description = "Specifies an optional runtime identifier to be used during the restore target when projects are analyzed. " +
+                                                           "More information available on https://learn.microsoft.com/en-us/dotnet/core/rid-catalog",
+         ShortName = "rt", LongName = "runtime")]
+      public string Runtime { get; set; } = string.Empty;
+      
         public static int Main(string[] args)
       {
          using var services = new ServiceCollection()
@@ -186,7 +191,7 @@ namespace DotNetOutdated
             // Analyze the projects
             console.WriteLine("Analyzing project(s)...");
 
-            var projectLists = await Task.WhenAll(projectPaths.Select(path => _projectAnalysisService.AnalyzeProjectAsync(path, false, Transitive, TransitiveDepth)));
+            var projectLists = await Task.WhenAll(projectPaths.Select(path => _projectAnalysisService.AnalyzeProjectAsync(path, false, Transitive, TransitiveDepth, Runtime)));
             var projects = projectLists.SelectMany(p => p).ToList();
 
             // Analyze the dependencies
