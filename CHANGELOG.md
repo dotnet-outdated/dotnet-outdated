@@ -1,5 +1,7 @@
 # Changelog
 
+Changelogs can now be found on the [GitHub Releases page](https://github.com/dotnet-outdated/dotnet-outdated/releases).
+
 ## [v4.1.0]
 
 - Add `--ignore-failed-sources` option to treat package source failures as warnings. - Thank you [Tim Heuer](https://github.com/timheuer)

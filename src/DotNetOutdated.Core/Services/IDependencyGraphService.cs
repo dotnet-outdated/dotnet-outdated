@@ -1,9 +1,10 @@
-﻿using NuGet.ProjectModel;
+﻿using System.Threading.Tasks;
+using NuGet.ProjectModel;
 
 namespace DotNetOutdated.Core.Services
 {
     public interface IDependencyGraphService
     {
-        DependencyGraphSpec GenerateDependencyGraph(string projectPath);
+        Task<DependencyGraphSpec> GenerateDependencyGraphAsync(string projectPath, string runtime);
     }
 }

@@ -44,7 +44,7 @@ namespace DotNetOutdated.Core.Services
 
                         if (fileContent.IndexOf($"\"{packageName}\"", StringComparison.OrdinalIgnoreCase) != -1)
                         {
-                            string newFileContent = Regex.Replace(fileContent, $"(<PackageVersion\\s*(?:Include|Update)=\"{packageName}\"\\s*Version=\")([^\"]*)(\".*\\/>)", m => $"{m.Groups[1].Captures[0].Value}{version}{m.Groups[3].Captures[0].Value}");
+                            string newFileContent = Regex.Replace(fileContent, $"(<(?:PackageVersion|GlobalPackageReference)\\s*(?:Include|Update)=\"{packageName}\"\\s*Version=\")([^\"]*)(\".*\\/>)", m => $"{m.Groups[1].Captures[0].Value}{version}{m.Groups[3].Captures[0].Value}");
 
                             if (newFileContent != fileContent)
                             {

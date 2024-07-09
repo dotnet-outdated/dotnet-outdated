@@ -1,14 +1,13 @@
-﻿using NuGet.Frameworks;
-using NuGet.Versioning;
-using System;
+﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
+using NuGet.Frameworks;
+using NuGet.Versioning;
 
 namespace DotNetOutdated.Core.Services
 {
-    using System.Collections.Concurrent;
-    using System.Linq;
-
     public class NuGetPackageResolutionService : INuGetPackageResolutionService
     {
         private readonly INuGetPackageInfoService _nugetService;
@@ -19,15 +18,45 @@ namespace DotNetOutdated.Core.Services
             _nugetService = nugetService;
         }
 
-        public async Task<NuGetVersion> ResolvePackageVersions(string packageName, NuGetVersion referencedVersion, IEnumerable<Uri> sources, VersionRange currentVersionRange,
-            VersionLock versionLock, PrereleaseReporting prerelease, NuGetFramework targetFrameworkName, string projectFilePath, bool isDevelopmentDependency)
+        public async Task<NuGetVersion> ResolvePackageVersions(
+            string packageName,
+            NuGetVersion referencedVersion,
+            IEnumerable<Uri> sources,
+            VersionRange currentVersionRange,
+            VersionLock versionLock,
+            PrereleaseReporting prerelease,
+            string prereleaseLabel,
+            NuGetFramework targetFrameworkName,
+            string projectFilePath,
+            bool isDevelopmentDependency)
         {
-            return await ResolvePackageVersions(packageName, referencedVersion, sources, currentVersionRange, versionLock, prerelease, targetFrameworkName, projectFilePath,
-                isDevelopmentDependency, 0).ConfigureAwait(false);
+            return await ResolvePackageVersions(
+                packageName,
+                referencedVersion,
+                sources,
+                currentVersionRange,
+                versionLock,
+                prerelease,
+                prereleaseLabel,
+                targetFrameworkName,
+                projectFilePath,
+                isDevelopmentDependency,
+                0).ConfigureAwait(false);
         }
 
-        public async Task<NuGetVersion> ResolvePackageVersions(string packageName, NuGetVersion referencedVersion, IEnumerable<Uri> sources, VersionRange currentVersionRange,
-            VersionLock versionLock, PrereleaseReporting prerelease, NuGetFramework targetFrameworkName, string projectFilePath, bool isDevelopmentDependency, int olderThanDays, bool ignoreFailedSources = false)
+        public async Task<NuGetVersion> ResolvePackageVersions(
+            string packageName,
+            NuGetVersion referencedVersion,
+            IEnumerable<Uri> sources,
+            VersionRange currentVersionRange,
+            VersionLock versionLock,
+            PrereleaseReporting prerelease,
+            string prereleaseLabel,
+            NuGetFramework targetFrameworkName,
+            string projectFilePath,
+            bool isDevelopmentDependency,
+            int olderThanDays,
+            bool ignoreFailedSources = false)
         {
             if (referencedVersion == null)
                 throw new ArgumentNullException(nameof(referencedVersion));
@@ -54,7 +83,16 @@ namespace DotNetOutdated.Core.Services
 
             string releasePrefix = string.Empty;
             if (referencedVersion.IsPrerelease)
-                releasePrefix = referencedVersion.ReleaseLabels.First(); // TODO Not sure exactly what to do for this bit
+            {
+                if (!string.IsNullOrWhiteSpace(prereleaseLabel))
+                {
+                    releasePrefix = prereleaseLabel;
+                }
+                else
+                {
+                    releasePrefix = referencedVersion.ReleaseLabels.First();
+                }
+            }
 
             // Create a new version range for comparison
             var latestVersionRange = new VersionRange(currentVersionRange, new FloatRange(floatingBehaviour, referencedVersion, releasePrefix));
