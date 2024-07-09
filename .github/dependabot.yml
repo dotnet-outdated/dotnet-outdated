@@ -10,13 +10,12 @@ updates:
       xunit:
         patterns:
           - xunit*
-      nuget:
-        NuGet:
-          patterns:
-           - NuGet.*
-        System.IO.Abstractions:
-          patterns:
-           - System.IO.Abstractions*
+      NuGet:
+        patterns:
+         - NuGet.*
+      System.IO.Abstractions:
+        patterns:
+         - System.IO.Abstractions*
 
   - package-ecosystem: "github-actions"
     directory: "/"
