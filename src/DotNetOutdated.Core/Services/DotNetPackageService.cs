@@ -38,12 +38,12 @@ namespace DotNetOutdated.Core.Services
             return _dotNetRunner.Run(_fileSystem.Path.GetDirectoryName(projectPath), arguments.ToArray(), timeout);
         }
 
-        public RunStatus RemovePackage(string projectPath, string packageName)
+        public RunStatus RemovePackage(string projectPath, string packageName, TimeSpan timeout)
         {
            var projectName = _fileSystem.Path.GetFileName(projectPath);
            var arguments = new[] { "remove", $"\"{projectName}\"", "package", packageName };
 
-           return _dotNetRunner.Run(_fileSystem.Path.GetDirectoryName(projectPath), arguments);
+           return _dotNetRunner.Run(_fileSystem.Path.GetDirectoryName(projectPath), arguments, timeout);
         }
     }
 }
