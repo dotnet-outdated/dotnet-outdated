@@ -126,6 +126,10 @@ namespace DotNetOutdated
          ShortName = "rt", LongName = "runtime")]
       public string Runtime { get; set; } = string.Empty;
       
+      [Option(CommandOptionType.NoValue, Description = "Disable legend in command output",
+         ShortName = "dl", LongName = "disable-legend")]
+      public bool DisableLegend { get; set; } = false;
+      
         public static int Main(string[] args)
       {
          using var services = new ServiceCollection()
@@ -200,7 +204,7 @@ namespace DotNetOutdated
             if (outdatedProjects.Any())
             {
                // Report on the outdated dependencies
-               ReportOutdatedDependencies(outdatedProjects, console);
+               ReportOutdatedDependencies(outdatedProjects, console, DisableLegend);
 
                // Upgrade the packages
                var success = UpgradePackages(outdatedProjects, console);
@@ -361,7 +365,7 @@ namespace DotNetOutdated
          console.Write(rest, GetUpgradeSeverityColor(upgradeSeverity));
       }
 
-      private static void ReportOutdatedDependencies(List<AnalyzedProject> projects, IConsole console)
+      private static void ReportOutdatedDependencies(List<AnalyzedProject> projects, IConsole console, bool legendDisabled)
       {
          foreach (var project in projects)
          {
@@ -405,7 +409,10 @@ namespace DotNetOutdated
             console.WriteLine();
          }
 
-         PrintColorLegend(console);
+         if (!legendDisabled)
+         {
+            PrintColorLegend(console);
+         }
       }
 
       private async Task<List<AnalyzedProject>> AnalyzeDependencies(List<Project> projects, IConsole console)
