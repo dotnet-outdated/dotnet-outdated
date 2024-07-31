@@ -24,9 +24,9 @@ using System.Threading.Tasks;
 
 namespace DotNetOutdated
 {
-    [Command(
-       Name = "dotnet outdated",
-       FullName = "A .NET Core global tool to list outdated Nuget packages.")]
+   [Command(
+      Name = "dotnet outdated",
+      FullName = "A .NET Core global tool to list outdated Nuget packages.")]
    [VersionOptionFromMember(MemberName = nameof(GetVersion))]
    internal class Program : CommandBase
    {
@@ -120,13 +120,16 @@ namespace DotNetOutdated
                                                             "Possible values: debug, verbose, information, warning (default), or error",
           ShortName = "ncll", LongName = "nuget-cred-log-level")]
       public LogLevel NuGetCredLogLevel { get; set; } = LogLevel.Warning;
-      
+
       [Option(CommandOptionType.SingleValue, Description = "Specifies an optional runtime identifier to be used during the restore target when projects are analyzed. " +
                                                            "More information available on https://learn.microsoft.com/en-us/dotnet/core/rid-catalog",
          ShortName = "rt", LongName = "runtime")]
       public string Runtime { get; set; } = string.Empty;
-      
-        public static int Main(string[] args)
+
+      [Option(CommandOptionType.SingleValue, Description = "Specifies how many seconds each operation can run for.", ShortName = "tmo", LongName = "timeout")]
+      public int Timeout { get; set; } = 30;
+
+      public static int Main(string[] args)
       {
          using var services = new ServiceCollection()
                  .AddSingleton<IConsole>(PhysicalConsole.Singleton)
@@ -191,7 +194,8 @@ namespace DotNetOutdated
             // Analyze the projects
             console.WriteLine("Analyzing project(s)...");
 
-            var projectLists = await Task.WhenAll(projectPaths.Select(path => _projectAnalysisService.AnalyzeProjectAsync(path, false, Transitive, TransitiveDepth, Runtime)));
+            TimeSpan timeout = TimeSpan.FromSeconds(Timeout);
+            var projectLists = await Task.WhenAll(projectPaths.Select(path => _projectAnalysisService.AnalyzeProjectAsync(path, false, Transitive, TransitiveDepth, Runtime, timeout)));
             var projects = projectLists.SelectMany(p => p).ToList();
 
             // Analyze the dependencies
@@ -203,7 +207,7 @@ namespace DotNetOutdated
                ReportOutdatedDependencies(outdatedProjects, console);
 
                // Upgrade the packages
-               var success = UpgradePackages(outdatedProjects, console);
+               var success = UpgradePackages(outdatedProjects, console, timeout);
 
                if (!Upgrade.HasValue)
                {
@@ -237,7 +241,7 @@ namespace DotNetOutdated
          }
       }
 
-      private bool UpgradePackages(List<AnalyzedProject> projects, IConsole console)
+      private bool UpgradePackages(List<AnalyzedProject> projects, IConsole console, TimeSpan timeout)
       {
          bool success = true;
 
@@ -283,13 +287,13 @@ namespace DotNetOutdated
                   if (!project.IsProjectSdkStyle())
                   {
                      console.WriteLine("Project format not SDK style, removing package before upgrade.");
-                     status = _dotNetPackageService.RemovePackage(project.ProjectFilePath, package.Name);
+                     status = _dotNetPackageService.RemovePackage(project.ProjectFilePath, package.Name, timeout);
                   }
 
                   if (status is null || status.IsSuccess)
                      status = package.IsVersionCentrallyManaged
-                        ? _centralPackageVersionManagementService.AddPackage(project.ProjectFilePath, package.Name, package.LatestVersion, NoRestore)
-                        : _dotNetPackageService.AddPackage(project.ProjectFilePath, package.Name, project.Framework.ToString(), package.LatestVersion, NoRestore, IgnoreFailedSources);
+                        ? _centralPackageVersionManagementService.AddPackage(project.ProjectFilePath, package.Name, package.LatestVersion, NoRestore, timeout)
+                        : _dotNetPackageService.AddPackage(project.ProjectFilePath, package.Name, project.Framework.ToString(), package.LatestVersion, NoRestore, timeout, IgnoreFailedSources);
 
                   if (status.IsSuccess)
                   {
