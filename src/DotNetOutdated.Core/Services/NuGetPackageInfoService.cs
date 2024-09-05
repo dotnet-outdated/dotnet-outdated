@@ -35,7 +35,7 @@ namespace DotNetOutdated.Core.Services
         /// This method tells Nuget what settings to use. 
         /// 
         /// If one or more <paramref name="configFiles"/> is provided then those will be given to NuGet to use. 
-        /// If no config files are selected, then defaults with be selected using the <paramref name="root"/>
+        /// If no config files are selected, then defaults will be selected using the <paramref name="root"/>
         /// </summary>
         /// <param name="root">
         /// The file system to walk to find configuration files.
