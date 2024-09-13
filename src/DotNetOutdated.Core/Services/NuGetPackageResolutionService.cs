@@ -100,7 +100,7 @@ namespace DotNetOutdated.Core.Services
             // Use new version range to determine latest version
             NuGetVersion latestVersion = latestVersionRange.FindBestMatch(allVersions);
 
-            return latestVersion;
+            return latestVersion ?? referencedVersion;
         }
     }
 }
