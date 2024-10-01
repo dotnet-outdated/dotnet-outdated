@@ -61,6 +61,9 @@ namespace DotNetOutdated.Core.Services
             if (referencedVersion == null)
                 throw new ArgumentNullException(nameof(referencedVersion));
 
+            if (currentVersionRange.MinVersion is null)
+                throw new ArgumentException($"No minimum version specified for package {packageName}.", nameof(currentVersionRange));
+
             // Determine whether we are interested in pre-releases
             bool includePrerelease = referencedVersion.IsPrerelease;
             if (prerelease == PrereleaseReporting.Always)
