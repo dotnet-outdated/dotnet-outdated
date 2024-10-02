@@ -18,13 +18,13 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="NuGet.Configuration" Version="6.11.0" />
-    <PackageReference Include="NuGet.Credentials" Version="6.11.0" />
-    <PackageReference Include="NuGet.ProjectModel" Version="6.11.0" />
-    <PackageReference Include="NuGet.Protocol" Version="6.11.0" />
-    <PackageReference Include="NuGet.Versioning" Version="6.11.0" />
+    <PackageReference Include="NuGet.Configuration" Version="6.11.1" />
+    <PackageReference Include="NuGet.Credentials" Version="6.11.1" />
+    <PackageReference Include="NuGet.ProjectModel" Version="6.11.1" />
+    <PackageReference Include="NuGet.Protocol" Version="6.11.1" />
+    <PackageReference Include="NuGet.Versioning" Version="6.11.1" />
     <PackageReference Include="System.Formats.Asn1" Version="6.0.1" />
-	<PackageReference Include="System.IO.Abstractions" Version="21.0.29" />
+    <PackageReference Include="System.IO.Abstractions" Version="21.0.29" />
   </ItemGroup>
 
   <ItemGroup>
