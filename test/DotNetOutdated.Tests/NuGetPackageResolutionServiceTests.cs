@@ -14,6 +14,7 @@ namespace DotNetOutdated.Tests
     {
         private readonly string _packageName1 = "MyPackage";
         private readonly string _packageName2 = "YourPackage";
+        private readonly string _packageName3 = "OtherPackage";
         private readonly NuGetPackageResolutionService _nuGetPackageResolutionService;
 
         public NuGetPackageResolutionServiceTests()
@@ -58,11 +59,15 @@ namespace DotNetOutdated.Tests
                 new NuGetVersion("8.0.0-rc.2.128"),
             };
 
+            List<NuGetVersion> availableVersions3 = new();
+
             var nuGetPackageInfoService = Substitute.For<INuGetPackageInfoService>();
             nuGetPackageInfoService.GetAllVersions(_packageName1, Arg.Any<List<Uri>>(), Arg.Any<bool>(), Arg.Any<NuGetFramework>(), Arg.Any<string>(), Arg.Any<bool>(), 0, Arg.Any<bool>())
                 .Returns(availableVersions1);
             nuGetPackageInfoService.GetAllVersions(_packageName2, Arg.Any<List<Uri>>(), Arg.Any<bool>(), Arg.Any<NuGetFramework>(), Arg.Any<string>(), Arg.Any<bool>(), 0, Arg.Any<bool>())
                 .Returns(availableVersions2);
+            nuGetPackageInfoService.GetAllVersions(_packageName3, Arg.Any<List<Uri>>(), Arg.Any<bool>(), Arg.Any<NuGetFramework>(), Arg.Any<string>(), Arg.Any<bool>(), 0, Arg.Any<bool>())
+                .Returns(availableVersions3);
 
             _nuGetPackageResolutionService = new NuGetPackageResolutionService(nuGetPackageInfoService);
         }
@@ -117,6 +122,12 @@ namespace DotNetOutdated.Tests
         [InlineData("8.0.0-rc.1.127", VersionLock.Major, PrereleaseReporting.Auto, "rc.1", "8.0.0-rc.1.127")]
         [InlineData("8.0.0-rc.1.127", VersionLock.Major, PrereleaseReporting.Always, null, "8.0.0-rc.2.128")]
         [InlineData("8.0.0-rc.1.127", VersionLock.Major, PrereleaseReporting.Always, "rc.1", "8.0.0-rc.1.127")]
+        [InlineData("8.0.0-rc.2.128", VersionLock.Major, PrereleaseReporting.Never, null, "8.0.0-rc.2.128")]
+        [InlineData("8.0.0-rc.2.128", VersionLock.Major, PrereleaseReporting.Never, "rc", "8.0.0-rc.2.128")]
+        [InlineData("8.0.0-rc.2.128", VersionLock.Major, PrereleaseReporting.Never, "rc.2", "8.0.0-rc.2.128")]
+        [InlineData("8.0.0-rc.2.128", VersionLock.None, PrereleaseReporting.Never, null, "8.0.0-rc.2.128")]
+        [InlineData("8.0.0-rc.2.128", VersionLock.None, PrereleaseReporting.Never, "rc", "8.0.0-rc.2.128")]
+        [InlineData("8.0.0-rc.2.128", VersionLock.None, PrereleaseReporting.Never, "rc.2", "8.0.0-rc.2.128")]
         public async Task ResolvesVersionCorrectlyWithParts(string current, VersionLock versionLock, PrereleaseReporting prerelease, string prereleaseLabel, string latest)
         {
             // Act
@@ -124,6 +135,48 @@ namespace DotNetOutdated.Tests
 
             // Assert
             Assert.Equal(NuGetVersion.Parse(latest), latestVersion);
+        }
+
+        [Theory]
+        [InlineData("3.0.0", VersionLock.None, PrereleaseReporting.Auto, null)]
+        [InlineData("3.0.0", VersionLock.None, PrereleaseReporting.Always, null)]
+        [InlineData("8.0.0-preview.1.123", VersionLock.None, PrereleaseReporting.Never, null)]
+        [InlineData("8.0.0-preview.1.123", VersionLock.None, PrereleaseReporting.Never, "preview.1")]
+        [InlineData("3.0.0", VersionLock.Major, PrereleaseReporting.Auto, null)]
+        [InlineData("3.0.0", VersionLock.Minor, PrereleaseReporting.Auto, null)]
+        [InlineData("3.1.0", VersionLock.Minor, PrereleaseReporting.Auto, null)]
+        [InlineData("3.1.0-preview.1.123", VersionLock.None, PrereleaseReporting.Always, null)]
+        [InlineData("3.1.0-preview.1.123", VersionLock.None, PrereleaseReporting.Always, "rc.2")]
+        [InlineData("3.1.0-preview.1.123", VersionLock.None, PrereleaseReporting.Auto, null)]
+        [InlineData("3.1.0-preview.1.123", VersionLock.None, PrereleaseReporting.Auto, "rc.2")]
+        [InlineData("3.1.0-preview.1.123", VersionLock.Minor, PrereleaseReporting.Auto, null)]
+        [InlineData("3.1.0-preview.1.123", VersionLock.Minor, PrereleaseReporting.Always, null)]
+        [InlineData("3.1.0-preview.1.123", VersionLock.Major, PrereleaseReporting.Auto, null)]
+        [InlineData("3.1.0-preview.1.123", VersionLock.Major, PrereleaseReporting.Always, null)]
+        [InlineData("8.0.0-preview.1.123", VersionLock.None, PrereleaseReporting.Always, null)]
+        [InlineData("8.0.0-preview.1.123", VersionLock.None, PrereleaseReporting.Always, "rc.2")]
+        [InlineData("8.0.0-preview.1.123", VersionLock.None, PrereleaseReporting.Auto, null)]
+        [InlineData("8.0.0-preview.1.123", VersionLock.None, PrereleaseReporting.Auto, "rc.2")]
+        [InlineData("8.0.0-preview.1.123", VersionLock.Minor, PrereleaseReporting.Auto, null)]
+        [InlineData("8.0.0-preview.3.126", VersionLock.Minor, PrereleaseReporting.Always, null)]
+        [InlineData("8.0.0-preview.3.126", VersionLock.Minor, PrereleaseReporting.Always, "preview.3")]
+        [InlineData("8.0.0-rc.1.127", VersionLock.Major, PrereleaseReporting.Auto, null)]
+        [InlineData("8.0.0-rc.1.127", VersionLock.Major, PrereleaseReporting.Auto, "rc.1")]
+        [InlineData("8.0.0-rc.1.127", VersionLock.Major, PrereleaseReporting.Always, null)]
+        [InlineData("8.0.0-rc.1.127", VersionLock.Major, PrereleaseReporting.Always, "rc.1")]
+        [InlineData("8.0.0-rc.2.128", VersionLock.Major, PrereleaseReporting.Never, null)]
+        [InlineData("8.0.0-rc.2.128", VersionLock.Major, PrereleaseReporting.Never, "rc")]
+        [InlineData("8.0.0-rc.2.128", VersionLock.Major, PrereleaseReporting.Never, "rc.2")]
+        [InlineData("8.0.0-rc.2.128", VersionLock.None, PrereleaseReporting.Never, null)]
+        [InlineData("8.0.0-rc.2.128", VersionLock.None, PrereleaseReporting.Never, "rc")]
+        [InlineData("8.0.0-rc.2.128", VersionLock.None, PrereleaseReporting.Never, "rc.2")]
+        public async Task ResolvesVersionCorrectlyIfPackageIsLatest(string current, VersionLock versionLock, PrereleaseReporting prerelease, string prereleaseLabel)
+        {
+            // Act
+            var latestVersion = await _nuGetPackageResolutionService.ResolvePackageVersions(_packageName3, NuGetVersion.Parse(current), new List<Uri>(), VersionRange.Parse(current), versionLock, prerelease, prereleaseLabel, null, null, false, 0);
+
+            // Assert
+            Assert.Equal(NuGetVersion.Parse(current), latestVersion);
         }
     }
 }
