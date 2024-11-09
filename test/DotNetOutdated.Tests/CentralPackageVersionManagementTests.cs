@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO.Abstractions.TestingHelpers;
 using NSubstitute;
 using Xunit;
+using System;
 
 namespace DotNetOutdated.Tests
 {
@@ -16,7 +17,7 @@ namespace DotNetOutdated.Tests
             SetupCPVMMocks(out IDotNetRestoreService mockRestoreService, out MockFileSystem mockFileSystem, out string path, out string nearestCPVMFilePath, out string rootCPVMFilePath, out string rootCPVMFileContent, out string _, out string _);
 
             var subject = new CentralPackageVersionManagementService(mockFileSystem, mockRestoreService);
-            RunStatus status = subject.AddPackage(path, isGlobalPackage ? "GlobalFakePackage" : "FakePackage", new NuGet.Versioning.NuGetVersion(2, 0, 0), false);
+            RunStatus status = subject.AddPackage(path, isGlobalPackage ? "GlobalFakePackage" : "FakePackage", new NuGet.Versioning.NuGetVersion(2, 0, 0), false, TestConstants.Timeout);
 
             Assert.NotNull(status);
             Assert.Equal(0, status.ExitCode);
@@ -31,7 +32,7 @@ namespace DotNetOutdated.Tests
             SetupCPVMMocks(out IDotNetRestoreService mockRestoreService, out MockFileSystem mockFileSystem, out string path, out string _, out string _, out string _, out string _, out string projectFileContent);
 
             var subject = new CentralPackageVersionManagementService(mockFileSystem, mockRestoreService);
-            RunStatus status = subject.AddPackage(path, "FakePackage", new NuGet.Versioning.NuGetVersion(2, 0, 0), false);
+            RunStatus status = subject.AddPackage(path, "FakePackage", new NuGet.Versioning.NuGetVersion(2, 0, 0), false, TestConstants.Timeout);
 
             Assert.Equal(0, status.ExitCode);
             Assert.Equal(projectFileContent, mockFileSystem.GetFile(path).TextContents);
@@ -45,15 +46,15 @@ namespace DotNetOutdated.Tests
             SetupCommonMocks(out IDotNetRestoreService mockRestoreService, out MockFileSystem mockFileSystem, out string projectPath, out string _);
 
             var subject = new CentralPackageVersionManagementService(mockFileSystem, mockRestoreService);
-            RunStatus status = subject.AddPackage(projectPath, "FakePackage", new NuGet.Versioning.NuGetVersion(1, 0, 0), noRestore);
+            RunStatus status = subject.AddPackage(projectPath, "FakePackage", new NuGet.Versioning.NuGetVersion(1, 0, 0), noRestore, TestConstants.Timeout);
 
             if (noRestore)
             {
-                mockRestoreService.DidNotReceiveWithAnyArgs().Restore(default);
+                mockRestoreService.DidNotReceiveWithAnyArgs().Restore(default, TestConstants.Timeout);
             }
             else
             {
-                mockRestoreService.Received().Restore(projectPath);
+                mockRestoreService.Received().Restore(projectPath, TestConstants.Timeout);
             }
         }
 
@@ -73,7 +74,7 @@ namespace DotNetOutdated.Tests
         private void SetupCommonMocks(out IDotNetRestoreService mockRestoreService, out MockFileSystem mockFileSystem, out string projectPath, out string projectFileContent)
         {
             mockRestoreService = Substitute.For<IDotNetRestoreService>();
-            mockRestoreService.Restore(Arg.Any<string>()).Returns(new RunStatus(string.Empty, string.Empty, 0));
+            mockRestoreService.Restore(Arg.Any<string>(), Arg.Any<TimeSpan>()).Returns(new RunStatus(string.Empty, string.Empty, 0));
 
             mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>());
 
