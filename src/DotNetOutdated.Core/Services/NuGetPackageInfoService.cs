@@ -18,6 +18,7 @@ namespace DotNetOutdated.Core.Services
     public sealed class NuGetPackageInfoService : INuGetPackageInfoService, IDisposable
     {
         private IEnumerable<PackageSource> _enabledSources;
+        private ISettings _nugetSettings;
         private readonly SourceCacheContext _context;
 
         private readonly ConcurrentDictionary<string, Lazy<Task<PackageMetadataResource>>> _metadataResourceRequests = new ConcurrentDictionary<string, Lazy<Task<PackageMetadataResource>>>();
@@ -30,12 +31,30 @@ namespace DotNetOutdated.Core.Services
             };
         }
 
+        /// <summary>
+        /// This method tells Nuget what settings to use. 
+        /// 
+        /// If one or more <paramref name="configFiles"/> is provided then those will be given to NuGet to use. 
+        /// If no config files are selected, then defaults will be selected using the <paramref name="root"/>
+        /// </summary>
+        /// <param name="root">
+        /// The file system to walk to find configuration files.
+        /// Can be null.
+        /// </param>
+        /// <param name="configFiles">
+        /// A list of paths to nuget.config files.
+        /// Can be an empty array.
+        /// </param>
+        public void LoadSettings(string root, IList<string> configFiles)
+        {
+            _nugetSettings = configFiles.Count == 0 ? Settings.LoadDefaultSettings(root) : Settings.LoadSettingsGivenConfigPaths(configFiles);
+        }
+
         private IEnumerable<PackageSource> GetEnabledSources(string root)
         {
             if (_enabledSources == null)
             {
-                var settings = Settings.LoadDefaultSettings(root);
-                _enabledSources = SettingsUtility.GetEnabledSources(settings);
+                _enabledSources = SettingsUtility.GetEnabledSources(_nugetSettings);
             }
 
             return _enabledSources;
