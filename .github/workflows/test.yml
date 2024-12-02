@@ -25,7 +25,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        framework: ['net6.0', 'net7.0', 'net8.0']
+        framework: ['net8.0', 'net9.0']
     timeout-minutes: 30
 
     steps:
@@ -35,9 +35,8 @@ jobs:
       uses: actions/setup-dotnet@v4.1.0
       with:
         dotnet-version: | 
-            6.0.x
-            7.0.x
             8.0.x
+            9.0.x
 
     - name: Smoke test
       run: |
