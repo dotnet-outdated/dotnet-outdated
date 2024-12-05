@@ -24,7 +24,7 @@
     <PackageReference Include="NuGet.Protocol" Version="6.11.1" />
     <PackageReference Include="NuGet.Versioning" Version="6.11.1" />
     <PackageReference Include="System.Formats.Asn1" Version="8.0.1" />
-    <PackageReference Include="System.IO.Abstractions" Version="21.0.29" />
+    <PackageReference Include="System.IO.Abstractions" Version="21.1.7" />
   </ItemGroup>
 
   <ItemGroup>
