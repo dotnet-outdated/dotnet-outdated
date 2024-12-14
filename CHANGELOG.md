@@ -1,5 +1,24 @@
 # Changelog
 
+## [v2.0.9-yextly]
+
+- Merge with upstream
+- Drop support for .NET 6.0 and 7.0
+- Add support for .NET 9.0
+- Upgrade all dependencies
+
+## [v2.0.8-yextly]
+
+- Fix analysis loop (#24)
+
+## [v2.0.7-yextly]
+
+- Improve analysis (#24)
+
+## [v2.0.6-yextly]
+
+- Add the ability to obtain the full analysis tree (useful for auditing)
+
 ## [v2.0.5-yextly]
 
 - Upgrade from the upstream project (which includes .NET 8 assemblies)
@@ -131,7 +150,7 @@
 
 - Add ability to filter packages with the `--include` and `--exclude` option (See [#55](https://github.com/jerriep/dotnet-outdated/issues/55)) - Thank you [Jeppe Ravn Christiansen](https://github.com/jepperc)
 - Add ability to save results to a JSON or CSV file (See [#29](https://github.com/jerriep/dotnet-outdated/issues/29) and [#57](https://github.com/jerriep/dotnet-outdated/issues/57)) - Thank you [Patrick Dwyer](https://github.com/coderpatros)
-- Fix some scenarios where current or latest versions for certain packages could not be resolved 
+- Fix some scenarios where current or latest versions for certain packages could not be resolved
 
 ## [v2.1.0]
 
