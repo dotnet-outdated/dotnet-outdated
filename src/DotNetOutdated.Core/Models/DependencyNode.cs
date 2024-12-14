@@ -14,8 +14,7 @@ namespace DotNetOutdated.Core.Models
         {
             if (string.IsNullOrWhiteSpace(id))
                 throw new ArgumentNullException(nameof(id));
-            if (dependencyItem == null)
-                throw new ArgumentNullException(nameof(dependencyItem));
+            ArgumentNullException.ThrowIfNull(dependencyItem);
 
             _nodes = new HashSet<DependencyNode>();
 
@@ -29,8 +28,7 @@ namespace DotNetOutdated.Core.Models
 
         public void AddNode(DependencyNode node)
         {
-            if (node == null)
-                throw new ArgumentNullException(nameof(node));
+            ArgumentNullException.ThrowIfNull(node);
 
             _nodes.Add(node);
         }
