@@ -1,18 +1,18 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
+    <LangVersion>latest</LangVersion>
     <TargetFrameworks>net6.0;net7.0;net8.0</TargetFrameworks>
 		<IsPackable>false</IsPackable>
 		<GenerateDocumentationFile>False</GenerateDocumentationFile>
 	</PropertyGroup>
 
 	<ItemGroup>
-		<PackageReference Include="McMaster.Extensions.CommandLineUtils" Version="4.0.2" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
-    <PackageReference Include="NSubstitute" Version="5.0.0" />
-		<PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
-    <PackageReference Include="System.IO.Abstractions.TestingHelpers" Version="19.2.64" />
-    <PackageReference Include="xunit" Version="2.6.2" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="2.5.4">
+    <PackageReference Include="McMaster.Extensions.CommandLineUtils" Version="4.1.1" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.10.0" />
+    <PackageReference Include="NSubstitute" Version="5.3.0" />
+    <PackageReference Include="System.IO.Abstractions.TestingHelpers" Version="21.0.29" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2">
 			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
 			<PrivateAssets>all</PrivateAssets>
 		</PackageReference>
@@ -26,4 +26,7 @@
 		<None Remove="TestData\*.*" />
 		<EmbeddedResource Include="TestData\*.*" />
 	</ItemGroup>
+  <ItemGroup>
+    <AssemblyMetadata Include="SolutionRoot" Value="$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)\..\..'))" />
+  </ItemGroup>
 </Project>

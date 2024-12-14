@@ -1,12 +1,10 @@
-using CsvHelper;
-using DotNetOutdated.Core.Models;
-using DotNetOutdated.Models;
-using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
+using DotNetOutdated.Core.Models;
 
 namespace DotNetOutdated.Services
 {
@@ -17,34 +15,30 @@ namespace DotNetOutdated.Services
 
     public class JsonReportingService : IReportingService
     {
-        public Task WriteReport(string filename, List<Project> projects)
+        public async Task WriteReport(string filename, List<Project> projects)
         {
-            throw new NotImplementedException();
+            using (FileStream createStream = File.Create(filename))
+            {
+                await JsonSerializer.SerializeAsync(createStream, projects);
+            }
         }
     }
 
-    internal class ToStringJsonConverter : JsonConverter
+    public class ToStringJsonConverter : JsonConverter<object>
     {
-        public override bool CanConvert(Type objectType)
+        public override bool CanConvert(Type typeToConvert)
         {
             return true;
         }
 
-        public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
+        public override void Write(Utf8JsonWriter writer, object value, JsonSerializerOptions options)
         {
-            writer.WriteValue(value.ToString());
+            writer.WriteStringValue(value.ToString());
         }
 
-        public override bool CanRead
+        public override object Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
-            get { return false; }
-        }
-
-        public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
-        {
-            throw new NotImplementedException();
+            throw new NotSupportedException("This converter cannot be used for reading JSON.");
         }
     }
-
-    
 }

@@ -1,12 +1,13 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
-		<TargetFramework>netstandard2.1</TargetFramework>
+    <TargetFrameworks>net6.0;net7.0;net8.0</TargetFrameworks>
 		<IsPackable>true</IsPackable>
 		<PackageTags>dotnet;outdated;core;lib</PackageTags>
 		<Description>The core functionality of DotNet Outdated as a library which allows you to embed it into your own applications (Yextly fork)</Description>
 		<Authors>dotnet-outdated Team &amp; Contributors</Authors>
 		<Copyright>Copyright (c) Jerrie Pelser</Copyright>
+    <LangVersion>latest</LangVersion>
 		<PackageId>Yextly.DotNetOutdatedTool.Core</PackageId>
 		<AssemblyName>Yextly.DotNetOutdatedTool.Core</AssemblyName>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
@@ -21,12 +22,13 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-    <PackageReference Include="NuGet.Configuration" Version="6.8.0" />
-    <PackageReference Include="NuGet.Credentials" Version="6.8.0" />
-    <PackageReference Include="NuGet.ProjectModel" Version="6.8.0" />
-    <PackageReference Include="NuGet.Protocol" Version="6.8.0" />
-    <PackageReference Include="NuGet.Versioning" Version="6.8.0" />
-    <PackageReference Include="System.IO.Abstractions" Version="19.2.64" />
+    <PackageReference Include="NuGet.Configuration" Version="6.11.1" />
+    <PackageReference Include="NuGet.Credentials" Version="6.11.1" />
+    <PackageReference Include="NuGet.ProjectModel" Version="6.11.1" />
+    <PackageReference Include="NuGet.Protocol" Version="6.11.1" />
+    <PackageReference Include="NuGet.Versioning" Version="6.11.1" />
+    <PackageReference Include="System.Formats.Asn1" Version="8.0.1" />
+    <PackageReference Include="System.IO.Abstractions" Version="21.0.29" />
 	</ItemGroup>
 
 	<ItemGroup>
