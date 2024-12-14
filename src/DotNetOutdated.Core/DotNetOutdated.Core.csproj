@@ -48,7 +48,7 @@
 
 
 	<ItemGroup>
-	  <None Update="Package.md">
+	  <None Include="Package.md">
 	    <Pack>True</Pack>
 	    <PackagePath>\</PackagePath>
 	  </None>
