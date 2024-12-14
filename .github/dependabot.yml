@@ -6,6 +6,16 @@ updates:
       interval: "daily"
     target-branch: "main"
     open-pull-requests-limit: 20
+    groups:
+      xunit:
+        patterns:
+          - xunit*
+      NuGet:
+        patterns:
+         - NuGet.*
+      System.IO.Abstractions:
+        patterns:
+         - System.IO.Abstractions*
 
   - package-ecosystem: "github-actions"
     directory: "/"

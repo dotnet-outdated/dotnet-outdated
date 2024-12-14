@@ -9,13 +9,11 @@ namespace DotNetOutdated.Core.Models
     {
         private readonly HashSet<DependencyNode> _nodes;
 
-        [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0016:Use 'throw' expression", Justification = "Prefer this way")]
         public DependencyNode(string id, Dependency dependencyItem)
         {
             if (string.IsNullOrWhiteSpace(id))
                 throw new ArgumentNullException(nameof(id));
-            if (dependencyItem == null)
-                throw new ArgumentNullException(nameof(dependencyItem));
+            ArgumentNullException.ThrowIfNull(dependencyItem);
 
             _nodes = new HashSet<DependencyNode>();
 
@@ -29,8 +27,7 @@ namespace DotNetOutdated.Core.Models
 
         public void AddNode(DependencyNode node)
         {
-            if (node == null)
-                throw new ArgumentNullException(nameof(node));
+            ArgumentNullException.ThrowIfNull(node);
 
             _nodes.Add(node);
         }
