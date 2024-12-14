@@ -9,7 +9,6 @@ namespace DotNetOutdated.Core.Models
     {
         private readonly HashSet<DependencyNode> _nodes;
 
-        [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0016:Use 'throw' expression", Justification = "Prefer this way")]
         public DependencyNode(string id, Dependency dependencyItem)
         {
             if (string.IsNullOrWhiteSpace(id))
