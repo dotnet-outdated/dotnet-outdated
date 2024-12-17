@@ -37,6 +37,7 @@ jobs:
             6.0.x
             7.0.x
             8.0.x
+            9.0.x
 
       # The tests should have already been run during the PR workflow, so this is really just a sanity check
       - name: Tests
