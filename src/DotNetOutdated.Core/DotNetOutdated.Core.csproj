@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net6.0;net7.0;net8.0</TargetFrameworks>
+    <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
     <IsPackable>true</IsPackable>
     <PackageTags>dotnet;outdated;core;lib</PackageTags>
     <Description>The core functionality of DotNet Outdated as a library which allows you to embed it into your own applications</Description>
@@ -24,7 +24,7 @@
     <PackageReference Include="NuGet.Protocol" Version="6.11.1" />
     <PackageReference Include="NuGet.Versioning" Version="6.11.1" />
     <PackageReference Include="System.Formats.Asn1" Version="9.0.0" />
-    <PackageReference Include="System.IO.Abstractions" Version="21.0.29" />
+    <PackageReference Include="System.IO.Abstractions" Version="21.2.1" />
   </ItemGroup>
 
   <ItemGroup>

@@ -31,12 +31,11 @@ jobs:
       - uses: actions/checkout@v4.2.2
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4.1.0
+        uses: actions/setup-dotnet@v4.2.0
         with:
           dotnet-version: | 
-            6.0.x
-            7.0.x
             8.0.x
+            9.0.x
 
       # The tests should have already been run during the PR workflow, so this is really just a sanity check
       - name: Tests
