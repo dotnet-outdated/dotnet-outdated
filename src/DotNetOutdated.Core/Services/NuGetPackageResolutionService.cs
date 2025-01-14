@@ -58,8 +58,8 @@ namespace DotNetOutdated.Core.Services
             int olderThanDays,
             bool ignoreFailedSources = false)
         {
-            if (referencedVersion == null)
-                throw new ArgumentNullException(nameof(referencedVersion));
+            ArgumentNullException.ThrowIfNull(referencedVersion);
+            ArgumentNullException.ThrowIfNull(currentVersionRange);
 
             if (currentVersionRange.MinVersion is null)
                 throw new ArgumentException($"No minimum version specified for package {packageName}.", nameof(currentVersionRange));

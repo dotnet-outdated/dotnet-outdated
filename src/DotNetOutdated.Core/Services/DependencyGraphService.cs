@@ -42,7 +42,7 @@ namespace DotNetOutdated.Core.Services
 
             if (runStatus.IsSuccess)
             {
-                var dependencyGraphText = await _fileSystem.File.ReadAllTextAsync(dgOutput);
+                var dependencyGraphText = await _fileSystem.File.ReadAllTextAsync(dgOutput).ConfigureAwait(false);
                 return new ExtendedDependencyGraphSpec(dependencyGraphText);
             }
 

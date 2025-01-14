@@ -23,8 +23,7 @@ namespace DotNetOutdated.Core.Services
 
         public RunStatus AddPackage(string projectPath, string packageName, string frameworkName, NuGetVersion version, bool noRestore, bool ignoreFailedSources = false)
         {
-            if (version == null)
-                throw new ArgumentNullException(nameof(version));
+            ArgumentNullException.ThrowIfNull(version);
 
             string projectName = _fileSystem.Path.GetFileName(projectPath);
 
