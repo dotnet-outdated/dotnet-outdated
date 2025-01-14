@@ -280,9 +280,9 @@ namespace DotNetOutdated
                {
                   RunStatus status = null;
 
-                  if (!project.IsProjectSdkStyle())
+                  if (!project.IsProjectSdkStyle() && !package.IsVersionCentrallyManaged)
                   {
-                     console.WriteLine("Project format not SDK style, removing package before upgrade.");
+                     console.WriteLine("Project format not SDK style or centrally managed, removing package before upgrade.");
                      status = _dotNetPackageService.RemovePackage(project.ProjectFilePath, package.Name);
                   }
 

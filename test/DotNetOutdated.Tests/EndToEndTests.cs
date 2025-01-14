@@ -103,12 +103,7 @@ public static class EndToEndTests
         private static DirectoryInfo CreateTempSubdirectory()
         {
             const string Prefix = "dotnet-bumper-";
-#if NET6_0
-            var tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), Prefix + Guid.NewGuid().ToString("N"));
-            return Directory.CreateDirectory(tempPath);
-#else
             return Directory.CreateTempSubdirectory(Prefix);
-#endif
         }
     }
 }
