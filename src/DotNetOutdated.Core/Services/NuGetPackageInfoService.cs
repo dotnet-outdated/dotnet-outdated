@@ -18,6 +18,9 @@ namespace DotNetOutdated.Core.Services
     public sealed class NuGetPackageInfoService : INuGetPackageInfoService, IDisposable
     {
         private IEnumerable<PackageSource> _enabledSources;
+
+        private PackageSourceMapping _packageSourceMapping;
+
         private readonly SourceCacheContext _context;
 
         private readonly ConcurrentDictionary<string, Lazy<Task<PackageMetadataResource>>> _metadataResourceRequests = new ConcurrentDictionary<string, Lazy<Task<PackageMetadataResource>>>();
@@ -36,13 +39,14 @@ namespace DotNetOutdated.Core.Services
             {
                 var settings = Settings.LoadDefaultSettings(root);
                 _enabledSources = SettingsUtility.GetEnabledSources(settings);
+                _packageSourceMapping = PackageSourceMapping.GetPackageSourceMapping(settings);
             }
 
             return _enabledSources;
         }
 
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "This method is supposed to fail silently")]
-        private async Task<PackageMetadataResource> FindMetadataResourceForSource(Uri source, string projectFilePath)
+        private async Task<PackageMetadataResource> FindMetadataResourceForSource(Uri source, string projectFilePath, string packageId)
         {
             try
             {
@@ -53,6 +57,18 @@ namespace DotNetOutdated.Core.Services
                 // enables secure feeds to work properly
                 var enabledSources = this.GetEnabledSources(projectFilePath);
                 var enabledSource = enabledSources?.FirstOrDefault(s => s.SourceUri == source);
+
+
+                if (enabledSource != null && _packageSourceMapping.IsEnabled)
+                {
+                    var mappedSources = _packageSourceMapping.GetConfiguredPackageSources(packageId);
+                    if (mappedSources != null && (!mappedSources.Any(s => String.Equals(s, enabledSource.Name, StringComparison.OrdinalIgnoreCase))))
+                    {
+                        Console.WriteLine($"package source {enabledSource.Name} skipped by packageSourceMapping, packageId: {packageId}");
+                        return null;
+                    }
+                }
+
                 var sourceRepository = enabledSource != null
                                            ? new SourceRepository(enabledSource, Repository.Provider.GetCoreV3())
                                            : Repository.Factory.GetCoreV3(resourceUrl);
@@ -82,7 +98,7 @@ namespace DotNetOutdated.Core.Services
             {
                 try
                 {
-                    var metadata = await FindMetadataResourceForSource(source, projectFilePath).ConfigureAwait(false);
+                    var metadata = await FindMetadataResourceForSource(source, projectFilePath, package).ConfigureAwait(false);
                     if (metadata != null)
                     {
                         var compatibleMetadataList = (await metadata.GetMetadataAsync(package, includePrerelease, false, _context, NullLogger.Instance, CancellationToken.None).ConfigureAwait(false)).ToList();
