@@ -1,16 +1,23 @@
 ﻿using CsvHelper;
 using DotNetOutdated.Models;
+using McMaster.Extensions.CommandLineUtils;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.IO.Abstractions;
 using System.Threading.Tasks;
 
 namespace DotNetOutdated.Formatters;
 
-internal class CsvFormatter : IOutputFormatter
+internal class CsvFormatter(IFileSystem fileSystem, IConsole console)
+    : FileFormatter(fileSystem, console)
 {
-    public async Task FormatAsync(IReadOnlyList<AnalyzedProject> projects, TextWriter writer)
+    protected override string Extension => ".csv";
+
+    internal protected async override Task FormatAsync(IReadOnlyList<AnalyzedProject> projects
+        , IDictionary<string, string> options
+        , TextWriter writer)
     {
         var csv = new CsvWriter(writer, CultureInfo.CurrentCulture);
         await using (csv.ConfigureAwait(false))

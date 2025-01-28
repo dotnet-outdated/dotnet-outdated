@@ -14,5 +14,7 @@ namespace DotNetOutdated
 
         public ConsoleColor UpgradeSuccess { get; } = ConsoleColor.Green;
         public ConsoleColor UpgradeFailure { get; } = ConsoleColor.Red;
+
+        public ConsoleColor Error { get; } = ConsoleColor.Red;
     }
 }
