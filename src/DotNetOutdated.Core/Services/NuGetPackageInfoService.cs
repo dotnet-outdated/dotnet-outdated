@@ -57,8 +57,7 @@ namespace DotNetOutdated.Core.Services
                                            ? new SourceRepository(enabledSource, Repository.Provider.GetCoreV3())
                                            : Repository.Factory.GetCoreV3(resourceUrl);
 
-                var resourceRequest = new Lazy<Task<PackageMetadataResource>>(() => sourceRepository.GetResourceAsync<PackageMetadataResource>());
-                return await _metadataResourceRequests.GetOrAdd(resourceUrl, resourceRequest).Value.ConfigureAwait(false);
+                return await _metadataResourceRequests.GetOrAdd(resourceUrl, _ => new Lazy<Task<PackageMetadataResource>>(() => sourceRepository.GetResourceAsync<PackageMetadataResource>())).Value.ConfigureAwait(false);
             }
             catch (Exception)
             {
