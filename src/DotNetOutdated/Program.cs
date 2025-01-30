@@ -492,11 +492,12 @@ namespace DotNetOutdated
       private async Task AddOutdatedDependencyIfNeeded(Project project, TargetFramework targetFramework, Dependency dependency, ConcurrentBag<AnalyzedDependency> outdatedDependencies)
       {
          var referencedVersion = dependency.ResolvedVersion;
-         NuGetVersion latestVersion = null;
+
+         Task<NuGetVersion> latestVersionTask = null;
 
          if (referencedVersion != null)
          {
-            latestVersion = await _nugetService.ResolvePackageVersions(
+            latestVersionTask = _nugetService.ResolvePackageVersions(
                 dependency.Name,
                 referencedVersion,
                 project.Sources,
@@ -508,15 +509,15 @@ namespace DotNetOutdated
                 project.FilePath,
                 dependency.IsDevelopmentDependency,
                 OlderThanDays,
-                IgnoreFailedSources).ConfigureAwait(false);
+                IgnoreFailedSources);
          }
 
-         if (referencedVersion == null || latestVersion == null || referencedVersion != latestVersion || IncludeUpToDate)
+         if (referencedVersion == null || latestVersionTask == null || IncludeUpToDate)
          {
             // special case when there is version installed which is not older than "OlderThan" days makes "latestVersion" to be null
-            if (OlderThanDays > 0 && latestVersion == null)
+            if (OlderThanDays > 0 && latestVersionTask == null)
             {
-               NuGetVersion absoluteLatestVersion = await _nugetService.ResolvePackageVersions(
+               Task<NuGetVersion> absoluteLatestVersionTask = _nugetService.ResolvePackageVersions(
                    dependency.Name,
                    referencedVersion,
                    project.Sources,
@@ -526,15 +527,19 @@ namespace DotNetOutdated
                    PrereleaseLabel,
                    targetFramework.Name,
                    project.FilePath,
-                   dependency.IsDevelopmentDependency).ConfigureAwait(false);
+                   dependency.IsDevelopmentDependency);
 
-               if (absoluteLatestVersion == null || referencedVersion > absoluteLatestVersion)
+               var absoluteLatestVersion = await absoluteLatestVersionTask.ConfigureAwait(false);
+
+               if (absoluteLatestVersionTask == null || referencedVersion > absoluteLatestVersion)
                {
+                  var latestVersion = await latestVersionTask.ConfigureAwait(false);
                   outdatedDependencies.Add(new AnalyzedDependency(dependency, latestVersion));
                }
             }
             else
             {
+               var latestVersion = await latestVersionTask.ConfigureAwait(false);
                outdatedDependencies.Add(new AnalyzedDependency(dependency, latestVersion));
             }
          }
