@@ -11,14 +11,11 @@ namespace DotNetOutdated
         {
             ArgumentNullException.ThrowIfNull(packages);
 
-            var columnWidths = new List<int>
-            {
+            return [
                 packages.Select(p => p.Description).Aggregate("", (max, cur) => max.Length > cur.Length ? max : cur).Length,
                 packages.Select(p => p.ResolvedVersion?.ToString() ?? "").Aggregate("", (max, cur) => max.Length > cur.Length ? max : cur).Length,
                 packages.Select(p => p.LatestVersion?.ToString() ?? "").Aggregate("", (max, cur) => max.Length > cur.Length ? max : cur).Length
-            };
-
-            return columnWidths.ToArray();
+            ];
         }
     }
 }
