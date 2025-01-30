@@ -85,12 +85,12 @@ namespace DotNetOutdated.Core.Services
                     var metadata = await FindMetadataResourceForSource(source, projectFilePath).ConfigureAwait(false);
                     if (metadata != null)
                     {
-                        var compatibleMetadataList = (await metadata.GetMetadataAsync(package, includePrerelease, false, _context, NullLogger.Instance, CancellationToken.None).ConfigureAwait(false)).ToList();
+                        var compatibleMetadataList = await metadata.GetMetadataAsync(package, includePrerelease, false, _context, NullLogger.Instance, CancellationToken.None).ConfigureAwait(false);
 
                         if (olderThanDays > 0)
                         {
                             compatibleMetadataList = compatibleMetadataList.Where(c => !c.Published.HasValue ||
-                                                                                       c.Published <= DateTimeOffset.UtcNow.AddDays(-olderThanDays)).ToList();
+                                                                                       c.Published <= DateTimeOffset.UtcNow.AddDays(-olderThanDays));
                         }
 
                         // We need to ensure that we only get package versions which are compatible with the requested target framework.
@@ -101,8 +101,7 @@ namespace DotNetOutdated.Core.Services
 
                             compatibleMetadataList = compatibleMetadataList
                                 .Where(meta => meta.DependencySets?.Any() != true ||
-                                               reducer.GetNearest(targetFramework, meta.DependencySets.Select(ds => ds.TargetFramework)) != null)
-                                .ToList();
+                                               reducer.GetNearest(targetFramework, meta.DependencySets.Select(ds => ds.TargetFramework)) != null);
                         }
 
                         foreach (var m in compatibleMetadataList)
