@@ -372,7 +372,7 @@ namespace DotNetOutdated
             {
                WriteTargetFramework(targetFramework, console);
 
-               var dependencies = targetFramework.Dependencies.ToList();
+               var dependencies = targetFramework.Dependencies;
 
                int[] columnWidths = dependencies.DetermineColumnWidths();
 

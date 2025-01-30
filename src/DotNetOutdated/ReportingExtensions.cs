@@ -7,7 +7,7 @@ namespace DotNetOutdated
 {
     public static class ReportingExtensions
     {
-        public static int[] DetermineColumnWidths(this List<AnalyzedDependency> packages)
+        public static int[] DetermineColumnWidths(this IReadOnlyList<AnalyzedDependency> packages)
         {
             ArgumentNullException.ThrowIfNull(packages);
 
