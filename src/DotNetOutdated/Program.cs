@@ -475,7 +475,7 @@ namespace DotNetOutdated
          if (FilterExclude.Count != 0)
             deps = deps.Where(NoExcludeFilterMatches);
 
-            NuGetVersion maximumVersion = null;
+         NuGetVersion maximumVersion = null;
 
          if (!string.IsNullOrEmpty(MaxVersion))
          {
