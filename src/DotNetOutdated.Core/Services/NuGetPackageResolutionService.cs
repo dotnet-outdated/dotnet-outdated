@@ -8,15 +8,10 @@ using NuGet.Versioning;
 
 namespace DotNetOutdated.Core.Services
 {
-    public class NuGetPackageResolutionService : INuGetPackageResolutionService
+    public class NuGetPackageResolutionService(INuGetPackageInfoService nugetService) : INuGetPackageResolutionService
     {
-        private readonly INuGetPackageInfoService _nugetService;
-        private readonly ConcurrentDictionary<string, Lazy<Task<IReadOnlyList<NuGetVersion>>>> _cache = new ConcurrentDictionary<string, Lazy<Task<IReadOnlyList<NuGetVersion>>>>();
-
-        public NuGetPackageResolutionService(INuGetPackageInfoService nugetService)
-        {
-            _nugetService = nugetService;
-        }
+        private readonly INuGetPackageInfoService _nugetService = nugetService;
+        private readonly ConcurrentDictionary<string, Lazy<Task<IReadOnlyList<NuGetVersion>>>> _cache = [];
 
         public async Task<NuGetVersion> ResolvePackageVersions(
             string packageName,

@@ -76,11 +76,11 @@ namespace DotNetOutdated
 
       [Option(CommandOptionType.MultipleValue, Description = "Specifies to only look at packages where the name contains the provided string. Culture and case insensitive. If provided multiple times, a single match is enough to include a package.",
           ShortName = "inc", LongName = "include")]
-      public List<string> FilterInclude { get; set; } = new List<string>();
+      public List<string> FilterInclude { get; set; } = [];
 
       [Option(CommandOptionType.MultipleValue, Description = "Specifies to only look at packages where the name does not contain the provided string. Culture and case insensitive. If provided multiple times, a single match is enough to exclude a package.",
           ShortName = "exc", LongName = "exclude")]
-      public List<string> FilterExclude { get; set; } = new List<string>();
+      public List<string> FilterExclude { get; set; } = [];
 
       [Option(CommandOptionType.SingleValue, Description = "Specifies the filename for a generated report. " +
                                                            "(Use the -of|--output-format option to specify the format. JSON by default.)",
@@ -125,11 +125,16 @@ namespace DotNetOutdated
                                                            "More information available on https://learn.microsoft.com/dotnet/core/rid-catalog",
          ShortName = "rt", LongName = "runtime")]
       public string Runtime { get; set; } = string.Empty;
+
+      [Option(CommandOptionType.SingleValue, Description = "The inclusive maximum package version to upgrade to." +
+                                                           "For example, a value of '8.0' would upgrade System.Text.Json 6.0.0 to the latest patch version of 8.0.x",
+         ShortName = "mv", LongName = "maximum-version")]
+      public string MaxVersion { get; set; } = string.Empty;
       
-        public static int Main(string[] args)
+      public static int Main(string[] args)
       {
          using var services = new ServiceCollection()
-                 .AddSingleton<IConsole>(PhysicalConsole.Singleton)
+                 .AddSingleton(PhysicalConsole.Singleton)
                  .AddSingleton<IReporter>(provider => new ConsoleReporter(provider.GetService<IConsole>()))
                  .AddSingleton<IFileSystem, FileSystem>()
                  .AddSingleton<IProjectDiscoveryService, ProjectDiscoveryService>()
@@ -197,7 +202,7 @@ namespace DotNetOutdated
             // Analyze the dependencies
             var outdatedProjects = await AnalyzeDependencies(projects, console).ConfigureAwait(false);
 
-            if (outdatedProjects.Any())
+            if (outdatedProjects.Count != 0)
             {
                // Report on the outdated dependencies
                ReportOutdatedDependencies(outdatedProjects, console);
@@ -464,11 +469,32 @@ namespace DotNetOutdated
 
          var deps = targetFramework.Dependencies.Where(d => this.IncludeAutoReferences || !d.IsAutoReferenced);
 
-         if (FilterInclude.Any())
+         if (FilterInclude.Count != 0)
             deps = deps.Where(AnyIncludeFilterMatches);
 
-         if (FilterExclude.Any())
+         if (FilterExclude.Count != 0)
             deps = deps.Where(NoExcludeFilterMatches);
+
+            NuGetVersion maximumVersion = null;
+
+         if (!string.IsNullOrEmpty(MaxVersion))
+         {
+             if (!Version.TryParse(MaxVersion, out var maxVersion))
+             {
+                 throw new CommandValidationException($"The specified maximum version '{MaxVersion}' is not a valid version string.");
+             }
+
+             // NuGetVersion normalizes no build or revision to 0, when we actually want
+             // those to mean "any version", so we need to force them to int.MaxValue.
+             if (maxVersion.Build is -1 || maxVersion.Revision is -1)
+             {
+                 var build = maxVersion.Build == -1 ? int.MaxValue : maxVersion.Build;
+                 var revision = maxVersion.Revision == -1 ? int.MaxValue : maxVersion.Revision;
+                 maxVersion = new(maxVersion.Major, maxVersion.Minor, build, revision);
+             }
+
+             maximumVersion = new NuGetVersion(maxVersion);
+         }
 
          var dependencies = deps.OrderBy(dependency => dependency.IsTransitive)
              .ThenBy(dependency => dependency.Name)
@@ -480,7 +506,7 @@ namespace DotNetOutdated
          {
             var dependency = dependencies[index];
 
-            tasks[index] = this.AddOutdatedDependencyIfNeeded(project, targetFramework, dependency, outdatedDependencies);
+            tasks[index] = AddOutdatedDependencyIfNeeded(project, targetFramework, dependency, maximumVersion, outdatedDependencies);
          }
 
          await Task.WhenAll(tasks).ConfigureAwait(false);
@@ -489,10 +515,29 @@ namespace DotNetOutdated
             outdatedFrameworks.Add(new AnalyzedTargetFramework(targetFramework.Name, outdatedDependencies));
       }
 
-      private async Task AddOutdatedDependencyIfNeeded(Project project, TargetFramework targetFramework, Dependency dependency, ConcurrentBag<AnalyzedDependency> outdatedDependencies)
+      private async Task AddOutdatedDependencyIfNeeded(
+          Project project,
+          TargetFramework targetFramework,
+          Dependency dependency,
+          NuGetVersion maximumVersion,
+          ConcurrentBag<AnalyzedDependency> outdatedDependencies)
       {
          var referencedVersion = dependency.ResolvedVersion;
+         var versionRange = dependency.VersionRange;
          NuGetVersion latestVersion = null;
+
+        if (maximumVersion is not null &&
+            (versionRange.MaxVersion is null || maximumVersion > versionRange.MaxVersion))
+        {
+            // Patch the version range to include the user-specified maximum
+            versionRange = new(
+                versionRange.MinVersion,
+                versionRange.IsMinInclusive,
+                maximumVersion,
+                includeMaxVersion: true,
+                versionRange.Float,
+                versionRange.OriginalString);
+        }
 
          if (referencedVersion != null)
          {
@@ -500,7 +545,7 @@ namespace DotNetOutdated
                 dependency.Name,
                 referencedVersion,
                 project.Sources,
-                dependency.VersionRange,
+                versionRange,
                 VersionLock,
                 Prerelease,
                 PrereleaseLabel,
@@ -520,7 +565,7 @@ namespace DotNetOutdated
                    dependency.Name,
                    referencedVersion,
                    project.Sources,
-                   dependency.VersionRange,
+                   versionRange,
                    VersionLock,
                    Prerelease,
                    PrereleaseLabel,
