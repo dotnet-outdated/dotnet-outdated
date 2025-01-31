@@ -87,6 +87,7 @@ Options:
   -r|--recursive                             Recursively search for all projects within the provided directory.
   -ifs|--ignore-failed-sources               Treat package source failures as warnings.
   -utd|--include-up-to-date                  Include all dependencies in the report even the ones not outdated.
+  -dl|--disable-legend                       Disable legend in command output.
 ```
 
 ![Screenshot of dotnet-outdated](screenshot.png)
