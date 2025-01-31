@@ -122,7 +122,7 @@ namespace DotNetOutdated
       public LogLevel NuGetCredLogLevel { get; set; } = LogLevel.Warning;
       
       [Option(CommandOptionType.SingleValue, Description = "Specifies an optional runtime identifier to be used during the restore target when projects are analyzed. " +
-                                                           "More information available on https://learn.microsoft.com/en-us/dotnet/core/rid-catalog",
+                                                           "More information available on https://learn.microsoft.com/dotnet/core/rid-catalog",
          ShortName = "rt", LongName = "runtime")]
       public string Runtime { get; set; } = string.Empty;
       
