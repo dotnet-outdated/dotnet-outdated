@@ -459,7 +459,12 @@ namespace DotNetOutdated
       {
          var outdatedDependencies = new ConcurrentBag<AnalyzedDependency>();
 
-         var deps = targetFramework.Dependencies.Where(d => this.IncludeAutoReferences || !d.IsAutoReferenced);
+         IEnumerable<Dependency> deps = targetFramework.Dependencies.Values;
+         
+         if (!this.IncludeAutoReferences)
+         {
+            deps = deps.Where(d => !d.IsAutoReferenced);
+         }
 
          if (FilterInclude.Count != 0)
             deps = deps.Where(AnyIncludeFilterMatches);
