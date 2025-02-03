@@ -17,7 +17,6 @@ namespace DotNetOutdated.Core.Services
 
     public sealed class NuGetPackageInfoService : INuGetPackageInfoService, IDisposable
     {
-        private readonly INuGetPackageInfoServiceLogger _logger;
         private IEnumerable<PackageSource> _enabledSources;
 
         private PackageSourceMapping _packageSourceMapping;
@@ -26,9 +25,8 @@ namespace DotNetOutdated.Core.Services
 
         private readonly ConcurrentDictionary<string, Task<PackageMetadataResource>> _metadataResourceRequests = [];
 
-        public NuGetPackageInfoService(INuGetPackageInfoServiceLogger logger)
+        public NuGetPackageInfoService()
         {
-            _logger = logger;
             _context = new SourceCacheContext()
             {
                 NoCache = true
@@ -66,7 +64,7 @@ namespace DotNetOutdated.Core.Services
                     var mappedSources = _packageSourceMapping.GetConfiguredPackageSources(packageId);
                     if (mappedSources != null && !mappedSources.Any(s => string.Equals(s, enabledSource.Name, StringComparison.OrdinalIgnoreCase)))
                     {
-                        _logger.PackageSourceSkipped(enabledSource.Name, packageId);
+                        // Skip package sources that are not mapped to the package
                         return null;
                     }
                 }
