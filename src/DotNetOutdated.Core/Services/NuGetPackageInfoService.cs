@@ -20,7 +20,7 @@ namespace DotNetOutdated.Core.Services
         private IEnumerable<PackageSource> _enabledSources;
         private readonly SourceCacheContext _context;
 
-        private readonly ConcurrentDictionary<string, Lazy<Task<PackageMetadataResource>>> _metadataResourceRequests = new ConcurrentDictionary<string, Lazy<Task<PackageMetadataResource>>>();
+        private readonly ConcurrentDictionary<string, Task<PackageMetadataResource>> _metadataResourceRequests = [];
 
         public NuGetPackageInfoService()
         {
@@ -57,8 +57,9 @@ namespace DotNetOutdated.Core.Services
                                            ? new SourceRepository(enabledSource, Repository.Provider.GetCoreV3())
                                            : Repository.Factory.GetCoreV3(resourceUrl);
 
-                var resourceRequest = new Lazy<Task<PackageMetadataResource>>(() => sourceRepository.GetResourceAsync<PackageMetadataResource>());
-                return await _metadataResourceRequests.GetOrAdd(resourceUrl, resourceRequest).Value.ConfigureAwait(false);
+                var metadataResourceRequest = _metadataResourceRequests.GetOrAdd(resourceUrl, _ => sourceRepository.GetResourceAsync<PackageMetadataResource>());
+
+                return await metadataResourceRequest.ConfigureAwait(false);
             }
             catch (Exception)
             {
