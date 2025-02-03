@@ -17,6 +17,7 @@ namespace DotNetOutdated.Core.Services
 
     public sealed class NuGetPackageInfoService : INuGetPackageInfoService, IDisposable
     {
+        private readonly INuGetPackageInfoServiceLogger _logger;
         private IEnumerable<PackageSource> _enabledSources;
 
         private PackageSourceMapping _packageSourceMapping;
@@ -25,8 +26,9 @@ namespace DotNetOutdated.Core.Services
 
         private readonly ConcurrentDictionary<string, Lazy<Task<PackageMetadataResource>>> _metadataResourceRequests = new ConcurrentDictionary<string, Lazy<Task<PackageMetadataResource>>>();
 
-        public NuGetPackageInfoService()
+        public NuGetPackageInfoService(INuGetPackageInfoServiceLogger logger)
         {
+            _logger = logger;
             _context = new SourceCacheContext()
             {
                 NoCache = true
@@ -62,9 +64,9 @@ namespace DotNetOutdated.Core.Services
                 if (enabledSource != null && _packageSourceMapping.IsEnabled)
                 {
                     var mappedSources = _packageSourceMapping.GetConfiguredPackageSources(packageId);
-                    if (mappedSources != null && (!mappedSources.Any(s => String.Equals(s, enabledSource.Name, StringComparison.OrdinalIgnoreCase))))
+                    if (mappedSources != null && !mappedSources.Any(s => string.Equals(s, enabledSource.Name, StringComparison.OrdinalIgnoreCase)))
                     {
-                        Console.WriteLine($"package source {enabledSource.Name} skipped by packageSourceMapping, packageId: {packageId}");
+                        _logger.PackageSourceSkipped(enabledSource.Name, packageId);
                         return null;
                     }
                 }

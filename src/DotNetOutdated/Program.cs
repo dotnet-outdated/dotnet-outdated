@@ -138,6 +138,7 @@ namespace DotNetOutdated
                  .AddSingleton<IDependencyGraphService, DependencyGraphService>()
                  .AddSingleton<IDotNetRestoreService, DotNetRestoreService>()
                  .AddSingleton<IDotNetPackageService, DotNetPackageService>()
+                 .AddSingleton<INuGetPackageInfoServiceLogger>(provider => new NuGetPackageInfoServiceLogger(provider.GetService<IConsole>()))
                  .AddSingleton<INuGetPackageInfoService, NuGetPackageInfoService>()
                  .AddSingleton<INuGetPackageResolutionService, NuGetPackageResolutionService>()
                  .AddSingleton<ICentralPackageVersionManagementService, CentralPackageVersionManagementService>()
