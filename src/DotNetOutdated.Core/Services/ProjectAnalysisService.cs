@@ -73,7 +73,7 @@ namespace DotNetOutdated.Core.Services
 
                             var dependency = new Dependency(projectDependency.Name, projectDependency.LibraryRange.VersionRange, projectLibrary?.Version,
                                 projectDependency.AutoReferenced, false, isDevelopmentDependency, projectDependency.VersionCentrallyManaged);
-                            targetFramework.Dependencies.Add(dependency.Name, dependency);
+                            targetFramework.Dependencies.TryAdd(dependency.Name, dependency);
 
                             // Process transitive dependencies for the library
                             if (includeTransitiveDependencies)
