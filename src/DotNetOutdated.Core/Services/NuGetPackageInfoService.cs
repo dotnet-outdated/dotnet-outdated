@@ -96,7 +96,7 @@ public sealed class NuGetPackageInfoService : INuGetPackageInfoService, IDisposa
     {
         ArgumentNullException.ThrowIfNull(sources);
 
-        var allVersions = new List<NuGetVersion>();
+        List<NuGetVersion> allVersions = [];
         foreach (var source in sources)
         {
             try

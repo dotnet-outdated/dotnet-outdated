@@ -31,7 +31,7 @@ public class ConsolidatedPackage
 
     public string Name { get; set; }
 
-    public List<PackageProjectReference> Projects { get; set; } = new();
+    public List<PackageProjectReference> Projects { get; set; } = [];
 
     public NuGetVersion ResolvedVersion { get; set; }
 

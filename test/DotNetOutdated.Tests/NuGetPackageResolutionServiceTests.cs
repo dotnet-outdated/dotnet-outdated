@@ -19,47 +19,47 @@ public class NuGetPackageResolutionServiceTests
 
     public NuGetPackageResolutionServiceTests()
     {
-        List<NuGetVersion> availableVersions1 = new()
-        {
-            new NuGetVersion("1.1.0"),
-            new NuGetVersion("1.2.0"),
-            new NuGetVersion("1.2.2"),
-            new NuGetVersion("1.3.0-pre"),
-            new NuGetVersion("1.3.0"),
-            new NuGetVersion("1.4.0-pre"),
-            new NuGetVersion("2.0.0"),
-            new NuGetVersion("2.1.0"),
-            new NuGetVersion("2.2.0-pre.1"),
-            new NuGetVersion("2.2.0-pre.2"),
-            new NuGetVersion("3.0.0-pre.1"),
-            new NuGetVersion("3.0.0-pre.2"),
-            new NuGetVersion("3.1.0-pre.1"),
-            new NuGetVersion("4.0.0-pre.1"),
-        };
+        List<NuGetVersion> availableVersions1 =
+        [
+            new("1.1.0"),
+            new("1.2.0"),
+            new("1.2.2"),
+            new("1.3.0-pre"),
+            new("1.3.0"),
+            new("1.4.0-pre"),
+            new("2.0.0"),
+            new("2.1.0"),
+            new("2.2.0-pre.1"),
+            new("2.2.0-pre.2"),
+            new("3.0.0-pre.1"),
+            new("3.0.0-pre.2"),
+            new("3.1.0-pre.1"),
+            new("4.0.0-pre.1")
+        ];
 
-        List<NuGetVersion> availableVersions2 = new()
-        {
-            new NuGetVersion("3.0.0-preview.1.123"),
-            new NuGetVersion("3.0.0"),
-            new NuGetVersion("3.0.1"),
-            new NuGetVersion("3.1.0-preview.1.123"),
-            new NuGetVersion("3.1.0"),
-            new NuGetVersion("3.1.1-preview.1.123"),
-            new NuGetVersion("3.1.1"),
-            new NuGetVersion("6.0.0-preview.1.123"),
-            new NuGetVersion("6.0.0"),
-            new NuGetVersion("6.0.1"),
-            new NuGetVersion("7.0.0"),
-            new NuGetVersion("7.0.1"),
-            new NuGetVersion("8.0.0-preview.1.123"),
-            new NuGetVersion("8.0.0-preview.1.124"),
-            new NuGetVersion("8.0.0-preview.2.125"),
-            new NuGetVersion("8.0.0-preview.3.126"),
-            new NuGetVersion("8.0.0-rc.1.127"),
-            new NuGetVersion("8.0.0-rc.2.128"),
-        };
+        List<NuGetVersion> availableVersions2 =
+        [
+            new("3.0.0-preview.1.123"),
+            new("3.0.0"),
+            new("3.0.1"),
+            new("3.1.0-preview.1.123"),
+            new("3.1.0"),
+            new("3.1.1-preview.1.123"),
+            new("3.1.1"),
+            new("6.0.0-preview.1.123"),
+            new("6.0.0"),
+            new("6.0.1"),
+            new("7.0.0"),
+            new("7.0.1"),
+            new("8.0.0-preview.1.123"),
+            new("8.0.0-preview.1.124"),
+            new("8.0.0-preview.2.125"),
+            new("8.0.0-preview.3.126"),
+            new("8.0.0-rc.1.127"),
+            new("8.0.0-rc.2.128")
+        ];
 
-        List<NuGetVersion> availableVersions3 = new();
+        List<NuGetVersion> availableVersions3 = [];
 
         var nuGetPackageInfoService = Substitute.For<INuGetPackageInfoService>();
         nuGetPackageInfoService.GetAllVersions(_packageName1, Arg.Any<List<Uri>>(), Arg.Any<bool>(), Arg.Any<NuGetFramework>(), Arg.Any<string>(), Arg.Any<bool>(), 0, Arg.Any<bool>())
@@ -131,7 +131,7 @@ public class NuGetPackageResolutionServiceTests
     public async Task ResolvesVersionCorrectlyWithParts(string current, VersionLock versionLock, PrereleaseReporting prerelease, string prereleaseLabel, string latest)
     {
         // Act
-        var latestVersion = await _nuGetPackageResolutionService.ResolvePackageVersions(_packageName2, NuGetVersion.Parse(current), new List<Uri>(), VersionRange.Parse(current), versionLock, prerelease, prereleaseLabel, null, null, false, 0);
+        var latestVersion = await _nuGetPackageResolutionService.ResolvePackageVersions(_packageName2, NuGetVersion.Parse(current), [], VersionRange.Parse(current), versionLock, prerelease, prereleaseLabel, null, null, false, 0);
 
         // Assert
         Assert.Equal(NuGetVersion.Parse(latest), latestVersion);
@@ -173,7 +173,7 @@ public class NuGetPackageResolutionServiceTests
     public async Task ResolvesVersionCorrectlyIfPackageIsLatest(string current, VersionLock versionLock, PrereleaseReporting prerelease, string prereleaseLabel)
     {
         // Act
-        var latestVersion = await _nuGetPackageResolutionService.ResolvePackageVersions(_packageName3, NuGetVersion.Parse(current), new List<Uri>(), VersionRange.Parse(current), versionLock, prerelease, prereleaseLabel, null, null, false, 0);
+        var latestVersion = await _nuGetPackageResolutionService.ResolvePackageVersions(_packageName3, NuGetVersion.Parse(current), [], VersionRange.Parse(current), versionLock, prerelease, prereleaseLabel, null, null, false, 0);
 
         // Assert
         Assert.Equal(NuGetVersion.Parse(current), latestVersion);
