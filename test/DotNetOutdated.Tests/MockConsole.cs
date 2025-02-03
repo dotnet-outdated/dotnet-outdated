@@ -2,66 +2,65 @@ using McMaster.Extensions.CommandLineUtils;
 using System;
 using System.IO;
 
-namespace DotNetOutdated.Tests
+namespace DotNetOutdated.Tests;
+
+public sealed class MockConsole : IConsole, IDisposable
 {
-    public sealed class MockConsole : IConsole, IDisposable
+    private readonly MockTextWriter _out;
+    private readonly MockTextWriter _error;
+
+    public MockConsole()
     {
-        private readonly MockTextWriter _out;
-        private readonly MockTextWriter _error;
+        _out = new MockTextWriter();
+        _error = new MockTextWriter();
+    }
 
-        public MockConsole()
+    public string WrittenOut => _out.Contents;
+
+    public TextWriter Out => _out;
+
+    public TextWriter Error => _error;
+
+    public TextReader In => throw new NotSupportedException();
+
+    public bool IsInputRedirected => throw new NotSupportedException();
+
+    public bool IsOutputRedirected => true;
+
+    public bool IsErrorRedirected => true;
+
+    private ConsoleColor _foreground = ConsoleColor.White;
+
+    public ConsoleColor ForegroundColor
+    {
+        get => _foreground; set
         {
-            _out = new MockTextWriter();
-            _error = new MockTextWriter();
+            _foreground = value;
+            _out.Write($"[{value}]");
         }
+    }
 
-        public string WrittenOut => _out.Contents;
+    public ConsoleColor BackgroundColor { get; set; }
 
-        public TextWriter Out => _out;
-
-        public TextWriter Error => _error;
-
-        public TextReader In => throw new NotSupportedException();
-
-        public bool IsInputRedirected => throw new NotSupportedException();
-
-        public bool IsOutputRedirected => true;
-
-        public bool IsErrorRedirected => true;
-
-        private ConsoleColor _foreground = ConsoleColor.White;
-
-        public ConsoleColor ForegroundColor
-        {
-            get => _foreground; set
-            {
-                _foreground = value;
-                _out.Write($"[{value}]");
-            }
-        }
-
-        public ConsoleColor BackgroundColor { get; set; }
-
-        // build warning because it is not used
+    // build warning because it is not used
 #pragma warning disable 67
 
-        public event ConsoleCancelEventHandler CancelKeyPress;
+    public event ConsoleCancelEventHandler CancelKeyPress;
 
 #pragma warning restore 67
 
-        public void ResetColor()
-        {
-            throw new NotSupportedException();
-        }
+    public void ResetColor()
+    {
+        throw new NotSupportedException();
+    }
 
-        public void Dispose()
+    public void Dispose()
+    {
+        using (_out)
         {
-            using (_out)
-            {
-            }
-            using (_error)
-            {
-            }
+        }
+        using (_error)
+        {
         }
     }
 }

@@ -1,7 +1,6 @@
-﻿namespace DotNetOutdated
+﻿namespace DotNetOutdated;
+
+public static class Constants
 {
-    public static class Constants
-    {
-        public static ReportingColors ReportingColors { get; } = new();
-    }
+    public static ReportingColors ReportingColors { get; } = new();
 }

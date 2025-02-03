@@ -1,11 +1,10 @@
-﻿namespace DotNetOutdated.Models
+﻿namespace DotNetOutdated.Models;
+
+public enum DependencyUpgradeSeverity
 {
-    public enum DependencyUpgradeSeverity
-    {
-        None,
-        Patch,
-        Minor,
-        Major,
-        Unknown
-    }
+    None,
+    Patch,
+    Minor,
+    Major,
+    Unknown
 }

@@ -1,8 +1,7 @@
-﻿namespace DotNetOutdated
+﻿namespace DotNetOutdated;
+
+public enum UpgradeType
 {
-    public enum UpgradeType
-    {
-        Auto,
-        Prompt
-    }
+    Auto,
+    Prompt
 }

@@ -6,39 +6,38 @@ using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using DotNetOutdated.Core.Models;
 
-namespace DotNetOutdated.Services
+namespace DotNetOutdated.Services;
+
+internal interface IReportingService
 {
-    internal interface IReportingService
-    {
-        Task WriteReport(string filename, List<Project> projects);
-    }
+    Task WriteReport(string filename, List<Project> projects);
+}
 
-    public class JsonReportingService : IReportingService
+public class JsonReportingService : IReportingService
+{
+    public async Task WriteReport(string filename, List<Project> projects)
     {
-        public async Task WriteReport(string filename, List<Project> projects)
+        using (FileStream createStream = File.Create(filename))
         {
-            using (FileStream createStream = File.Create(filename))
-            {
-                await JsonSerializer.SerializeAsync(createStream, projects);
-            }
+            await JsonSerializer.SerializeAsync(createStream, projects);
         }
     }
+}
 
-    public class ToStringJsonConverter : JsonConverter<object>
+public class ToStringJsonConverter : JsonConverter<object>
+{
+    public override bool CanConvert(Type typeToConvert)
     {
-        public override bool CanConvert(Type typeToConvert)
-        {
-            return true;
-        }
+        return true;
+    }
 
-        public override void Write(Utf8JsonWriter writer, object value, JsonSerializerOptions options)
-        {
-            writer.WriteStringValue(value.ToString());
-        }
+    public override void Write(Utf8JsonWriter writer, object value, JsonSerializerOptions options)
+    {
+        writer.WriteStringValue(value.ToString());
+    }
 
-        public override object Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-        {
-            throw new NotSupportedException("This converter cannot be used for reading JSON.");
-        }
+    public override object Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        throw new NotSupportedException("This converter cannot be used for reading JSON.");
     }
 }

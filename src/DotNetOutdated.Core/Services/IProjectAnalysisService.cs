@@ -2,10 +2,9 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
-namespace DotNetOutdated.Core.Services
+namespace DotNetOutdated.Core.Services;
+
+public interface IProjectAnalysisService
 {
-    public interface IProjectAnalysisService
-    {
-        Task<List<Project>> AnalyzeProjectAsync(string projectPath, bool runRestore, bool includeTransitiveDependencies, int transitiveDepth, string runtime);
-    }
+    Task<List<Project>> AnalyzeProjectAsync(string projectPath, bool runRestore, bool includeTransitiveDependencies, int transitiveDepth, string runtime);
 }

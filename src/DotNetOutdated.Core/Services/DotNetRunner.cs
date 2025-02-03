@@ -4,88 +4,87 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace DotNetOutdated.Core.Services
+namespace DotNetOutdated.Core.Services;
+
+/// <summary>
+/// Runs dot net executable.
+/// </summary>
+/// <remarks>
+/// Credit for the stuff happening in here goes to the https://github.com/jaredcnance/dotnet-status project
+/// </remarks>
+public class DotNetRunner : IDotNetRunner
 {
-    /// <summary>
-    /// Runs dot net executable.
-    /// </summary>
-    /// <remarks>
-    /// Credit for the stuff happening in here goes to the https://github.com/jaredcnance/dotnet-status project
-    /// </remarks>
-    public class DotNetRunner : IDotNetRunner
+    public RunStatus Run(string workingDirectory, string[] arguments)
     {
-        public RunStatus Run(string workingDirectory, string[] arguments)
+        var psi = new ProcessStartInfo("dotnet", arguments)
         {
-            var psi = new ProcessStartInfo("dotnet", arguments)
-            {
-                WorkingDirectory = workingDirectory,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true
-            };
+            WorkingDirectory = workingDirectory,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        };
 
-            var p = new Process();
-            try
-            {
-                p.StartInfo = psi;
-                p.Start();
+        var p = new Process();
+        try
+        {
+            p.StartInfo = psi;
+            p.Start();
 
-                var output = new StringBuilder();
-                var errors = new StringBuilder();
-                var timeSinceLastOutput = Stopwatch.StartNew();
-                var outputTask = ConsumeStreamReaderAsync(p.StandardOutput, timeSinceLastOutput, output);
-                var errorTask = ConsumeStreamReaderAsync(p.StandardError, timeSinceLastOutput, errors);
-                bool processExited = false;
-                const int Timeout = 20_000;
+            var output = new StringBuilder();
+            var errors = new StringBuilder();
+            var timeSinceLastOutput = Stopwatch.StartNew();
+            var outputTask = ConsumeStreamReaderAsync(p.StandardOutput, timeSinceLastOutput, output);
+            var errorTask = ConsumeStreamReaderAsync(p.StandardError, timeSinceLastOutput, errors);
+            bool processExited = false;
+            const int Timeout = 20_000;
 
-                while (true) {
-                    if (p.HasExited) {
-                        processExited = true;
+            while (true) {
+                if (p.HasExited) {
+                    processExited = true;
+                    break;
+                }
+
+                // If output has not been received for a while, then
+                // assume that the process has hung and stop waiting.
+                lock(timeSinceLastOutput) {
+                    if (timeSinceLastOutput.ElapsedMilliseconds > Timeout) {
                         break;
                     }
-
-                    // If output has not been received for a while, then
-                    // assume that the process has hung and stop waiting.
-                    lock(timeSinceLastOutput) {
-                        if (timeSinceLastOutput.ElapsedMilliseconds > Timeout) {
-                            break;
-                        }
-                    }
-
-                    Thread.Sleep(100);
                 }
 
-                if (!processExited)
-                {
-                    p.Kill();
-
-                    return new RunStatus(output.ToString(), errors.ToString(), exitCode: -1);
-                }
-
-                Task.WaitAll(outputTask, errorTask);
-
-                return new RunStatus(output.ToString(), errors.ToString(), p.ExitCode);
+                Thread.Sleep(100);
             }
-            finally
+
+            if (!processExited)
             {
-                p.Dispose();
+                p.Kill();
+
+                return new RunStatus(output.ToString(), errors.ToString(), exitCode: -1);
             }
+
+            Task.WaitAll(outputTask, errorTask);
+
+            return new RunStatus(output.ToString(), errors.ToString(), p.ExitCode);
         }
-
-        private static async Task ConsumeStreamReaderAsync(StreamReader reader, Stopwatch timeSinceLastOutput, StringBuilder lines)
+        finally
         {
-            await Task.Yield();
+            p.Dispose();
+        }
+    }
 
-            string line;
-            while ((line = await reader.ReadLineAsync().ConfigureAwait(false)) != null)
-            {
-                lock (timeSinceLastOutput) {
-                    timeSinceLastOutput.Restart();
-                }
+    private static async Task ConsumeStreamReaderAsync(StreamReader reader, Stopwatch timeSinceLastOutput, StringBuilder lines)
+    {
+        await Task.Yield();
 
-                lines.AppendLine(line);
+        string line;
+        while ((line = await reader.ReadLineAsync().ConfigureAwait(false)) != null)
+        {
+            lock (timeSinceLastOutput) {
+                timeSinceLastOutput.Restart();
             }
+
+            lines.AppendLine(line);
         }
     }
 }

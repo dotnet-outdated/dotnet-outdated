@@ -1,9 +1,8 @@
 ﻿using McMaster.Extensions.CommandLineUtils;
 
-namespace DotNetOutdated
+namespace DotNetOutdated;
+
+[HelpOption]
+internal abstract class CommandBase
 {
-    [HelpOption]
-    internal abstract class CommandBase
-    {
-    }
 }

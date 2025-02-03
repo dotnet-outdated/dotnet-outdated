@@ -3,96 +3,95 @@ using NuGet.Common;
 using System;
 using System.Threading.Tasks;
 
-namespace DotNetOutdated.Core.Services
+namespace DotNetOutdated.Core.Services;
+
+public class ConsoleLogger : ILogger
 {
-    public class ConsoleLogger : ILogger
+    private readonly LogLevel _minimumLogLevel;
+    private readonly IConsole _console;
+
+    public ConsoleLogger(IConsole console, LogLevel minimumLogLevel)
     {
-        private readonly LogLevel _minimumLogLevel;
-        private readonly IConsole _console;
+        _minimumLogLevel = minimumLogLevel;
+        _console = console;
+    }
 
-        public ConsoleLogger(IConsole console, LogLevel minimumLogLevel)
+    public void LogDebug(string data)
+    {
+        Log(new LogMessage(LogLevel.Debug, data));
+    }
+
+    public void LogVerbose(string data)
+    {
+        Log(new LogMessage(LogLevel.Verbose, data));
+    }
+
+    public void LogInformation(string data)
+    {
+        Log(new LogMessage(LogLevel.Information, data));
+    }
+
+    public void LogMinimal(string data)
+    {
+        Log(new LogMessage(LogLevel.Minimal, data));
+    }
+
+    public void LogWarning(string data)
+    {
+        Log(new LogMessage(LogLevel.Warning, data));
+    }
+
+    public void LogError(string data)
+    {
+        Log(new LogMessage(LogLevel.Error, data));
+    }
+
+    public void LogInformationSummary(string data)
+    {
+        Log(new LogMessage(LogLevel.Information, data));
+    }
+
+    public void Log(LogLevel level, string data)
+    {
+        Log(new LogMessage(level, data));
+    }
+
+    public Task LogAsync(LogLevel level, string data)
+    {
+        return LogAsync(new LogMessage(level, data));
+    }
+
+    public void Log(ILogMessage message)
+    {
+        // Ignore if Log is lower level than minimum
+        if (_minimumLogLevel > message.Level)
         {
-            _minimumLogLevel = minimumLogLevel;
-            _console = console;
+            return;
         }
 
-        public void LogDebug(string data)
+        // Save ForegroundColor so we can return it after the log has been written
+        var color = _console.ForegroundColor;
+
+        switch (message.Level)
         {
-            Log(new LogMessage(LogLevel.Debug, data));
+            case LogLevel.Warning:
+                _console.ForegroundColor = ConsoleColor.Yellow;
+                break;
+            case LogLevel.Error:
+                _console.ForegroundColor = ConsoleColor.Red;
+                break;
+            default:
+                break;
         }
 
-        public void LogVerbose(string data)
-        {
-            Log(new LogMessage(LogLevel.Verbose, data));
-        }
+        _console.WriteLine("[{0}] {1}", message.Level.ToString().ToUpper(), message.Message);
+        _console.ForegroundColor = color;
+    }
 
-        public void LogInformation(string data)
-        {
-            Log(new LogMessage(LogLevel.Information, data));
-        }
+    public Task LogAsync(ILogMessage message)
+    {
+        Log(message);
 
-        public void LogMinimal(string data)
-        {
-            Log(new LogMessage(LogLevel.Minimal, data));
-        }
-
-        public void LogWarning(string data)
-        {
-            Log(new LogMessage(LogLevel.Warning, data));
-        }
-
-        public void LogError(string data)
-        {
-            Log(new LogMessage(LogLevel.Error, data));
-        }
-
-        public void LogInformationSummary(string data)
-        {
-            Log(new LogMessage(LogLevel.Information, data));
-        }
-
-        public void Log(LogLevel level, string data)
-        {
-            Log(new LogMessage(level, data));
-        }
-
-        public Task LogAsync(LogLevel level, string data)
-        {
-            return LogAsync(new LogMessage(level, data));
-        }
-
-        public void Log(ILogMessage message)
-        {
-            // Ignore if Log is lower level than minimum
-            if (_minimumLogLevel > message.Level)
-            {
-                return;
-            }
-
-            // Save ForegroundColor so we can return it after the log has been written
-            var color = _console.ForegroundColor;
-
-            switch (message.Level)
-            {
-                case LogLevel.Warning:
-                    _console.ForegroundColor = ConsoleColor.Yellow;
-                    break;
-                case LogLevel.Error:
-                    _console.ForegroundColor = ConsoleColor.Red;
-                    break;
-                default:
-                    break;
-            }
-
-            _console.WriteLine("[{0}] {1}", message.Level.ToString().ToUpper(), message.Message);
-            _console.ForegroundColor = color;
-        }
-
-        public Task LogAsync(ILogMessage message)
-        {
-            Log(message);
-
-            return Task.CompletedTask;
-        }
+        return Task.CompletedTask;
     }
 }

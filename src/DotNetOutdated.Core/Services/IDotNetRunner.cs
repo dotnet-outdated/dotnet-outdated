@@ -1,7 +1,6 @@
-﻿namespace DotNetOutdated.Core.Services
+﻿namespace DotNetOutdated.Core.Services;
+
+public interface IDotNetRunner
 {
-    public interface IDotNetRunner
-    {
-        RunStatus Run(string workingDirectory, string[] arguments);
-    }
+    RunStatus Run(string workingDirectory, string[] arguments);
 }

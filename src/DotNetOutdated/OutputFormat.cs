@@ -1,9 +1,8 @@
-﻿namespace DotNetOutdated
+﻿namespace DotNetOutdated;
+
+public enum OutputFormat
 {
-    public enum OutputFormat
-    {
-        Json,
-        Csv,
-        Markdown
-    }
+    Json,
+    Csv,
+    Markdown
 }

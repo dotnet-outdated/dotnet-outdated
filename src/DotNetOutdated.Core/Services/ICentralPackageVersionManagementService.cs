@@ -1,9 +1,8 @@
 ﻿using NuGet.Versioning;
 
-namespace DotNetOutdated.Core.Services
+namespace DotNetOutdated.Core.Services;
+
+public interface ICentralPackageVersionManagementService
 {
-    public interface ICentralPackageVersionManagementService
-    {
-        RunStatus AddPackage(string projectFilePath, string packageName, NuGetVersion version, bool noRestore);
-    }
+    RunStatus AddPackage(string projectFilePath, string packageName, NuGetVersion version, bool noRestore);
 }

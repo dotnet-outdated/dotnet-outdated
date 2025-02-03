@@ -9,101 +9,100 @@ using System.IO.Abstractions;
 using System.Linq;
 using System.Threading.Tasks;
 
-namespace DotNetOutdated.Core.Services
+namespace DotNetOutdated.Core.Services;
+
+public class ProjectAnalysisService : IProjectAnalysisService
 {
-    public class ProjectAnalysisService : IProjectAnalysisService
+    private readonly IDependencyGraphService _dependencyGraphService;
+    private readonly IDotNetRestoreService _dotNetRestoreService;
+    private readonly IFileSystem _fileSystem;
+
+    public ProjectAnalysisService(IDependencyGraphService dependencyGraphService, IDotNetRestoreService dotNetRestoreService, IFileSystem fileSystem)
     {
-        private readonly IDependencyGraphService _dependencyGraphService;
-        private readonly IDotNetRestoreService _dotNetRestoreService;
-        private readonly IFileSystem _fileSystem;
+        _dependencyGraphService = dependencyGraphService;
+        _dotNetRestoreService = dotNetRestoreService;
+        _fileSystem = fileSystem;
+    }
 
-        public ProjectAnalysisService(IDependencyGraphService dependencyGraphService, IDotNetRestoreService dotNetRestoreService, IFileSystem fileSystem)
+    public async Task<List<Project>> AnalyzeProjectAsync(string projectPath, bool runRestore, bool includeTransitiveDependencies, int transitiveDepth,  string runtime)
+    {
+        var dependencyGraph = await _dependencyGraphService.GenerateDependencyGraphAsync(projectPath, runtime).ConfigureAwait(false);
+        if (dependencyGraph == null)
+            return null;
+
+        var projects = new List<Project>();
+        foreach (var packageSpec in dependencyGraph.Projects.Where(p => p.RestoreMetadata.ProjectStyle == ProjectStyle.PackageReference))
         {
-            _dependencyGraphService = dependencyGraphService;
-            _dotNetRestoreService = dotNetRestoreService;
-            _fileSystem = fileSystem;
-        }
-
-        public async Task<List<Project>> AnalyzeProjectAsync(string projectPath, bool runRestore, bool includeTransitiveDependencies, int transitiveDepth,  string runtime)
-        {
-            var dependencyGraph = await _dependencyGraphService.GenerateDependencyGraphAsync(projectPath, runtime).ConfigureAwait(false);
-            if (dependencyGraph == null)
-                return null;
-
-            var projects = new List<Project>();
-            foreach (var packageSpec in dependencyGraph.Projects.Where(p => p.RestoreMetadata.ProjectStyle == ProjectStyle.PackageReference))
+            // Restore the packages
+            if (runRestore)
             {
-                // Restore the packages
-                if (runRestore)
+                _dotNetRestoreService.Restore(packageSpec.FilePath);
+            }
+
+            // Load the lock file
+            string lockFilePath = _fileSystem.Path.Combine(packageSpec.RestoreMetadata.OutputPath, "project.assets.json");
+            var lockFile = LockFileUtilities.GetLockFile(lockFilePath, NullLogger.Instance);
+
+            // Create a project
+            var project = new Project(packageSpec.Name, packageSpec.FilePath, packageSpec.RestoreMetadata.Sources.Select(s => s.SourceUri).ToList(), packageSpec.Version);
+            projects.Add(project);
+
+            // Get the target frameworks with their dependencies
+            foreach (var targetFrameworkInformation in packageSpec.TargetFrameworks)
+            {
+                var targetFramework = new TargetFramework(targetFrameworkInformation.FrameworkName);
+                project.TargetFrameworks.Add(targetFramework);
+
+                var target = lockFile.Targets.FirstOrDefault(t => t.TargetFramework.Equals(targetFrameworkInformation.FrameworkName));
+
+                if (target != null)
                 {
-                    _dotNetRestoreService.Restore(packageSpec.FilePath);
-                }
-
-                // Load the lock file
-                string lockFilePath = _fileSystem.Path.Combine(packageSpec.RestoreMetadata.OutputPath, "project.assets.json");
-                var lockFile = LockFileUtilities.GetLockFile(lockFilePath, NullLogger.Instance);
-
-                // Create a project
-                var project = new Project(packageSpec.Name, packageSpec.FilePath, packageSpec.RestoreMetadata.Sources.Select(s => s.SourceUri).ToList(), packageSpec.Version);
-                projects.Add(project);
-
-                // Get the target frameworks with their dependencies
-                foreach (var targetFrameworkInformation in packageSpec.TargetFrameworks)
-                {
-                    var targetFramework = new TargetFramework(targetFrameworkInformation.FrameworkName);
-                    project.TargetFrameworks.Add(targetFramework);
-
-                    var target = lockFile.Targets.FirstOrDefault(t => t.TargetFramework.Equals(targetFrameworkInformation.FrameworkName));
-
-                    if (target != null)
+                    foreach (var projectDependency in targetFrameworkInformation.Dependencies)
                     {
-                        foreach (var projectDependency in targetFrameworkInformation.Dependencies)
+                        var projectLibrary = target.Libraries.FirstOrDefault(library => string.Equals(library.Name, projectDependency.Name, StringComparison.OrdinalIgnoreCase));
+
+                        bool isDevelopmentDependency = false;
+                        if (projectLibrary != null)
                         {
-                            var projectLibrary = target.Libraries.FirstOrDefault(library => string.Equals(library.Name, projectDependency.Name, StringComparison.OrdinalIgnoreCase));
-
-                            bool isDevelopmentDependency = false;
-                            if (projectLibrary != null)
-                            {
-                                // Determine whether this is a development dependency
-                                var packageIdentity = new PackageIdentity(projectLibrary.Name, projectLibrary.Version);
-                                var packageInfo = LocalFolderUtility.GetPackageV3(packageSpec.RestoreMetadata.PackagesPath, packageIdentity, NullLogger.Instance);
-                                if (packageInfo != null)
-                                    isDevelopmentDependency = packageInfo.GetReader().GetDevelopmentDependency();
-                            }
-
-                            var dependency = new Dependency(projectDependency.Name, projectDependency.LibraryRange.VersionRange, projectLibrary?.Version,
-                                projectDependency.AutoReferenced, false, isDevelopmentDependency, projectDependency.VersionCentrallyManaged);
-                            targetFramework.Dependencies.Add(dependency.Name, dependency);
-
-                            // Process transitive dependencies for the library
-                            if (includeTransitiveDependencies)
-                                AddDependencies(targetFramework, projectLibrary, target, 1, transitiveDepth);
+                            // Determine whether this is a development dependency
+                            var packageIdentity = new PackageIdentity(projectLibrary.Name, projectLibrary.Version);
+                            var packageInfo = LocalFolderUtility.GetPackageV3(packageSpec.RestoreMetadata.PackagesPath, packageIdentity, NullLogger.Instance);
+                            if (packageInfo != null)
+                                isDevelopmentDependency = packageInfo.GetReader().GetDevelopmentDependency();
                         }
+
+                        var dependency = new Dependency(projectDependency.Name, projectDependency.LibraryRange.VersionRange, projectLibrary?.Version,
+                            projectDependency.AutoReferenced, false, isDevelopmentDependency, projectDependency.VersionCentrallyManaged);
+                        targetFramework.Dependencies.Add(dependency.Name, dependency);
+
+                        // Process transitive dependencies for the library
+                        if (includeTransitiveDependencies)
+                            AddDependencies(targetFramework, projectLibrary, target, 1, transitiveDepth);
                     }
                 }
             }
-
-            return projects;
         }
 
-        private void AddDependencies(TargetFramework targetFramework, LockFileTargetLibrary parentLibrary, LockFileTarget target, int level, int transitiveDepth)
+        return projects;
+    }
+
+    private void AddDependencies(TargetFramework targetFramework, LockFileTargetLibrary parentLibrary, LockFileTarget target, int level, int transitiveDepth)
+    {
+        if (parentLibrary?.Dependencies != null)
         {
-            if (parentLibrary?.Dependencies != null)
+            foreach (var packageDependency in parentLibrary.Dependencies)
             {
-                foreach (var packageDependency in parentLibrary.Dependencies)
+                var childLibrary = target.Libraries.FirstOrDefault(library => library.Name == packageDependency.Id);
+
+                // Only add library and process child dependencies if we have not come across this dependency before
+                if (!targetFramework.Dependencies.ContainsKey(packageDependency.Id))
                 {
-                    var childLibrary = target.Libraries.FirstOrDefault(library => library.Name == packageDependency.Id);
+                    var childDependency = new Dependency(packageDependency.Id, packageDependency.VersionRange, childLibrary?.Version, false, true, false, false);
+                    targetFramework.Dependencies.Add(childDependency.Name, childDependency);
 
-                    // Only add library and process child dependencies if we have not come across this dependency before
-                    if (!targetFramework.Dependencies.ContainsKey(packageDependency.Id))
-                    {
-                        var childDependency = new Dependency(packageDependency.Id, packageDependency.VersionRange, childLibrary?.Version, false, true, false, false);
-                        targetFramework.Dependencies.Add(childDependency.Name, childDependency);
-
-                        // Process the dependency for this project dependency
-                        if (level < transitiveDepth)
-                            AddDependencies(targetFramework, childLibrary, target, level + 1, transitiveDepth);
-                    }
+                    // Process the dependency for this project dependency
+                    if (level < transitiveDepth)
+                        AddDependencies(targetFramework, childLibrary, target, level + 1, transitiveDepth);
                 }
             }
         }

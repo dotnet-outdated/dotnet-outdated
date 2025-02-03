@@ -1,7 +1,6 @@
-﻿namespace DotNetOutdated.Core.Services
+﻿namespace DotNetOutdated.Core.Services;
+
+public interface IDotNetRestoreService
 {
-    public interface IDotNetRestoreService
-    {
-        RunStatus Restore(string projectPath);
-    }
+    RunStatus Restore(string projectPath);
 }

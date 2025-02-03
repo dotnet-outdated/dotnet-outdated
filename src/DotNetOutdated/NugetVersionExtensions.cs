@@ -3,27 +3,26 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 
-namespace DotNetOutdated
+namespace DotNetOutdated;
+
+public static class NugetVersionExtensions
 {
-    public static class NugetVersionExtensions
+    public static IEnumerable<string> GetParts(this NuGetVersion version)
     {
-        public static IEnumerable<string> GetParts(this NuGetVersion version)
+        ArgumentNullException.ThrowIfNull(version);
+
+        return YieldItems();
+
+        IEnumerable<string> YieldItems()
         {
-            ArgumentNullException.ThrowIfNull(version);
+            yield return version.Major.ToString(CultureInfo.InvariantCulture);
+            yield return version.Minor.ToString(CultureInfo.InvariantCulture);
+            yield return version.Patch.ToString(CultureInfo.InvariantCulture);
+            yield return version.Revision.ToString(CultureInfo.InvariantCulture);
 
-            return YieldItems();
-
-            IEnumerable<string> YieldItems()
+            foreach (var label in version.ReleaseLabels)
             {
-                yield return version.Major.ToString(CultureInfo.InvariantCulture);
-                yield return version.Minor.ToString(CultureInfo.InvariantCulture);
-                yield return version.Patch.ToString(CultureInfo.InvariantCulture);
-                yield return version.Revision.ToString(CultureInfo.InvariantCulture);
-
-                foreach (var label in version.ReleaseLabels)
-                {
-                    yield return label;
-                }
+                yield return label;
             }
         }
     }
