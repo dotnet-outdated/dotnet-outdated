@@ -8,6 +8,6 @@ internal sealed class NuGetPackageInfoServiceLogger(IConsole console) : INuGetPa
     public void PackageSourceSkipped(string sourceName, string packageId)
     {
         console.WriteLine(
-            $"package source {sourceName} skipped by packageSourceMapping, packageId: {packageId}");
+            $"Package source {sourceName} skipped by packageSourceMapping, packageId: {packageId}");
     }
 }
