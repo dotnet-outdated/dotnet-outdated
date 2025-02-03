@@ -28,15 +28,22 @@ namespace DotNetOutdated
        Name = "dotnet outdated",
        FullName = "A .NET Core global tool to list outdated Nuget packages.")]
    [VersionOptionFromMember(MemberName = nameof(GetVersion))]
-   internal class Program : CommandBase
+   internal class Program(
+        IFileSystem fileSystem,
+        IReporter reporter,
+        INuGetPackageResolutionService nugetService,
+        IProjectAnalysisService projectAnalysisService,
+        IProjectDiscoveryService projectDiscoveryService,
+        IDotNetPackageService dotNetPackageService,
+        ICentralPackageVersionManagementService centralPackageVersionManagementService) : CommandBase
    {
-      private readonly IFileSystem _fileSystem;
-      private readonly IReporter _reporter;
-      private readonly INuGetPackageResolutionService _nugetService;
-      private readonly IProjectAnalysisService _projectAnalysisService;
-      private readonly IProjectDiscoveryService _projectDiscoveryService;
-      private readonly IDotNetPackageService _dotNetPackageService;
-      private readonly ICentralPackageVersionManagementService _centralPackageVersionManagementService;
+      private readonly IFileSystem _fileSystem = fileSystem;
+      private readonly IReporter _reporter = reporter;
+      private readonly INuGetPackageResolutionService _nugetService = nugetService;
+      private readonly IProjectAnalysisService _projectAnalysisService = projectAnalysisService;
+      private readonly IProjectDiscoveryService _projectDiscoveryService = projectDiscoveryService;
+      private readonly IDotNetPackageService _dotNetPackageService = dotNetPackageService;
+      private readonly ICentralPackageVersionManagementService _centralPackageVersionManagementService = centralPackageVersionManagementService;
 
       [Option(CommandOptionType.NoValue, Description = "Specifies whether to include auto-referenced packages.",
           LongName = "include-auto-references")]
@@ -161,18 +168,6 @@ namespace DotNetOutdated
           .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
           .InformationalVersion;
 
-      public Program(IFileSystem fileSystem, IReporter reporter, INuGetPackageResolutionService nugetService, IProjectAnalysisService projectAnalysisService,
-          IProjectDiscoveryService projectDiscoveryService, IDotNetPackageService dotNetPackageService, ICentralPackageVersionManagementService centralPackageVersionManagementService)
-      {
-         _fileSystem = fileSystem;
-         _reporter = reporter;
-         _nugetService = nugetService;
-         _projectAnalysisService = projectAnalysisService;
-         _projectDiscoveryService = projectDiscoveryService;
-         _dotNetPackageService = dotNetPackageService;
-         _centralPackageVersionManagementService = centralPackageVersionManagementService;
-      }
-
       public async Task<int> OnExecute(CommandLineApplication app, IConsole console)
       {
          ArgumentNullException.ThrowIfNull(app);
@@ -196,7 +191,12 @@ namespace DotNetOutdated
             // Analyze the projects
             console.WriteLine("Analyzing project(s)...");
 
-            var projectLists = await Task.WhenAll(projectPaths.Select(path => _projectAnalysisService.AnalyzeProjectAsync(path, false, Transitive, TransitiveDepth, Runtime)));
+            var projectLists = new ConcurrentBag<List<Project>>();
+            await Parallel.ForEachAsync(projectPaths, async (path, _) =>
+            {
+                projectLists.Add(await _projectAnalysisService.AnalyzeProjectAsync(path, false, Transitive, TransitiveDepth, Runtime));
+            });
+
             var projects = projectLists.SelectMany(p => p).ToList();
 
             // Analyze the dependencies
@@ -419,15 +419,7 @@ namespace DotNetOutdated
 
          console.WriteLine("Analyzing dependencies...");
 
-         var tasks = new Task[projects.Count];
-
-         for (var index = 0; index < projects.Count; index++)
-         {
-            var project = projects[index];
-            tasks[index] = AddOutdatedProjectsIfNeeded(project, outdatedProjects);
-         }
-
-         await Task.WhenAll(tasks).ConfigureAwait(false);
+         await Parallel.ForEachAsync(projects, async (project, _) => await AddOutdatedProjectsIfNeeded(project, outdatedProjects));
 
          return outdatedProjects
              .OrderBy(p => p.Name)
