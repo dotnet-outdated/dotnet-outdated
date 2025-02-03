@@ -12,16 +12,10 @@ namespace DotNetOutdated.Core.Services
     /// <remarks>
     /// Credit for the stuff happening in here goes to the https://github.com/jaredcnance/dotnet-status project
     /// </remarks>
-    public sealed class DependencyGraphService : IDependencyGraphService
+    public sealed class DependencyGraphService(IDotNetRunner dotNetRunner, IFileSystem fileSystem) : IDependencyGraphService
     {
-        private readonly IDotNetRunner _dotNetRunner;
-        private readonly IFileSystem _fileSystem;
-
-        public DependencyGraphService(IDotNetRunner dotNetRunner, IFileSystem fileSystem)
-        {
-            _dotNetRunner = dotNetRunner;
-            _fileSystem = fileSystem;
-        }
+        private readonly IDotNetRunner _dotNetRunner = dotNetRunner;
+        private readonly IFileSystem _fileSystem = fileSystem;
 
         public async Task<DependencyGraphSpec> GenerateDependencyGraphAsync(string projectPath, string runtime)
         {
@@ -29,13 +23,12 @@ namespace DotNetOutdated.Core.Services
             string[] arguments =
             [
                 "msbuild",
-                $"\"{projectPath}\"",
+                projectPath,
                 "/p:NoWarn=NU1605",
                 "/p:TreatWarningsAsErrors=false",
                 "/t:Restore,GenerateRestoreGraphFile",
-                $"/p:RestoreGraphOutputPath=\"{dgOutput}\"",
-                $"/p:RuntimeIdentifiers=\"{runtime}\""
-
+                $"/p:RestoreGraphOutputPath={dgOutput}",
+                $"/p:RuntimeIdentifiers={runtime}"
             ];
 
             var runStatus = _dotNetRunner.Run(_fileSystem.Path.GetDirectoryName(projectPath), arguments);

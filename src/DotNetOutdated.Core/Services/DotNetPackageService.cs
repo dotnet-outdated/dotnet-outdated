@@ -5,16 +5,10 @@ using System.IO.Abstractions;
 
 namespace DotNetOutdated.Core.Services
 {
-    public class DotNetPackageService : IDotNetPackageService
+    public class DotNetPackageService(IDotNetRunner dotNetRunner, IFileSystem fileSystem) : IDotNetPackageService
     {
-        private readonly IDotNetRunner _dotNetRunner;
-        private readonly IFileSystem _fileSystem;
-
-        public DotNetPackageService(IDotNetRunner dotNetRunner, IFileSystem fileSystem)
-        {
-            _dotNetRunner = dotNetRunner;
-            _fileSystem = fileSystem;
-        }
+        private readonly IDotNetRunner _dotNetRunner = dotNetRunner;
+        private readonly IFileSystem _fileSystem = fileSystem;
 
         public RunStatus AddPackage(string projectPath, string packageName, string frameworkName, NuGetVersion version)
         {
@@ -27,7 +21,7 @@ namespace DotNetOutdated.Core.Services
 
             string projectName = _fileSystem.Path.GetFileName(projectPath);
 
-            List<string> arguments = new List<string> { "add", $"\"{projectName}\"", "package", packageName, "-v", version.ToString(), "-f", $"\"{frameworkName}\"" };
+            List<string> arguments = ["add", projectName, "package", packageName, "-v", version.ToString(), "-f", frameworkName];
             if (noRestore)
             {
                 arguments.Add("--no-restore");
@@ -37,13 +31,13 @@ namespace DotNetOutdated.Core.Services
                 arguments.Add("--ignore-failed-sources");
             }
 
-            return _dotNetRunner.Run(_fileSystem.Path.GetDirectoryName(projectPath), arguments.ToArray());
+            return _dotNetRunner.Run(_fileSystem.Path.GetDirectoryName(projectPath), [.. arguments]);
         }
 
         public RunStatus RemovePackage(string projectPath, string packageName)
         {
            var projectName = _fileSystem.Path.GetFileName(projectPath);
-           var arguments = new[] { "remove", $"\"{projectName}\"", "package", packageName };
+           string[] arguments = ["remove", projectName, "package", packageName];
 
            return _dotNetRunner.Run(_fileSystem.Path.GetDirectoryName(projectPath), arguments);
         }
