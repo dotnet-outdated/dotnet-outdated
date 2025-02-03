@@ -7,18 +7,16 @@ namespace DotNetOutdated
 {
     public static class ReportingExtensions
     {
-        public static int[] DetermineColumnWidths(this List<AnalyzedDependency> packages)
+        public static int[] DetermineColumnWidths(this IReadOnlyList<AnalyzedDependency> packages)
         {
             ArgumentNullException.ThrowIfNull(packages);
 
-            var columnWidths = new List<int>
-            {
-                packages.Select(p => p.Description).Aggregate("", (max, cur) => max.Length > cur.Length ? max : cur).Length,
-                packages.Select(p => p.ResolvedVersion?.ToString() ?? "").Aggregate("", (max, cur) => max.Length > cur.Length ? max : cur).Length,
-                packages.Select(p => p.LatestVersion?.ToString() ?? "").Aggregate("", (max, cur) => max.Length > cur.Length ? max : cur).Length
-            };
-
-            return columnWidths.ToArray();
+            return
+            [
+                packages.Max(p => p.Description.Length),
+                packages.Max(p => p.ResolvedVersion?.ToString().Length ?? 0),
+                packages.Max(p => p.LatestVersion?.ToString().Length ?? 0)
+            ];
         }
     }
 }

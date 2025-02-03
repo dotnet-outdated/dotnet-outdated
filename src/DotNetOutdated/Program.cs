@@ -377,7 +377,7 @@ namespace DotNetOutdated
             {
                WriteTargetFramework(targetFramework, console);
 
-               var dependencies = targetFramework.Dependencies.ToList();
+               var dependencies = targetFramework.Dependencies;
 
                int[] columnWidths = dependencies.DetermineColumnWidths();
 
@@ -495,11 +495,11 @@ namespace DotNetOutdated
 
          var dependencies = deps.OrderBy(dependency => dependency.IsTransitive)
              .ThenBy(dependency => dependency.Name)
-             .ToList();
+             .ToArray();
 
-         var tasks = new Task[dependencies.Count];
+         var tasks = new Task[dependencies.Length];
 
-         for (var index = 0; index < dependencies.Count; index++)
+         for (var index = 0; index < dependencies.Length; index++)
          {
             var dependency = dependencies[index];
 
