@@ -17,7 +17,6 @@
     <PackageVersion>$(VersionSuffix)</PackageVersion>
     <RepositoryType>git</RepositoryType>
     <RepositoryUrl>https://github.com/dotnet-outdated/dotnet-outdated.git</RepositoryUrl>
-    <PackAsTool>true</PackAsTool>
   </PropertyGroup>
 
   <ItemGroup>
