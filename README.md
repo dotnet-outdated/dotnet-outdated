@@ -57,36 +57,46 @@ dotnet tool update --global dotnet-outdated-tool
 Usage: dotnet outdated [options] <Path>
 
 Arguments:
-  Path                                       The path to a .sln, .slnf, .csproj or .fsproj file, or to a directory containing a .NET Core solution/project. If none is specified, the current directory will be used.
+  Path                                                  The path to a .sln, .slnf, .csproj or .fsproj file, or to a directory containing a .NET Core solution/project. If none is specified, the current directory will be used.
 
 Options:
-  --version                                  Show version information.
-  -?|-h|--help                               Show help information.
-  -i|--include-auto-references               Specifies whether to include auto-referenced packages.
-  -pre|--pre-release <PRERELEASE>            Specifies whether to look for pre-release versions of packages. Possible values: Auto (default), Always or Never.
-                                             Allowed values are: Auto, Always, Never.
-                                             Default value is: Auto.
-  -vl|--version-lock <VERSION_LOCK>          Specifies whether the package should be locked to the current Major or Minor version. Possible values: None (default), Major or Minor.
-                                             Allowed values are: None, Major, Minor.
-                                             Default value is: None.
-  -t|--transitive                            Specifies whether it should detect transitive dependencies.
-  -td|--transitive-depth <TRANSITIVE_DEPTH>  Defines how many levels deep transitive dependencies should be analyzed. Integer value (default = 1)
-                                             Default value is: 1.
-  -u|--upgrade[:<TYPE>]                      Specifies whether outdated packages should be upgraded. Possible values for <TYPE> is Auto (default) or Prompt.
-                                             Allowed values are: Auto, Prompt.
-  -f|--fail-on-updates                       Specifies whether it should return a non-zero exit code when updates are found.
-  -inc|--include <FILTER_INCLUDE>            Specifies to only look at packages where the name contains the provided string. Culture and case insensitive. If provided multiple times, a single match is enough to include a package.
-  -exc|--exclude <FILTER_EXCLUDE>            Specifies to only look at packages where the name does not contain the provided string. Culture and case insensitive. If provided multiple times, a single match is enough to exclude a package.
-  -o|--output <OUTPUT_FILENAME>              Specifies the filename for a generated report. (Use the -of|--output-format option to specify the format. JSON by default.)
-  -of|--output-format <OUTPUT_FILE_FORMAT>   Specifies the output format for the generated report. Possible values: json (default) or csv.
-                                             Allowed values are: Json, Csv, Markdown.
-                                             Default value is: Json.
-  -ot|--older-than <OLDER_THAN_DAYS>         Only include package versions that are older than the specified number of days.
-                                             Default value is: 0.
-  -n|--no-restore                            Add the reference without performing restore preview and compatibility check.
-  -r|--recursive                             Recursively search for all projects within the provided directory.
-  -ifs|--ignore-failed-sources               Treat package source failures as warnings.
-  -utd|--include-up-to-date                  Include all dependencies in the report even the ones not outdated.
+  --version                                             Show version information.
+  -?|-h|--help                                          Show help information.
+  -i|--include-auto-references                          Specifies whether to include auto-referenced packages.
+  -pre|--pre-release <PRERELEASE>                       Specifies whether to look for pre-release versions of packages. Possible values: Auto (default), Always or Never.
+                                                        Allowed values are: Auto, Always, Never.
+                                                        Default value is: Auto.
+  -vl|--version-lock <VERSION_LOCK>                     Specifies whether the package should be locked to the current Major or Minor version. Possible values: None (default), Major or Minor.
+                                                        Allowed values are: None, Major, Minor.
+                                                        Default value is: None.
+  -t|--transitive                                       Specifies whether it should detect transitive dependencies.
+  -td|--transitive-depth <TRANSITIVE_DEPTH>             Defines how many levels deep transitive dependencies should be analyzed. Integer value (default = 1)
+                                                        Default value is: 1.
+  -u|--upgrade[:<TYPE>]                                 Specifies whether outdated packages should be upgraded. Possible values for <TYPE> is Auto (default) or Prompt.
+                                                        Allowed values are: Auto, Prompt.
+  -f|--fail-on-updates                                  Specifies whether it should return a non-zero exit code when updates are found.
+  -inc|--include <FILTER_INCLUDE>                       Specifies to only look at packages where the name contains the provided string. Culture and case insensitive. If provided multiple times, a single match
+                                                        is enough to include a package.
+  -exc|--exclude <FILTER_EXCLUDE>                       Specifies to only look at packages where the name does not contain the provided string. Culture and case insensitive. If provided multiple times, a single
+                                                        match is enough to exclude a package.
+  -o|--output <OUTPUT_FILENAME>                         Specifies the filename for a generated report. (Use the -of|--output-format option to specify the format. JSON by default.)
+  -of|--output-format <OUTPUT_FILE_FORMAT>              Specifies the output format for the generated report. Possible values: json (default), csv, or markdown.
+                                                        Allowed values are: Json, Csv, Markdown.
+                                                        Default value is: Json.
+  -ot|--older-than <OLDER_THAN_DAYS>                    Only include package versions that are older than the specified number of days.
+                                                        Default value is: 0.
+  -n|--no-restore                                       Add the reference without performing restore preview and compatibility check.
+  -r|--recursive                                        Recursively search for all projects within the provided directory.
+  -ifs|--ignore-failed-sources                          Treat package source failures as warnings.
+  -utd|--include-up-to-date                             Include all dependencies in the report even the ones not outdated.
+  -prl|--pre-release-label <PRERELEASE_LABEL>           Specifies an optional label to restrict matches to when looking for pre-release versions of packages. For example, a label of 'rc.1' would only match
+                                                        pre-release packages with a pre-release label that starts with that prefix.
+  -ncll|--nuget-cred-log-level <NU_GET_CRED_LOG_LEVEL>  Specifies the minimum level of logs for NuGet Credential Service. Possible values: debug, verbose, information, warning (default), or error
+                                                        Allowed values are: Debug, Verbose, Information, Minimal, Warning, Error.
+                                                        Default value is: Warning.
+  -rt|--runtime <RUNTIME>                               Specifies an optional runtime identifier to be used during the restore target when projects are analyzed.
+                                                        More information available on https://learn.microsoft.com/dotnet/core/rid-catalog.
+  -mv|--maximum-version <MAX_VERSION>                   The inclusive maximum package version to upgrade to.For example, a value of '8.0' would upgrade System.Text.Json 6.0.0 to the latest patch version of 8.0.x
 ```
 
 ![Screenshot of dotnet-outdated](screenshot.png)
