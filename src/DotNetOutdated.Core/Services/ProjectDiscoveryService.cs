@@ -45,6 +45,10 @@ namespace DotNetOutdated.Core.Services
                 if (solutionFiles.Length == 1)
                     return new[] { _fileSystem.Path.GetFullPath(solutionFiles[0]) };
 
+                solutionFiles = _fileSystem.Directory.GetFiles(path, "*.slnx");
+                if (solutionFiles.Length == 1)
+                    return new[] { _fileSystem.Path.GetFullPath(solutionFiles[0]) };
+
                 if (solutionFiles.Length > 1)
                     throw new CommandValidationException(string.Format(CultureInfo.InvariantCulture, Resources.ValidationErrorMessages.DirectoryContainsMultipleSolutions, path));
 
@@ -64,7 +68,9 @@ namespace DotNetOutdated.Core.Services
             if ((string.Equals(_fileSystem.Path.GetExtension(path), ".sln", StringComparison.OrdinalIgnoreCase)) ||
                 (string.Equals(_fileSystem.Path.GetExtension(path), ".csproj", StringComparison.OrdinalIgnoreCase)) ||
                 (string.Equals(_fileSystem.Path.GetExtension(path), ".fsproj", StringComparison.OrdinalIgnoreCase)) ||
-                (string.Equals(_fileSystem.Path.GetExtension(path), ".slnf", StringComparison.OrdinalIgnoreCase)))
+                (string.Equals(_fileSystem.Path.GetExtension(path), ".slnf", StringComparison.OrdinalIgnoreCase)) ||
+                (string.Equals(_fileSystem.Path.GetExtension(path), ".slnx", StringComparison.OrdinalIgnoreCase))
+                )
             {
                 return new[] { _fileSystem.Path.GetFullPath(path) };
             }
