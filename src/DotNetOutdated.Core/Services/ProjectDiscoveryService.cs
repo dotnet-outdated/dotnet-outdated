@@ -63,9 +63,6 @@ namespace DotNetOutdated.Core.Services
                 if (projectFiles.Length > 1)
                     throw new CommandValidationException(string.Format(CultureInfo.InvariantCulture, Resources.ValidationErrorMessages.DirectoryContainsMultipleProjects, path));
 
-                if (projectFiles.Length > 1)
-                    throw new CommandValidationException(string.Format(CultureInfo.InvariantCulture, Resources.ValidationErrorMessages.DirectoryContainsMultipleProjects, path));
-
                 // At this point the path contains no solutions or projects, so throw an exception
                 throw new CommandValidationException(string.Format(CultureInfo.InvariantCulture, Resources.ValidationErrorMessages.DirectoryDoesNotContainSolutionsOrProjects, path));
             }
