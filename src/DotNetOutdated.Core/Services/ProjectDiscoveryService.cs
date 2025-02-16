@@ -45,17 +45,23 @@ namespace DotNetOutdated.Core.Services
                 if (solutionFiles.Length == 1)
                     return new[] { _fileSystem.Path.GetFullPath(solutionFiles[0]) };
 
+                if (solutionFiles.Length > 1)
+                    throw new CommandValidationException(string.Format(CultureInfo.InvariantCulture, Resources.ValidationErrorMessages.DirectoryContainsMultipleSolutions, path));
+
                 solutionFiles = _fileSystem.Directory.GetFiles(path, "*.slnx");
                 if (solutionFiles.Length == 1)
                     return new[] { _fileSystem.Path.GetFullPath(solutionFiles[0]) };
 
                 if (solutionFiles.Length > 1)
                     throw new CommandValidationException(string.Format(CultureInfo.InvariantCulture, Resources.ValidationErrorMessages.DirectoryContainsMultipleSolutions, path));
-
+                
                 // We did not find any solutions, so try and find individual projects
                 var projectFiles = _fileSystem.Directory.GetFiles(path, "*.csproj").Concat(_fileSystem.Directory.GetFiles(path, "*.fsproj")).ToArray();
                 if (projectFiles.Length == 1)
                     return new[] { _fileSystem.Path.GetFullPath(projectFiles[0]) };
+
+                if (projectFiles.Length > 1)
+                    throw new CommandValidationException(string.Format(CultureInfo.InvariantCulture, Resources.ValidationErrorMessages.DirectoryContainsMultipleProjects, path));
 
                 if (projectFiles.Length > 1)
                     throw new CommandValidationException(string.Format(CultureInfo.InvariantCulture, Resources.ValidationErrorMessages.DirectoryContainsMultipleProjects, path));
@@ -68,9 +74,8 @@ namespace DotNetOutdated.Core.Services
             if ((string.Equals(_fileSystem.Path.GetExtension(path), ".sln", StringComparison.OrdinalIgnoreCase)) ||
                 (string.Equals(_fileSystem.Path.GetExtension(path), ".csproj", StringComparison.OrdinalIgnoreCase)) ||
                 (string.Equals(_fileSystem.Path.GetExtension(path), ".fsproj", StringComparison.OrdinalIgnoreCase)) ||
-                (string.Equals(_fileSystem.Path.GetExtension(path), ".slnf", StringComparison.OrdinalIgnoreCase)) ||
-                (string.Equals(_fileSystem.Path.GetExtension(path), ".slnx", StringComparison.OrdinalIgnoreCase))
-                )
+                (string.Equals(_fileSystem.Path.GetExtension(path), ".slnx", StringComparison.OrdinalIgnoreCase)) ||
+                (string.Equals(_fileSystem.Path.GetExtension(path), ".slnf", StringComparison.OrdinalIgnoreCase)))
             {
                 return new[] { _fileSystem.Path.GetFullPath(path) };
             }

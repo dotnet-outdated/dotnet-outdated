@@ -57,7 +57,7 @@ dotnet tool update --global dotnet-outdated-tool
 Usage: dotnet outdated [options] <Path>
 
 Arguments:
-  Path                                                  The path to a .sln, .slnf, .csproj or .fsproj file, or to a directory containing a .NET Core solution/project. If none is specified, the current directory will be used.
+  Path                                                  The path to a .sln, .slnx, .slnf, .csproj or .fsproj file, or to a directory containing a .NET Core solution/project. If none is specified, the current directory will be used.
 
 Options:
   --version                                             Show version information.

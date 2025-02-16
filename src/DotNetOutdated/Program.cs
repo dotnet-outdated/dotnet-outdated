@@ -49,7 +49,7 @@ namespace DotNetOutdated
           LongName = "include-auto-references")]
       public bool IncludeAutoReferences { get; set; } = false;
 
-      [Argument(0, Description = "The path to a .sln, .slnf, .csproj or .fsproj file, or to a directory containing a .NET Core solution/project. " +
+      [Argument(0, Description = "The path to a .sln, .slnx, .slnf, .csproj or .fsproj file, or to a directory containing a .NET Core solution/project. " +
                                  "If none is specified, the current directory will be used.")]
       public string Path { get; set; }
 
