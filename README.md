@@ -103,11 +103,11 @@ Options:
 
 ## Specifying the path
 
-You can run **dotnet-outdated** without specifying the `Path` argument. In this case, it will look in the current directory for a solution (`.sln`) and if one is found it will analyze that solution. If no solution is found it will look for a project (`.csproj` or `.fsproj`) and if one is found it will analyze that project. If more than one solution or project is found in the current folder, **dotnet-outdated** will report an error.
+You can run **dotnet-outdated** without specifying the `Path` argument. In this case, it will look in the current directory for a solution (`.sln`/`.slnx`) and if one is found it will analyze that solution. If no solution is found it will look for a project (`.csproj` or `.fsproj`) and if one is found it will analyze that project. If more than one solution or project is found in the current folder, **dotnet-outdated** will report an error.
 
 You can also pass a directory in the `Path` argument, in which case the same logic described above will be used, but in the directory specified.
 
-Lastly, you can specify the path to a solution (`.sln`) or project (`.csproj` or `.fsproj`) which **dotnet-outdated** must analyze.
+Lastly, you can specify the path to a solution (`.sln`/`.slnx`) or project (`.csproj` or `.fsproj`) which **dotnet-outdated** must analyze.
 
 ## Upgrading packages
 

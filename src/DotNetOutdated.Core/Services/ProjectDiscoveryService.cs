@@ -70,7 +70,7 @@ namespace DotNetOutdated.Core.Services
                 throw new CommandValidationException(string.Format(CultureInfo.InvariantCulture, Resources.ValidationErrorMessages.DirectoryDoesNotContainSolutionsOrProjects, path));
             }
 
-            // If a .sln or .csproj file was passed, just return that
+            // If a solution file or project file was passed, just return that
             if ((string.Equals(_fileSystem.Path.GetExtension(path), ".sln", StringComparison.OrdinalIgnoreCase)) ||
                 (string.Equals(_fileSystem.Path.GetExtension(path), ".csproj", StringComparison.OrdinalIgnoreCase)) ||
                 (string.Equals(_fileSystem.Path.GetExtension(path), ".fsproj", StringComparison.OrdinalIgnoreCase)) ||
