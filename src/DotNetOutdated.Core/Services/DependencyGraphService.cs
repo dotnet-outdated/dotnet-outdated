@@ -19,7 +19,7 @@ namespace DotNetOutdated.Core.Services
 
         public async Task<DependencyGraphSpec> GenerateDependencyGraphAsync(string projectPath, string runtime)
         {
-            var dgOutput = _fileSystem.Path.Combine(_fileSystem.Path.GetTempPath(), _fileSystem.Path.GetTempFileName());
+            var dgOutput = _fileSystem.Path.Combine(_fileSystem.Path.GetTempPath(), _fileSystem.Path.GetRandomFileName());
             string[] arguments =
             [
                 "msbuild",
