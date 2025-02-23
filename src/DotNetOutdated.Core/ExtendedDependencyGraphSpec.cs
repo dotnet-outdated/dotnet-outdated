@@ -9,8 +9,9 @@ namespace DotNetOutdated
             : base()
         {
             // Parse the JSON and initialize the object.
-            var jObject = JsonDocument.Parse(json).RootElement;
-            if (jObject.TryGetProperty("projects", out JsonElement projects))
+            using var jsonDocument = JsonDocument.Parse(json);
+
+            if (jsonDocument.RootElement.TryGetProperty("projects", out JsonElement projects))
             {
                 foreach (var project in projects.EnumerateObject())
                 {

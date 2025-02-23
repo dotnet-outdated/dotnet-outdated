@@ -16,7 +16,7 @@ namespace DotNetOutdated.Core.Services
     {
         public RunStatus Run(string workingDirectory, string[] arguments)
         {
-            var psi = new ProcessStartInfo("dotnet", string.Join(" ", arguments))
+            var psi = new ProcessStartInfo("dotnet", arguments)
             {
                 WorkingDirectory = workingDirectory,
                 UseShellExecute = false,
@@ -37,7 +37,7 @@ namespace DotNetOutdated.Core.Services
                 var outputTask = ConsumeStreamReaderAsync(p.StandardOutput, timeSinceLastOutput, output);
                 var errorTask = ConsumeStreamReaderAsync(p.StandardError, timeSinceLastOutput, errors);
                 bool processExited = false;
-                const int Timeout = 20000;
+                const int Timeout = 20_000;
 
                 while (true) {
                     if (p.HasExited) {

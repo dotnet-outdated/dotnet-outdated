@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text.Json;
 using Xunit;
 
 namespace DotNetOutdated.Tests;
@@ -36,7 +37,7 @@ public static class EndToEndTests
             list.Add($"--runtime {runtime}");
         }
         
-        var actual = Program.Main(list.ToArray());
+        var actual = Program.Main([.. list]);
         Assert.Equal(expectedExitCode, actual);
     }
 
@@ -59,6 +60,35 @@ public static class EndToEndTests
 
         var actual = Program.Main([project.Path, "--output", outputPath, "--output-format", format.ToString()]);
         Assert.Equal(0, actual);
+    }
+
+    [Fact]
+    public static void Can_Upgrade_Project_With_Maximum_Version()
+    {
+        using var directory = TestSetup("max-version");
+
+        var outputPath = Path.Combine(directory.Path, "output.json");
+
+        var actual = Program.Main([directory.Path, "--maximum-version:8.0", "--output", outputPath, "--output-format:json"]);
+        Assert.Equal(0, actual);
+
+        using var output = JsonDocument.Parse(File.ReadAllText(outputPath));
+
+        foreach (var project in output.RootElement.GetProperty("Projects").EnumerateArray())
+        {
+            foreach (var tfm in project.GetProperty("TargetFrameworks").EnumerateArray())
+            {
+                foreach (var dependency in tfm.GetProperty("Dependencies").EnumerateArray())
+                {
+                    var latestVersionString = dependency.GetProperty("LatestVersion").GetString();
+
+                    Assert.True(Version.TryParse(latestVersionString, out var latestVersion));
+                    Assert.Equal(8, latestVersion.Major);
+                    Assert.Equal(0, latestVersion.Minor);
+                    Assert.NotEqual(0, latestVersion.Build);
+                }
+            }
+        }
     }
 
     private static TemporaryDirectory TestSetup(string testProjectName)
@@ -103,12 +133,7 @@ public static class EndToEndTests
         private static DirectoryInfo CreateTempSubdirectory()
         {
             const string Prefix = "dotnet-bumper-";
-#if NET6_0
-            var tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), Prefix + Guid.NewGuid().ToString("N"));
-            return Directory.CreateDirectory(tempPath);
-#else
             return Directory.CreateTempSubdirectory(Prefix);
-#endif
         }
     }
 }

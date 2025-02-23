@@ -28,7 +28,7 @@ namespace DotNetOutdated.Core.Models
 
     public class TargetFramework
     {
-        public IList<Dependency> Dependencies { get; } = new List<Dependency>();
+        public Dictionary<string, Dependency> Dependencies { get; } = [];
 
         public NuGetFramework Name { get; set; }
 

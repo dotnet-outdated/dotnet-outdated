@@ -73,7 +73,7 @@ namespace DotNetOutdated.Core.Services
 
                             var dependency = new Dependency(projectDependency.Name, projectDependency.LibraryRange.VersionRange, projectLibrary?.Version,
                                 projectDependency.AutoReferenced, false, isDevelopmentDependency, projectDependency.VersionCentrallyManaged);
-                            targetFramework.Dependencies.Add(dependency);
+                            targetFramework.Dependencies.TryAdd(dependency.Name, dependency);
                             var node = new DependencyNode(dependency.Name, dependency);
                             targetFramework.Nodes.Add(node);
 
@@ -97,10 +97,10 @@ namespace DotNetOutdated.Core.Services
                     var childLibrary = target.Libraries.FirstOrDefault(library => library.Name == packageDependency.Id);
 
                     // Only add library and process child dependencies if we have not come across this dependency before
-                    if (!targetFramework.Dependencies.Any(dependency => dependency.Name == packageDependency.Id))
+                    if (!targetFramework.Dependencies.ContainsKey(packageDependency.Id))
                     {
                         var childDependency = new Dependency(packageDependency.Id, packageDependency.VersionRange, childLibrary?.Version, false, true, false, false);
-                        targetFramework.Dependencies.Add(childDependency);
+                        targetFramework.Dependencies.Add(childDependency.Name, childDependency);
 
                         var newNode = new DependencyNode(childDependency.Name, childDependency);
                         node.AddNode(newNode);
