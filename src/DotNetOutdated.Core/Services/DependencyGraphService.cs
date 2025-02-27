@@ -1,6 +1,7 @@
 ﻿using DotNetOutdated.Core.Exceptions;
 using NuGet.ProjectModel;
 using System;
+using System.Collections.Generic;
 using System.IO.Abstractions;
 using System.Threading.Tasks;
 
@@ -14,28 +15,29 @@ namespace DotNetOutdated.Core.Services
     /// </remarks>
     public sealed class DependencyGraphService(IDotNetRunner dotNetRunner, IFileSystem fileSystem) : IDependencyGraphService
     {
-        private readonly IDotNetRunner _dotNetRunner = dotNetRunner;
-        private readonly IFileSystem _fileSystem = fileSystem;
-
         public async Task<DependencyGraphSpec> GenerateDependencyGraphAsync(string projectPath, string runtime)
         {
-            var dgOutput = _fileSystem.Path.Combine(_fileSystem.Path.GetTempPath(), _fileSystem.Path.GetTempFileName());
-            string[] arguments =
+            var dgOutput = fileSystem.Path.Combine(fileSystem.Path.GetTempPath(), fileSystem.Path.GetTempFileName());
+            List<string> arguments =
             [
                 "msbuild",
                 projectPath,
                 "/p:NoWarn=NU1605",
                 "/p:TreatWarningsAsErrors=false",
                 "/t:Restore,GenerateRestoreGraphFile",
-                $"/p:RestoreGraphOutputPath={dgOutput}",
-                $"/p:RuntimeIdentifiers={runtime}"
+                $"/p:RestoreGraphOutputPath={dgOutput}"
             ];
 
-            var runStatus = _dotNetRunner.Run(_fileSystem.Path.GetDirectoryName(projectPath), arguments);
+            if (!string.IsNullOrEmpty(runtime))
+            {
+                arguments.Add($"/p:RuntimeIdentifiers={runtime}");
+            }
+
+            var runStatus = dotNetRunner.Run(fileSystem.Path.GetDirectoryName(projectPath), arguments.ToArray());
 
             if (runStatus.IsSuccess)
             {
-                var dependencyGraphText = await _fileSystem.File.ReadAllTextAsync(dgOutput).ConfigureAwait(false);
+                var dependencyGraphText = await fileSystem.File.ReadAllTextAsync(dgOutput).ConfigureAwait(false);
                 return new ExtendedDependencyGraphSpec(dependencyGraphText);
             }
 
