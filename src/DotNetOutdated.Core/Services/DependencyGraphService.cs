@@ -15,9 +15,12 @@ namespace DotNetOutdated.Core.Services
     /// </remarks>
     public sealed class DependencyGraphService(IDotNetRunner dotNetRunner, IFileSystem fileSystem) : IDependencyGraphService
     {
+        private readonly IDotNetRunner _dotNetRunner = dotNetRunner;
+        private readonly IFileSystem _fileSystem = fileSystem;
+
         public async Task<DependencyGraphSpec> GenerateDependencyGraphAsync(string projectPath, string runtime)
         {
-            var dgOutput = fileSystem.Path.Combine(fileSystem.Path.GetTempPath(), fileSystem.Path.GetTempFileName());
+            var dgOutput = _fileSystem.Path.Combine(_fileSystem.Path.GetTempPath(), _fileSystem.Path.GetTempFileName());
             List<string> arguments =
             [
                 "msbuild",
@@ -33,11 +36,11 @@ namespace DotNetOutdated.Core.Services
                 arguments.Add($"/p:RuntimeIdentifiers={runtime}");
             }
 
-            var runStatus = dotNetRunner.Run(fileSystem.Path.GetDirectoryName(projectPath), arguments.ToArray());
+            var runStatus = _dotNetRunner.Run(_fileSystem.Path.GetDirectoryName(projectPath), arguments.ToArray());
 
             if (runStatus.IsSuccess)
             {
-                var dependencyGraphText = await fileSystem.File.ReadAllTextAsync(dgOutput).ConfigureAwait(false);
+                var dependencyGraphText = await _fileSystem.File.ReadAllTextAsync(dgOutput).ConfigureAwait(false);
                 return new ExtendedDependencyGraphSpec(dependencyGraphText);
             }
 
