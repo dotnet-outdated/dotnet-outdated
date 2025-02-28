@@ -1,6 +1,7 @@
 ﻿using DotNetOutdated.Core.Exceptions;
 using NuGet.ProjectModel;
 using System;
+using System.Collections.Generic;
 using System.IO.Abstractions;
 using System.Threading.Tasks;
 
@@ -20,18 +21,22 @@ namespace DotNetOutdated.Core.Services
         public async Task<DependencyGraphSpec> GenerateDependencyGraphAsync(string projectPath, string runtime)
         {
             var dgOutput = _fileSystem.Path.Combine(_fileSystem.Path.GetTempPath(), _fileSystem.Path.GetTempFileName());
-            string[] arguments =
+            List<string> arguments =
             [
                 "msbuild",
                 projectPath,
                 "/p:NoWarn=NU1605",
                 "/p:TreatWarningsAsErrors=false",
                 "/t:Restore,GenerateRestoreGraphFile",
-                $"/p:RestoreGraphOutputPath={dgOutput}",
-                $"/p:RuntimeIdentifiers={runtime}"
+                $"/p:RestoreGraphOutputPath={dgOutput}"
             ];
 
-            var runStatus = _dotNetRunner.Run(_fileSystem.Path.GetDirectoryName(projectPath), arguments);
+            if (!string.IsNullOrEmpty(runtime))
+            {
+                arguments.Add($"/p:RuntimeIdentifiers={runtime}");
+            }
+
+            var runStatus = _dotNetRunner.Run(_fileSystem.Path.GetDirectoryName(projectPath), arguments.ToArray());
 
             if (runStatus.IsSuccess)
             {

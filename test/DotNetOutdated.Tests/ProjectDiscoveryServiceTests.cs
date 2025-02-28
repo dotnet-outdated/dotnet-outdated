@@ -21,6 +21,7 @@ namespace DotNetOutdated.Tests
         private readonly string _project4 = XFS.Path(@"c:\path\sub\project4.csproj");
         private readonly string _solution1 = XFS.Path(@"c:\path\solution1.sln");
         private readonly string _solution2 = XFS.Path(@"c:\path\solution2.sln");
+        private readonly string _solutionX1 = XFS.Path(@"c:\path\solution1.slnx");
         private readonly string _solutionFilter1 = XFS.Path(@"c:\path\solution1.slnf");
         private readonly string _someOtherPath = XFS.Path(@"c:\another_path");
 
@@ -228,6 +229,23 @@ namespace DotNetOutdated.Tests
 
             // Assert
             Assert.Equal(_solution1, project);
+        }
+
+        [Fact]
+        public void SingleSolutionXReturnsSolution()
+        {
+            // Arrange
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { _solutionX1, Singletons.NullObject}
+            }, _path);
+            var projectDiscoveryService = new ProjectDiscoveryService(fileSystem);
+
+            // Act
+            string project = projectDiscoveryService.DiscoverProjects(_path).Single();
+
+            // Assert
+            Assert.Equal(_solutionX1, project);
         }
     }
 }
