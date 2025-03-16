@@ -97,6 +97,8 @@ Options:
   -rt|--runtime <RUNTIME>                               Specifies an optional runtime identifier to be used during the restore target when projects are analyzed.
                                                         More information available on https://learn.microsoft.com/dotnet/core/rid-catalog.
   -mv|--maximum-version <MAX_VERSION>                   The inclusive maximum package version to upgrade to. For example, a value of '8.0' would upgrade System.Text.Json 6.0.0 to the latest patch version of 8.0.x
+  -uod|--update-only-deprecated	                        Update only deprecated packages. Can be used together with update-only-vulnerable
+  -uov|--update-only-vulnerable	                        Update only vulnerable packages. Can be used together with update-only-deprecated
 ```
 
 ![Screenshot of dotnet-outdated](screenshot.png)
