@@ -12,6 +12,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.IO.Abstractions;
 using System.Linq;
 using System.Reflection;
@@ -31,12 +32,14 @@ namespace DotNetOutdated
    internal class Program(
         IFileSystem fileSystem,
         IReporter reporter,
+        INuGetPackageInfoService packageInfoService,
         INuGetPackageResolutionService nugetService,
         IProjectAnalysisService projectAnalysisService,
         IProjectDiscoveryService projectDiscoveryService,
         IDotNetPackageService dotNetPackageService,
         ICentralPackageVersionManagementService centralPackageVersionManagementService) : CommandBase
    {
+      private readonly INuGetPackageInfoService nuGetPackageInfoService = packageInfoService;
       private readonly IFileSystem _fileSystem = fileSystem;
       private readonly IReporter _reporter = reporter;
       private readonly INuGetPackageResolutionService _nugetService = nugetService;
@@ -137,7 +140,13 @@ namespace DotNetOutdated
                                                            "For example, a value of '8.0' would upgrade System.Text.Json 6.0.0 to the latest patch version of 8.0.x",
          ShortName = "mv", LongName = "maximum-version")]
       public string MaxVersion { get; set; } = string.Empty;
-      
+
+      [Option(CommandOptionType.NoValue, Description = "Update only deprecated packages. Can be used together with update-only-vulnerable", ShortName = "uod", LongName = "update-only-deprecated")]
+       public bool UpdateOnlyDeprecatedPackages { get; set; } = false;
+		
+      [Option(CommandOptionType.NoValue, Description = "Update only vulnerable packages. Can be used together with update-only-deprecated", ShortName = "uov", LongName = "update-only-vulnerable")]
+      public bool UpdateOnlyVulnerablePackages { get; set; } = false;
+
       public static int Main(string[] args)
       {
          using var services = new ServiceCollection()
@@ -198,7 +207,6 @@ namespace DotNetOutdated
             });
 
             var projects = projectLists.SelectMany(p => p).ToList();
-
             // Analyze the dependencies
             var outdatedProjects = await AnalyzeDependencies(projects, console).ConfigureAwait(false);
 
@@ -552,6 +560,24 @@ namespace DotNetOutdated
                 OlderThanDays,
                 IgnoreFailedSources).ConfigureAwait(false);
          }
+        
+        if (UpdateOnlyVulnerablePackages || UpdateOnlyDeprecatedPackages)
+        {
+            var currentNugetPackageMetadata = await nuGetPackageInfoService
+                    .GetSpecificVersion(dependency.Name, project.Sources, false, targetFramework.Name, project.FilePath, referencedVersion);
+            if (UpdateOnlyVulnerablePackages && currentNugetPackageMetadata.Vulnerabilities != null)
+            {
+                outdatedDependencies.Add(new AnalyzedDependency(dependency, latestVersion));
+            }
+
+            var depMetadata = await currentNugetPackageMetadata.GetDeprecationMetadataAsync();
+            if (UpdateOnlyDeprecatedPackages && depMetadata!=null)
+            {
+                outdatedDependencies.Add(new AnalyzedDependency(dependency, latestVersion));
+            }
+            
+            return;
+		}
 
          if (referencedVersion == null || latestVersion == null || referencedVersion != latestVersion || IncludeUpToDate)
          {
