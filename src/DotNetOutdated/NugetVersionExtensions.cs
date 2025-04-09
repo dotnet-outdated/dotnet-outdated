@@ -3,7 +3,6 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using System.Text.RegularExpressions;
 
 namespace DotNetOutdated
 {
@@ -35,10 +34,17 @@ namespace DotNetOutdated
                 .Zip(latestVersion.GetParts(), (p1, p2) => (part: p2, matches: p1 == p2))
                 .TakeWhile(p => p.matches)
                 .Select(p => p.part));
-            if (matching.Length > 0) { matching += '.'; }
-            var rest = new Regex($"^{matching}").Replace(latestString, "");
-
-            return (matching, rest);
+            
+            if (matching.Length > 0) 
+            { 
+                matching += '.';
+                if (latestString.StartsWith(matching, StringComparison.Ordinal))
+                {
+                    return (matching, latestString[matching.Length..]);
+                }
+            }
+            
+            return (matching, latestString);
         }
     }
 }
