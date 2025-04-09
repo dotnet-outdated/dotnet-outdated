@@ -1,10 +1,11 @@
 ﻿using DotNetOutdated.Models;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading.Tasks;
 
 namespace DotNetOutdated;
 
 internal interface IOutputFormatter
 {
-    void Format(IReadOnlyList<AnalyzedProject> projects,TextWriter writer);
+    Task FormatAsync(IReadOnlyList<AnalyzedProject> projects,TextWriter writer);
 }

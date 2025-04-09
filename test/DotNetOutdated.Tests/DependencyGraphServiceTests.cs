@@ -41,13 +41,13 @@ namespace DotNetOutdated.Tests
             var graphService = new DependencyGraphService(dotNetRunner, mockFileSystem);
 
             // Act
-            var dependencyGraph = await graphService.GenerateDependencyGraphAsync(_path);
+            var dependencyGraph = await graphService.GenerateDependencyGraphAsync(_path, string.Empty);
 
             // Assert
             Assert.NotNull(dependencyGraph);
             Assert.Equal(3, dependencyGraph.Projects.Count);
 
-            dotNetRunner.Received().Run(XFS.Path(@"c:\"), Arg.Is<string[]>(a => a[0] == "msbuild" && a[1] == '\"' + _path + '\"'));
+            dotNetRunner.Received().Run(XFS.Path(@"c:\"), Arg.Is<string[]>(a => a[0] == "msbuild" && a[1] == _path));
         }
 
         [Fact]
@@ -63,7 +63,7 @@ namespace DotNetOutdated.Tests
             var graphService = new DependencyGraphService(dotNetRunner, mockFileSystem);
 
             // Assert
-            await Assert.ThrowsAsync<CommandValidationException>(() => graphService.GenerateDependencyGraphAsync(_path));
+            await Assert.ThrowsAsync<CommandValidationException>(() => graphService.GenerateDependencyGraphAsync(_path, string.Empty));
         }
 
         [Fact]
@@ -93,13 +93,13 @@ namespace DotNetOutdated.Tests
             var graphService = new DependencyGraphService(dotNetRunner, mockFileSystem);
 
             // Act
-            var dependencyGraph = await graphService.GenerateDependencyGraphAsync(_solutionPath);
+            var dependencyGraph = await graphService.GenerateDependencyGraphAsync(_solutionPath, string.Empty);
 
             // Assert
             Assert.NotNull(dependencyGraph);
             Assert.Empty(dependencyGraph.Projects);
 
-            dotNetRunner.Received().Run(_path, Arg.Is<string[]>(a => a[0] == "msbuild" && a[1] == '\"' + _solutionPath + '\"' && a[4] == "/t:Restore,GenerateRestoreGraphFile"));
+            dotNetRunner.Received().Run(_path, Arg.Is<string[]>(a => a[0] == "msbuild" && a[1] == _solutionPath && a[4] == "/t:Restore,GenerateRestoreGraphFile"));
         }
     }
 }

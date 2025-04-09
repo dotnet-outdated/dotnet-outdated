@@ -9,12 +9,14 @@ namespace DotNetOutdated
             : base()
         {
             // Parse the JSON and initialize the object.
-            var jObject = JsonDocument.Parse(json).RootElement;
-            if (jObject.TryGetProperty("projects", out JsonElement projects))
+            using var jsonDocument = JsonDocument.Parse(json);
+
+            if (jsonDocument.RootElement.TryGetProperty("projects", out JsonElement projects))
             {
                 foreach (var project in projects.EnumerateObject())
                 {
-                    var packageSpec = JsonPackageSpecReader.GetPackageSpec(project.Value.GetRawText(), project.Name, project.Name);
+                    var projectName = project.Value.GetProperty("restore").GetProperty("projectName").GetString();
+                    var packageSpec = JsonPackageSpecReader.GetPackageSpec(project.Value.GetRawText(), projectName, project.Name);
                     this.AddProject(packageSpec);
                     this.AddRestore(packageSpec.RestoreMetadata.ProjectUniqueName);
                 }

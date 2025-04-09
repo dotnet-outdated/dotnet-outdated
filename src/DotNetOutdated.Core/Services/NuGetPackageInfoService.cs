@@ -18,9 +18,12 @@ namespace DotNetOutdated.Core.Services
     public sealed class NuGetPackageInfoService : INuGetPackageInfoService, IDisposable
     {
         private IEnumerable<PackageSource> _enabledSources;
+
+        private PackageSourceMapping _packageSourceMapping;
+
         private readonly SourceCacheContext _context;
 
-        private readonly ConcurrentDictionary<string, Lazy<Task<PackageMetadataResource>>> _metadataResourceRequests = new ConcurrentDictionary<string, Lazy<Task<PackageMetadataResource>>>();
+        private readonly ConcurrentDictionary<string, Task<PackageMetadataResource>> _metadataResourceRequests = [];
 
         public NuGetPackageInfoService()
         {
@@ -36,13 +39,14 @@ namespace DotNetOutdated.Core.Services
             {
                 var settings = Settings.LoadDefaultSettings(root);
                 _enabledSources = SettingsUtility.GetEnabledSources(settings);
+                _packageSourceMapping = PackageSourceMapping.GetPackageSourceMapping(settings);
             }
 
             return _enabledSources;
         }
 
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "This method is supposed to fail silently")]
-        private async Task<PackageMetadataResource> FindMetadataResourceForSource(Uri source, string projectFilePath)
+        private async Task<PackageMetadataResource> FindMetadataResourceForSource(Uri source, string projectFilePath, string packageId)
         {
             try
             {
@@ -53,12 +57,25 @@ namespace DotNetOutdated.Core.Services
                 // enables secure feeds to work properly
                 var enabledSources = this.GetEnabledSources(projectFilePath);
                 var enabledSource = enabledSources?.FirstOrDefault(s => s.SourceUri == source);
+
+
+                if (enabledSource != null && _packageSourceMapping.IsEnabled)
+                {
+                    var mappedSources = _packageSourceMapping.GetConfiguredPackageSources(packageId);
+                    if (mappedSources != null && !mappedSources.Any(s => string.Equals(s, enabledSource.Name, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        // Skip package sources that are not mapped to the package
+                        return null;
+                    }
+                }
+
                 var sourceRepository = enabledSource != null
                                            ? new SourceRepository(enabledSource, Repository.Provider.GetCoreV3())
                                            : Repository.Factory.GetCoreV3(resourceUrl);
 
-                var resourceRequest = new Lazy<Task<PackageMetadataResource>>(() => sourceRepository.GetResourceAsync<PackageMetadataResource>());
-                return await _metadataResourceRequests.GetOrAdd(resourceUrl, resourceRequest).Value.ConfigureAwait(false);
+                var metadataResourceRequest = _metadataResourceRequests.GetOrAdd(resourceUrl, _ => sourceRepository.GetResourceAsync<PackageMetadataResource>());
+
+                return await metadataResourceRequest.ConfigureAwait(false);
             }
             catch (Exception)
             {
@@ -75,23 +92,22 @@ namespace DotNetOutdated.Core.Services
         public async Task<IReadOnlyList<NuGetVersion>> GetAllVersions(string package, IEnumerable<Uri> sources, bool includePrerelease, NuGetFramework targetFramework,
             string projectFilePath, bool isDevelopmentDependency, int olderThanDays, bool ignoreFailedSources = false)
         {
-            if (sources == null)
-                throw new ArgumentNullException(nameof(sources));
+            ArgumentNullException.ThrowIfNull(sources);
 
             var allVersions = new List<NuGetVersion>();
             foreach (var source in sources)
             {
                 try
                 {
-                    var metadata = await FindMetadataResourceForSource(source, projectFilePath).ConfigureAwait(false);
+                    var metadata = await FindMetadataResourceForSource(source, projectFilePath, package).ConfigureAwait(false);
                     if (metadata != null)
                     {
-                        var compatibleMetadataList = (await metadata.GetMetadataAsync(package, includePrerelease, false, _context, NullLogger.Instance, CancellationToken.None).ConfigureAwait(false)).ToList();
+                        var compatibleMetadataList = await metadata.GetMetadataAsync(package, includePrerelease, false, _context, NullLogger.Instance, CancellationToken.None).ConfigureAwait(false);
 
                         if (olderThanDays > 0)
                         {
                             compatibleMetadataList = compatibleMetadataList.Where(c => !c.Published.HasValue ||
-                                                                                       c.Published <= DateTimeOffset.UtcNow.AddDays(-olderThanDays)).ToList();
+                                                                                       c.Published <= DateTimeOffset.UtcNow.AddDays(-olderThanDays));
                         }
 
                         // We need to ensure that we only get package versions which are compatible with the requested target framework.
@@ -102,8 +118,7 @@ namespace DotNetOutdated.Core.Services
 
                             compatibleMetadataList = compatibleMetadataList
                                 .Where(meta => meta.DependencySets?.Any() != true ||
-                                               reducer.GetNearest(targetFramework, meta.DependencySets.Select(ds => ds.TargetFramework)) != null)
-                                .ToList();
+                                               reducer.GetNearest(targetFramework, meta.DependencySets.Select(ds => ds.TargetFramework)) != null);
                         }
 
                         foreach (var m in compatibleMetadataList)

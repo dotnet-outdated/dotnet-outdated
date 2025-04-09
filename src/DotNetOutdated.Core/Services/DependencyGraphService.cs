@@ -1,8 +1,8 @@
 ﻿using DotNetOutdated.Core.Exceptions;
 using NuGet.ProjectModel;
 using System;
+using System.Collections.Generic;
 using System.IO.Abstractions;
-using System.Text.Json;
 using System.Threading.Tasks;
 
 namespace DotNetOutdated.Core.Services
@@ -13,36 +13,34 @@ namespace DotNetOutdated.Core.Services
     /// <remarks>
     /// Credit for the stuff happening in here goes to the https://github.com/jaredcnance/dotnet-status project
     /// </remarks>
-    public sealed class DependencyGraphService : IDependencyGraphService
+    public sealed class DependencyGraphService(IDotNetRunner dotNetRunner, IFileSystem fileSystem) : IDependencyGraphService
     {
-        private readonly IDotNetRunner _dotNetRunner;
-        private readonly IFileSystem _fileSystem;
+        private readonly IDotNetRunner _dotNetRunner = dotNetRunner;
+        private readonly IFileSystem _fileSystem = fileSystem;
 
-        public DependencyGraphService(IDotNetRunner dotNetRunner, IFileSystem fileSystem)
-        {
-            _dotNetRunner = dotNetRunner;
-            _fileSystem = fileSystem;
-        }
-
-        public async Task<DependencyGraphSpec> GenerateDependencyGraphAsync(string projectPath)
+        public async Task<DependencyGraphSpec> GenerateDependencyGraphAsync(string projectPath, string runtime)
         {
             var dgOutput = _fileSystem.Path.Combine(_fileSystem.Path.GetTempPath(), _fileSystem.Path.GetTempFileName());
-
-            string[] arguments =
+            List<string> arguments =
             [
                 "msbuild",
-                $"\"{projectPath}\"",
+                projectPath,
                 "/p:NoWarn=NU1605",
                 "/p:TreatWarningsAsErrors=false",
                 "/t:Restore,GenerateRestoreGraphFile",
-                $"/p:RestoreGraphOutputPath=\"{dgOutput}\"",
+                $"/p:RestoreGraphOutputPath={dgOutput}"
             ];
 
-            var runStatus = _dotNetRunner.Run(_fileSystem.Path.GetDirectoryName(projectPath), arguments);
+            if (!string.IsNullOrEmpty(runtime))
+            {
+                arguments.Add($"/p:RuntimeIdentifiers={runtime}");
+            }
+
+            var runStatus = _dotNetRunner.Run(_fileSystem.Path.GetDirectoryName(projectPath), arguments.ToArray());
 
             if (runStatus.IsSuccess)
             {
-                var dependencyGraphText = await _fileSystem.File.ReadAllTextAsync(dgOutput);
+                var dependencyGraphText = await _fileSystem.File.ReadAllTextAsync(dgOutput).ConfigureAwait(false);
                 return new ExtendedDependencyGraphSpec(dependencyGraphText);
             }
 
