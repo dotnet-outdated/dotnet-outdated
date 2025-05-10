@@ -92,7 +92,7 @@ namespace DotNetOutdated.Core.Services
             {
                 foreach (var packageDependency in parentLibrary.Dependencies)
                 {
-                    var childLibrary = target.Libraries.FirstOrDefault(library => library.Name == packageDependency.Id);
+                    var childLibrary = target.Libraries.FirstOrDefault(library => string.Equals(library.Name, packageDependency.Id, StringComparison.OrdinalIgnoreCase));
 
                     // Only add library and process child dependencies if we have not come across this dependency before
                     if (!targetFramework.Dependencies.ContainsKey(packageDependency.Id))
