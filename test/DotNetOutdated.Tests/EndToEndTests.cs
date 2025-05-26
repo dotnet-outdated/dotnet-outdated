@@ -91,6 +91,75 @@ public static class EndToEndTests
         }
     }
 
+	[Theory]
+	[InlineData("update-only-deprecated", true)]
+	[InlineData("update-only-vulnerable", false)]
+	public static void UpdateOnlyDeprecated(string testProjectName, bool expectUpdate)
+	{
+		using var directory = TestSetup(testProjectName);
+
+		var outputPath = Path.Combine(directory.Path, "output.json");
+
+		var actual = Program.Main([directory.Path, "--update-only-deprecated", "--output", outputPath, "--output-format:json"]);
+		Assert.Equal(0, actual);
+        if (!expectUpdate && !File.Exists(outputPath))
+        {
+            return;
+        }
+
+		using var output = JsonDocument.Parse(File.ReadAllText(outputPath));
+
+		foreach (var project in output.RootElement.GetProperty("Projects").EnumerateArray())
+		{
+			foreach (var tfm in project.GetProperty("TargetFrameworks").EnumerateArray())
+			{
+				var updatedCount = tfm.GetProperty("Dependencies").EnumerateArray().Count();
+                Assert.Equal(1, updatedCount);
+				foreach (var dependency in tfm.GetProperty("Dependencies").EnumerateArray())
+				{
+					var latestVersionString = dependency.GetProperty("LatestVersion").GetString();
+                    var resolvedVersionString = dependency.GetProperty("ResolvedVersion").GetString();
+					Assert.NotEqual(latestVersionString, resolvedVersionString);
+				}
+			}
+		
+		}
+	}
+	[Theory]
+	[InlineData("update-only-deprecated", false)]
+	[InlineData("update-only-vulnerable", true)]
+	public static void UpdateOnlyVulnerable(string testProjectName, bool expectUpdate)
+	{
+		using var directory = TestSetup(testProjectName);
+
+		var outputPath = Path.Combine(directory.Path, "output.json");
+
+		var actual = Program.Main([directory.Path, "--update-only-vulnerable", "--output", outputPath, "--output-format:json"]);
+		Assert.Equal(0, actual);
+		if (!expectUpdate && !File.Exists(outputPath))
+		{
+			return;
+		}
+
+		using var output = JsonDocument.Parse(File.ReadAllText(outputPath));
+
+		foreach (var project in output.RootElement.GetProperty("Projects").EnumerateArray())
+		{
+			foreach (var tfm in project.GetProperty("TargetFrameworks").EnumerateArray())
+			{
+				var updatedCount = tfm.GetProperty("Dependencies").EnumerateArray().Count();
+				Assert.Equal(1, updatedCount);
+				foreach (var dependency in tfm.GetProperty("Dependencies").EnumerateArray())
+				{
+					var latestVersionString = dependency.GetProperty("LatestVersion").GetString();
+					var resolvedVersionString = dependency.GetProperty("ResolvedVersion").GetString();
+					Assert.NotEqual(latestVersionString, resolvedVersionString);
+				}
+			}
+
+		}
+	}
+
     private static TemporaryDirectory TestSetup(string testProjectName)
     {
         var solutionRoot = typeof(EndToEndTests).Assembly
