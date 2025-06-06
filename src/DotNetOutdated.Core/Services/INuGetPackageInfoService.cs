@@ -1,4 +1,5 @@
 ﻿using NuGet.Frameworks;
+using NuGet.Protocol.Core.Types;
 using NuGet.Versioning;
 using System;
 using System.Collections.Generic;
@@ -13,5 +14,7 @@ namespace DotNetOutdated.Core.Services
 
         Task<IReadOnlyList<NuGetVersion>> GetAllVersions(string package, IEnumerable<Uri> sources, bool includePrerelease, NuGetFramework targetFramework, string projectFilePath,
             bool isDevelopmentDependency, int olderThanDays, bool ignoreFailedSources);
-    }
+        Task<IPackageSearchMetadata> GetSpecificVersion(string package, IEnumerable<Uri> sources, bool includePrerelease, NuGetFramework targetFramework,
+            string projectFilePath, NuGetVersion referencedVersion, bool ignoreFailedSources = false);
+	}
 }

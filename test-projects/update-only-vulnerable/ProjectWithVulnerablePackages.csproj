@@ -1,0 +1,13 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<TargetFramework>netcoreapp2.1</TargetFramework>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="System.IO.Packaging" Version="6.0.0" />
+		<PackageReference Include="CsvHelper" Version="30.0.0" />
+	</ItemGroup>
+
+</Project>
