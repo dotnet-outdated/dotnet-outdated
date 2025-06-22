@@ -103,12 +103,8 @@ internal class MarkdownFormatter : IOutputFormatter
                 }
                 else
                 {
-                    var matching = string.Join(".", resolvedVersion.GetParts()
-                        .Zip(latestVersion.GetParts(), (p1, p2) => (part: p2, matches: p1 == p2))
-                        .TakeWhile(p => p.matches)
-                        .Select(p => p.part));
-                    if (matching.Length > 0) { matching += "."; }
-                    var rest = new Regex($"^{matching}").Replace(latestString, "");
+                    var (matching, rest) = resolvedVersion.MatchVersionString(latestVersion, latestString);
+
                     return (color, matching, rest);
                 }
             }
