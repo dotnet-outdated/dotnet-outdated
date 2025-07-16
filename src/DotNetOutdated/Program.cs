@@ -133,11 +133,13 @@ namespace DotNetOutdated
          ShortName = "rt", LongName = "runtime")]
       public string Runtime { get; set; } = string.Empty;
 
-      [Option(CommandOptionType.SingleValue, Description = "The inclusive maximum package version to upgrade to." +
-                                                           "For example, a value of '8.0' would upgrade System.Text.Json 6.0.0 to the latest patch version of 8.0.x",
+      [Option(CommandOptionType.MultipleValue, Description = "The inclusive maximum package version to upgrade to, can be specified multiple times for different packages." +
+                                                             "For example, a value of 'System.Text.Json:8' would upgrade System.Text.Json 6.0.0 to the latest version of 8.x." +
+                                                             "Or a value of 'Microsoft.Extensions:8.1' would upgrade all packages starting with 'Microsoft.Extensions' to a maximum of 8.1.x." +
+                                                             "If no package name is specified, such as '8' or '8.0' then the maximum value will apply to all packages (expect for those with specific maximum versions configured)",
          ShortName = "mv", LongName = "maximum-version")]
-      public string MaxVersion { get; set; } = string.Empty;
-      
+      public List<string> MaxVersion { get; set; } = [];
+
       public static int Main(string[] args)
       {
          using var services = new ServiceCollection()
@@ -473,24 +475,32 @@ namespace DotNetOutdated
             deps = deps.Where(NoExcludeFilterMatches);
 
          NuGetVersion maximumVersion = null;
+         var maximumVersions = new Dictionary<string, NuGetVersion>();
 
-         if (!string.IsNullOrEmpty(MaxVersion))
+         if (MaxVersion.Count > 0)
          {
-             if (!Version.TryParse(MaxVersion, out var maxVersion))
-             {
-                 throw new CommandValidationException($"The specified maximum version '{MaxVersion}' is not a valid version string.");
-             }
+            foreach (var maxVersionString in MaxVersion)
+            {
+                (string package, Version maxVersion) = ParseMaximumVersion(maxVersionString);
 
-             // NuGetVersion normalizes no build or revision to 0, when we actually want
-             // those to mean "any version", so we need to force them to int.MaxValue.
-             if (maxVersion.Build is -1 || maxVersion.Revision is -1)
-             {
-                 var build = maxVersion.Build == -1 ? int.MaxValue : maxVersion.Build;
-                 var revision = maxVersion.Revision == -1 ? int.MaxValue : maxVersion.Revision;
-                 maxVersion = new(maxVersion.Major, maxVersion.Minor, build, revision);
-             }
+                // NuGetVersion normalizes no build or revision to 0, when we actually want
+                // those to mean "any version", so we need to force them to int.MaxValue.
+                if (maxVersion.Build is -1 || maxVersion.Revision is -1)
+                {
+                    var build = maxVersion.Build == -1 ? int.MaxValue : maxVersion.Build;
+                    var revision = maxVersion.Revision == -1 ? int.MaxValue : maxVersion.Revision;
+                    maxVersion = new(maxVersion.Major, maxVersion.Minor, build, revision);
+                }
 
-             maximumVersion = new NuGetVersion(maxVersion);
+                if (string.IsNullOrEmpty(package))
+                {
+                    maximumVersion = new NuGetVersion(maxVersion);
+                }
+                else
+                {
+                    maximumVersions[package] = new NuGetVersion(maxVersion);
+                }
+            }
          }
 
          var dependencies = deps.OrderBy(dependency => dependency.IsTransitive)
@@ -503,7 +513,20 @@ namespace DotNetOutdated
          {
             var dependency = dependencies[index];
 
-            tasks[index] = AddOutdatedDependencyIfNeeded(project, targetFramework, dependency, maximumVersion, outdatedDependencies);
+            if (!maximumVersions.TryGetValue(dependency.Name, out var dependencyMaximumVersion))
+            {
+                dependencyMaximumVersion = maximumVersion;
+
+                var dependencyMaximumVersions = maximumVersions
+                    .Where(x => dependency.Name.StartsWith(x.Key, StringComparison.OrdinalIgnoreCase))
+                    .Select(x => x.Value);
+                if (dependencyMaximumVersions.Any())
+                {
+                    dependencyMaximumVersion = dependencyMaximumVersions.Order().First();
+                }
+            }
+
+            tasks[index] = AddOutdatedDependencyIfNeeded(project, targetFramework, dependency, dependencyMaximumVersion, outdatedDependencies);
          }
 
          await Task.WhenAll(tasks).ConfigureAwait(false);
@@ -634,6 +657,30 @@ namespace DotNetOutdated
          Console.SetCursorPosition(0, Console.CursorTop);
          Console.Write(new string(' ', Console.BufferWidth));
          Console.SetCursorPosition(0, currentLineCursor);
+      }
+
+      private (string Package, Version maxVersion) ParseMaximumVersion(string maximumVersionString)
+      {
+         string package;
+         Version maxVersion;
+
+         var maxVersionParts = maximumVersionString.Split(':', 2);
+         var versionPart = maxVersionParts.Last();
+
+         package = maxVersionParts.Length > 1
+            ? maxVersionParts[0]
+            : string.Empty;
+
+         if (int.TryParse(versionPart, out var majorVersion))
+         {
+            maxVersion = new Version(majorVersion, int.MaxValue);
+         }
+         else if (!Version.TryParse(versionPart, out maxVersion))
+         {
+            throw new CommandValidationException($"The specified maximum version '{versionPart}' is not a valid version string.");
+         }
+
+         return (package, maxVersion);
       }
    }
 }
