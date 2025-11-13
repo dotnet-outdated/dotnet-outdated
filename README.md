@@ -96,7 +96,7 @@ Options:
                                                         Default value is: Warning.
   -rt|--runtime <RUNTIME>                               Specifies an optional runtime identifier to be used during the restore target when projects are analyzed.
                                                         More information available on https://learn.microsoft.com/dotnet/core/rid-catalog.
-  -mv|--maximum-version <MAX_VERSION>                   The inclusive maximum package version to upgrade to. For example, a value of '8.0' would upgrade System.Text.Json 6.0.0 to the latest patch version of 8.0.x
+  -mv|--maximum-version <MAX_VERSION>                   The inclusive maximum package version to upgrade to, can be specified multiple times for different packages. For example, a value of 'System.Text.Json:8' would upgrade System.Text.Json 6.0.0 to the latest version of 8.x. Or a value of 'Microsoft.Extensions:8.1' would upgrade all packages starting with 'Microsoft.Extensions' to a maximum of 8.1.x. If no package name is specified, such as '8' or '8.0' then the maximum value will apply to all packages (expect for those with specific maximum versions configured)
 ```
 
 ![Screenshot of dotnet-outdated](screenshot.png)
