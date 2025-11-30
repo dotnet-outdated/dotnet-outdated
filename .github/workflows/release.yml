@@ -29,6 +29,7 @@ jobs:
     timeout-minutes: 30
     permissions:
       id-token: write
+      contents: write
     steps:
       - uses: actions/checkout@v4.2.2
 
