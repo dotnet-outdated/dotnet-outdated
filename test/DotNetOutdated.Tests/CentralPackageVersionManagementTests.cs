@@ -9,14 +9,15 @@ namespace DotNetOutdated.Tests
     public class CentralPackageVersionManagementTests
     {
         [Theory]
-        [InlineData(true)]
-        [InlineData(false)]
-        public void UpgradingCPVMEnabledPackageUpdatesNearestCPVMFile(bool isGlobalPackage)
+        [InlineData("GlobalFakePackage")]
+        [InlineData("GlobalFakePackage.Analyzer")]
+        [InlineData("FakePackage")]
+        public void UpgradingCPVMEnabledPackageUpdatesNearestCPVMFile(string packageName)
         {
             SetupCPVMMocks(out IDotNetRestoreService mockRestoreService, out MockFileSystem mockFileSystem, out string path, out string nearestCPVMFilePath, out string rootCPVMFilePath, out string rootCPVMFileContent, out string _, out string _);
 
             var subject = new CentralPackageVersionManagementService(mockFileSystem, mockRestoreService);
-            RunStatus status = subject.AddPackage(path, isGlobalPackage ? "GlobalFakePackage" : "FakePackage", new NuGet.Versioning.NuGetVersion(2, 0, 0), false);
+            RunStatus status = subject.AddPackage(path, packageName, new NuGet.Versioning.NuGetVersion(2, 0, 0), false);
 
             Assert.NotNull(status);
             Assert.Equal(0, status.ExitCode);

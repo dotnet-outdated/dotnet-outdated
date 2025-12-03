@@ -2,6 +2,12 @@
 	<ItemGroup>
 		<GlobalPackageReference Include="GlobalFakePackage" Version="1.0.0" />
 	</ItemGroup>
+	<ItemGroup Condition="'$(MSBuildProjectExtension)' == '.csproj'">
+		<GlobalPackageReference Include="GlobalFakePackage.Analyzer" Version="1.0.0">
+			<PrivateAssets>all</PrivateAssets>
+			<IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+		</GlobalPackageReference>
+	</ItemGroup >
 	<ItemGroup>
 		<PackageVersion Include="FakePackage" Version="1.0.0" />
 	</ItemGroup>
