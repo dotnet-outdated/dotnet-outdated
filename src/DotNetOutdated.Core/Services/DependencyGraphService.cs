@@ -18,7 +18,7 @@ namespace DotNetOutdated.Core.Services
         private readonly IDotNetRunner _dotNetRunner = dotNetRunner;
         private readonly IFileSystem _fileSystem = fileSystem;
 
-        public async Task<DependencyGraphSpec> GenerateDependencyGraphAsync(string projectPath, string runtime)
+        public async Task<DependencyGraphSpec> GenerateDependencyGraphAsync(string projectPath, string runtime, int commandTimeOut)
         {
             var dgOutput = _fileSystem.Path.Combine(_fileSystem.Path.GetTempPath(), _fileSystem.Path.GetTempFileName());
             List<string> arguments =
@@ -36,7 +36,7 @@ namespace DotNetOutdated.Core.Services
                 arguments.Add($"/p:RuntimeIdentifiers={runtime}");
             }
 
-            var runStatus = _dotNetRunner.Run(_fileSystem.Path.GetDirectoryName(projectPath), arguments.ToArray());
+            var runStatus = _dotNetRunner.Run(_fileSystem.Path.GetDirectoryName(projectPath), arguments.ToArray(), commandTimeOut);
 
             if (runStatus.IsSuccess)
             {
