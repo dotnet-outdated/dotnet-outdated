@@ -28,6 +28,7 @@ namespace DotNetOutdated
        Name = "dotnet outdated",
        FullName = "A .NET Core global tool to list outdated Nuget packages.")]
    [VersionOptionFromMember(MemberName = nameof(GetVersion))]
+   [Subcommand(typeof(McpCommand))]
    internal class Program(
         IFileSystem fileSystem,
         IReporter reporter,

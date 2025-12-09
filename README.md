@@ -191,6 +191,50 @@ For failing CI builds, a proposed protocol is to have another CI build which wil
 
 Also, some companies/users do not feel comfortable jumping directly on the newest versions, as they might contain some bugs, and might want to wait for some time before updating to the newest package.
 
+## Model Context Protocol (MCP) Server
+
+**dotnet-outdated** includes a built-in [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server. This allows AI agents (like Claude Desktop, GitHub Copilot, etc.) to interact with your .NET projects to discover, analyze, and update outdated NuGet packages.
+
+### Usage
+
+To start the MCP server, run:
+
+```bash
+dotnet outdated mcp
+```
+
+### Configuration
+
+#### Claude Desktop
+
+Add the following to your `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "dotnet-outdated": {
+      "command": "dotnet-outdated",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+#### VS Code (with MCP Extension)
+
+Add the following to your `.vscode/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "dotnet-outdated": {
+      "command": "dotnet-outdated",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
 ## FAQ
 
 ### Why are unrelated changes made to .csproj files when running with `-u`?
