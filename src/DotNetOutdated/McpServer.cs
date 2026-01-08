@@ -22,7 +22,6 @@ namespace DotNetOutdated
         private readonly IProjectDiscoveryService _projectDiscoveryService;
         private readonly IProjectAnalysisService _projectAnalysisService;
         private readonly IDotNetPackageService _dotNetPackageService;
-        private readonly ICentralPackageVersionManagementService _centralPackageVersionManagementService;
         private readonly INuGetPackageResolutionService _nugetService;
         private readonly Stream _inputStream;
         private readonly Stream _outputStream;
@@ -32,7 +31,6 @@ namespace DotNetOutdated
             IProjectDiscoveryService projectDiscoveryService,
             IProjectAnalysisService projectAnalysisService,
             IDotNetPackageService dotNetPackageService,
-            ICentralPackageVersionManagementService centralPackageVersionManagementService,
             INuGetPackageResolutionService nugetService,
             Stream inputStream,
             Stream outputStream)
@@ -41,7 +39,6 @@ namespace DotNetOutdated
             _projectDiscoveryService = projectDiscoveryService;
             _projectAnalysisService = projectAnalysisService;
             _dotNetPackageService = dotNetPackageService;
-            _centralPackageVersionManagementService = centralPackageVersionManagementService;
             _nugetService = nugetService;
             _inputStream = inputStream;
             _outputStream = outputStream;
@@ -173,9 +170,9 @@ namespace DotNetOutdated
                             projectPath = new { type = "string", description = "Path to the project" },
                             packageName = new { type = "string", description = "Name of the package" },
                             version = new { type = "string", description = "Version to upgrade to" },
-                            framework = new { type = "string", description = "Target framework (optional, but recommended)" }
+                            framework = new { type = "string", description = "Target framework" }
                         },
-                        required = new[] { "projectPath", "packageName", "version" }
+                        required = new[] { "projectPath", "packageName", "version", "framework" }
                     }
                 }
             };
@@ -362,25 +359,12 @@ namespace DotNetOutdated
                  throw new ArgumentException($"Invalid version: {versionString}");
             }
 
-            RunStatus status;
-            
-            if (!string.IsNullOrEmpty(framework))
+            if (string.IsNullOrEmpty(framework))
             {
-                 status = _dotNetPackageService.AddPackage(projectPath, packageName, framework, version);
+                 throw new ArgumentException("framework is required");
             }
-            else
-            {
-                status = _centralPackageVersionManagementService.AddPackage(projectPath, packageName, version, false);
-                
-                if (!status.IsSuccess)
-                {
-                    return new 
-                    {
-                        content = new[] { new { type = "text", text = $"Failed to update package. If this is not a CPM project, please provide the 'framework' argument. Error: {status.Errors}" } },
-                        isError = true
-                    };
-                }
-            }
+
+            RunStatus status = _dotNetPackageService.AddPackage(projectPath, packageName, framework, version);
 
             if (status.IsSuccess)
             {
