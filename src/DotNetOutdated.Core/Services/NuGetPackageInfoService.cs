@@ -13,6 +13,7 @@ using System.Threading.Tasks;
 
 namespace DotNetOutdated.Core.Services
 {
+    using NuGet.Packaging.Core;
     using System.Collections.Concurrent;
 
     public sealed class NuGetPackageInfoService : INuGetPackageInfoService, IDisposable
@@ -164,5 +165,39 @@ namespace DotNetOutdated.Core.Services
         {
             _context?.Dispose();
         }
+
+        public async Task<IPackageSearchMetadata> GetSpecificVersion(string package, IEnumerable<Uri> sources, bool includePrerelease, NuGetFramework targetFramework,
+            string projectFilePath, NuGetVersion referencedVersion, bool ignoreFailedSources = false)
+        {
+            foreach (var source in sources)
+            {
+                try
+                {
+                    var metadata = await FindMetadataResourceForSource(source, projectFilePath, package).ConfigureAwait(false);
+                    if (metadata != null)
+                    {
+                        var packageMetadata = await metadata.GetMetadataAsync(new PackageIdentity(package, referencedVersion), _context, NullLogger.Instance, CancellationToken.None);
+                        if (packageMetadata != null)
+                        {
+                            return packageMetadata;
+                        }
+                    }
+                }
+                catch (HttpRequestException)
+                {
+                    // Suppress HTTP errors when connecting to NuGet sources
+                }
+                catch (Exception ex)
+                {
+                    if (!ignoreFailedSources)
+                    {
+                        continue;
+                    }
+                    // if the inner exception is NOT HttpRequestException, throw it
+                    if (ex.InnerException != null && !(ex.InnerException is HttpRequestException)) throw;
+                }
+            }
+			return null;
+		}
     }
 }
