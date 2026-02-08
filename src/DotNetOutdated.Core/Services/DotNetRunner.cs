@@ -14,6 +14,8 @@ namespace DotNetOutdated.Core.Services
     /// </remarks>
     public class DotNetRunner(DotNetRunnerOptions options) : IDotNetRunner
     {
+        public DotNetRunner() : this(new DotNetRunnerOptions()) { }
+
         public RunStatus Run(string workingDirectory, string[] arguments)
         {
             var psi = new ProcessStartInfo("dotnet", arguments)
