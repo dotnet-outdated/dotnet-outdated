@@ -12,8 +12,10 @@ namespace DotNetOutdated.Core.Services
     /// <remarks>
     /// Credit for the stuff happening in here goes to the https://github.com/jaredcnance/dotnet-status project
     /// </remarks>
-    public class DotNetRunner : IDotNetRunner
+    public class DotNetRunner(DotNetRunnerOptions options) : IDotNetRunner
     {
+        public DotNetRunner() : this(new DotNetRunnerOptions()) { }
+
         public RunStatus Run(string workingDirectory, string[] arguments)
         {
             var psi = new ProcessStartInfo("dotnet", arguments)
@@ -37,7 +39,6 @@ namespace DotNetOutdated.Core.Services
                 var outputTask = ConsumeStreamReaderAsync(p.StandardOutput, timeSinceLastOutput, output);
                 var errorTask = ConsumeStreamReaderAsync(p.StandardError, timeSinceLastOutput, errors);
                 bool processExited = false;
-                const int Timeout = 20_000;
 
                 while (true) {
                     if (p.HasExited) {
@@ -48,7 +49,7 @@ namespace DotNetOutdated.Core.Services
                     // If output has not been received for a while, then
                     // assume that the process has hung and stop waiting.
                     lock(timeSinceLastOutput) {
-                        if (timeSinceLastOutput.ElapsedMilliseconds > Timeout) {
+                        if (timeSinceLastOutput.Elapsed > options.IdleTimeout) {
                             break;
                         }
                     }
