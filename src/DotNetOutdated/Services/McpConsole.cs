@@ -18,7 +18,7 @@ namespace DotNetOutdated.Services
 
         public bool IsInputRedirected => Console.IsInputRedirected;
 
-        public bool IsOutputRedirected => Console.IsErrorRedirected;
+        public bool IsOutputRedirected => Console.IsOutputRedirected;
 
         public bool IsErrorRedirected => Console.IsErrorRedirected;
 
