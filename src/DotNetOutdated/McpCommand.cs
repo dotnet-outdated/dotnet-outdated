@@ -26,7 +26,6 @@ namespace DotNetOutdated
                  .AddSingleton<IDotNetPackageService, DotNetPackageService>()
                  .AddSingleton<INuGetPackageInfoService, NuGetPackageInfoService>()
                  .AddSingleton<INuGetPackageResolutionService, NuGetPackageResolutionService>()
-                 .AddSingleton<ICentralPackageVersionManagementService, CentralPackageVersionManagementService>()
                  .BuildServiceProvider();
 
             var server = new McpServer(
@@ -34,7 +33,6 @@ namespace DotNetOutdated
                 services.GetRequiredService<IProjectDiscoveryService>(),
                 services.GetRequiredService<IProjectAnalysisService>(),
                 services.GetRequiredService<IDotNetPackageService>(),
-                services.GetRequiredService<ICentralPackageVersionManagementService>(),
                 services.GetRequiredService<INuGetPackageResolutionService>(),
                 Console.OpenStandardInput(),
                 Console.OpenStandardOutput()

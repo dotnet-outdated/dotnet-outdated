@@ -19,7 +19,6 @@ namespace DotNetOutdated.Tests
         private readonly IProjectDiscoveryService _projectDiscoveryService;
         private readonly IProjectAnalysisService _projectAnalysisService;
         private readonly IDotNetPackageService _dotNetPackageService;
-        private readonly ICentralPackageVersionManagementService _centralPackageVersionManagementService;
         private readonly INuGetPackageResolutionService _nugetService;
 
         public McpServerTests()
@@ -28,7 +27,6 @@ namespace DotNetOutdated.Tests
             _projectDiscoveryService = Substitute.For<IProjectDiscoveryService>();
             _projectAnalysisService = Substitute.For<IProjectAnalysisService>();
             _dotNetPackageService = Substitute.For<IDotNetPackageService>();
-            _centralPackageVersionManagementService = Substitute.For<ICentralPackageVersionManagementService>();
             _nugetService = Substitute.For<INuGetPackageResolutionService>();
         }
 
@@ -45,7 +43,6 @@ namespace DotNetOutdated.Tests
                 _projectDiscoveryService,
                 _projectAnalysisService,
                 _dotNetPackageService,
-                _centralPackageVersionManagementService,
                 _nugetService,
                 inputStream,
                 outputStream
@@ -58,7 +55,7 @@ namespace DotNetOutdated.Tests
             outputStream.Position = 0;
             using var reader = new StreamReader(outputStream);
             var output = await reader.ReadToEndAsync();
-            
+
             Assert.Contains("\"result\"", output);
             Assert.Contains("\"protocolVersion\":\"2024-11-05\"", output);
             Assert.Contains("\"dotnet-outdated\"", output);
@@ -77,7 +74,6 @@ namespace DotNetOutdated.Tests
                 _projectDiscoveryService,
                 _projectAnalysisService,
                 _dotNetPackageService,
-                _centralPackageVersionManagementService,
                 _nugetService,
                 inputStream,
                 outputStream
@@ -112,7 +108,6 @@ namespace DotNetOutdated.Tests
                 _projectDiscoveryService,
                 _projectAnalysisService,
                 _dotNetPackageService,
-                _centralPackageVersionManagementService,
                 _nugetService,
                 inputStream,
                 outputStream

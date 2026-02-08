@@ -36,7 +36,6 @@ namespace DotNetOutdated
         IProjectAnalysisService projectAnalysisService,
         IProjectDiscoveryService projectDiscoveryService,
         IDotNetPackageService dotNetPackageService,
-        ICentralPackageVersionManagementService centralPackageVersionManagementService,
         DotNetRunnerOptions dotNetRunnerOptions) : CommandBase
    {
       private readonly IFileSystem _fileSystem = fileSystem;
@@ -45,7 +44,6 @@ namespace DotNetOutdated
       private readonly IProjectAnalysisService _projectAnalysisService = projectAnalysisService;
       private readonly IProjectDiscoveryService _projectDiscoveryService = projectDiscoveryService;
       private readonly IDotNetPackageService _dotNetPackageService = dotNetPackageService;
-      private readonly ICentralPackageVersionManagementService _centralPackageVersionManagementService = centralPackageVersionManagementService;
       private readonly DotNetRunnerOptions _dotNetRunnerOptions = dotNetRunnerOptions;
 
       [Option(CommandOptionType.NoValue, Description = "Specifies whether to include auto-referenced packages.",
@@ -161,7 +159,6 @@ namespace DotNetOutdated
                  .AddSingleton<IDotNetPackageService, DotNetPackageService>()
                  .AddSingleton<INuGetPackageInfoService, NuGetPackageInfoService>()
                  .AddSingleton<INuGetPackageResolutionService, NuGetPackageResolutionService>()
-                 .AddSingleton<ICentralPackageVersionManagementService, CentralPackageVersionManagementService>()
                  .BuildServiceProvider();
 
          using var app = new CommandLineApplication<Program>();
@@ -296,16 +293,14 @@ namespace DotNetOutdated
                {
                   RunStatus status = null;
 
-                  if (!project.IsProjectSdkStyle() && !package.IsVersionCentrallyManaged)
+                  if (!project.IsProjectSdkStyle())
                   {
                      console.WriteLine("Project format not SDK style or centrally managed, removing package before upgrade.");
                      status = _dotNetPackageService.RemovePackage(project.ProjectFilePath, package.Name);
                   }
 
                   if (status is null || status.IsSuccess)
-                     status = package.IsVersionCentrallyManaged
-                        ? _centralPackageVersionManagementService.AddPackage(project.ProjectFilePath, package.Name, package.LatestVersion, NoRestore)
-                        : _dotNetPackageService.AddPackage(project.ProjectFilePath, package.Name, project.Framework.ToString(), package.LatestVersion, NoRestore, IgnoreFailedSources);
+                     status = _dotNetPackageService.AddPackage(project.ProjectFilePath, package.Name, project.Framework.ToString(), package.LatestVersion, NoRestore, IgnoreFailedSources);
 
                   if (status.IsSuccess)
                   {

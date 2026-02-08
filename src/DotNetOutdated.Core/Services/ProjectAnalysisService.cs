@@ -72,7 +72,7 @@ namespace DotNetOutdated.Core.Services
                             }
 
                             var dependency = new Dependency(projectDependency.Name, projectDependency.LibraryRange.VersionRange, projectLibrary?.Version,
-                                projectDependency.AutoReferenced, false, isDevelopmentDependency, projectDependency.VersionCentrallyManaged);
+                                projectDependency.AutoReferenced, false, isDevelopmentDependency);
                             targetFramework.Dependencies.TryAdd(dependency.Name, dependency);
 
                             // Process transitive dependencies for the library
@@ -97,7 +97,7 @@ namespace DotNetOutdated.Core.Services
                     // Only add library and process child dependencies if we have not come across this dependency before
                     if (!targetFramework.Dependencies.ContainsKey(packageDependency.Id))
                     {
-                        var childDependency = new Dependency(packageDependency.Id, packageDependency.VersionRange, childLibrary?.Version, false, true, false, false);
+                        var childDependency = new Dependency(packageDependency.Id, packageDependency.VersionRange, childLibrary?.Version, false, true, false);
                         targetFramework.Dependencies.Add(childDependency.Name, childDependency);
 
                         // Process the dependency for this project dependency

@@ -25,8 +25,6 @@ namespace DotNetOutdated
 
         public bool IsTransitive { get; set; }
 
-        public bool IsVersionCentrallyManaged { get; set; }
-
         public NuGetVersion LatestVersion { get; set; }
 
         public string Name { get; set; }
