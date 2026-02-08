@@ -36,7 +36,7 @@ namespace DotNetOutdated
         IProjectDiscoveryService projectDiscoveryService,
         IDotNetPackageService dotNetPackageService,
         ICentralPackageVersionManagementService centralPackageVersionManagementService,
-        IDotNetRunner dotNetRunner) : CommandBase
+        DotNetRunnerOptions dotNetRunnerOptions) : CommandBase
    {
       private readonly IFileSystem _fileSystem = fileSystem;
       private readonly IReporter _reporter = reporter;
@@ -45,7 +45,7 @@ namespace DotNetOutdated
       private readonly IProjectDiscoveryService _projectDiscoveryService = projectDiscoveryService;
       private readonly IDotNetPackageService _dotNetPackageService = dotNetPackageService;
       private readonly ICentralPackageVersionManagementService _centralPackageVersionManagementService = centralPackageVersionManagementService;
-      private readonly IDotNetRunner _dotNetRunner = dotNetRunner;
+      private readonly DotNetRunnerOptions _dotNetRunnerOptions = dotNetRunnerOptions;
 
       [Option(CommandOptionType.NoValue, Description = "Specifies whether to include auto-referenced packages.",
           LongName = "include-auto-references")]
@@ -140,10 +140,10 @@ namespace DotNetOutdated
          ShortName = "mv", LongName = "maximum-version")]
       public string MaxVersion { get; set; } = string.Empty;
 
-      [Option(CommandOptionType.SingleValue, Description = "Specifies the minimum timeout in seconds to wait for responses from the dotnet executable. " +
-                                                           "Default is 20 seconds.",
-          ShortName = "mt", LongName = "min-timeout")]
-      public int MinTimeout { get; set; } = 20;
+      [Option(CommandOptionType.SingleValue, Description = "Specifies the idle timeout in seconds to wait for output from the dotnet executable before assuming it has hung. " +
+                                                           "Default is 120 seconds.",
+          ShortName = "it", LongName = "idle-timeout")]
+      public int IdleTimeout { get; set; } = 120;
       
       public static int Main(string[] args)
       {
@@ -153,7 +153,8 @@ namespace DotNetOutdated
                  .AddSingleton<IFileSystem, FileSystem>()
                  .AddSingleton<IProjectDiscoveryService, ProjectDiscoveryService>()
                  .AddSingleton<IProjectAnalysisService, ProjectAnalysisService>()
-                 .AddSingleton<IDotNetRunner, DotNetRunner>()
+                 .AddSingleton<DotNetRunnerOptions>()
+                .AddSingleton<IDotNetRunner, DotNetRunner>()
                  .AddSingleton<IDependencyGraphService, DependencyGraphService>()
                  .AddSingleton<IDotNetRestoreService, DotNetRestoreService>()
                  .AddSingleton<IDotNetPackageService, DotNetPackageService>()
@@ -180,7 +181,7 @@ namespace DotNetOutdated
          ArgumentNullException.ThrowIfNull(app);
          ArgumentNullException.ThrowIfNull(console);
          
-         _dotNetRunner.MinTimeout = TimeSpan.FromSeconds(MinTimeout);
+         _dotNetRunnerOptions.IdleTimeout = TimeSpan.FromSeconds(IdleTimeout);
 
          try
          {

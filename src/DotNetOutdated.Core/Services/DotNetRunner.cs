@@ -1,5 +1,4 @@
-﻿using System;
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Threading;
@@ -13,10 +12,8 @@ namespace DotNetOutdated.Core.Services
     /// <remarks>
     /// Credit for the stuff happening in here goes to the https://github.com/jaredcnance/dotnet-status project
     /// </remarks>
-    public class DotNetRunner : IDotNetRunner
+    public class DotNetRunner(DotNetRunnerOptions options) : IDotNetRunner
     {
-        public TimeSpan MinTimeout { get; set; } = TimeSpan.FromSeconds(20);
-
         public RunStatus Run(string workingDirectory, string[] arguments)
         {
             var psi = new ProcessStartInfo("dotnet", arguments)
@@ -50,7 +47,7 @@ namespace DotNetOutdated.Core.Services
                     // If output has not been received for a while, then
                     // assume that the process has hung and stop waiting.
                     lock(timeSinceLastOutput) {
-                        if (timeSinceLastOutput.Elapsed > MinTimeout) {
+                        if (timeSinceLastOutput.Elapsed > options.IdleTimeout) {
                             break;
                         }
                     }
