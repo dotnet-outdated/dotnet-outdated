@@ -229,7 +229,11 @@ namespace DotNetOutdated
 
         private async Task<object> HandleDiscoverProjects(JsonElement arguments)
         {
-            string path = arguments.GetProperty("path").GetString();
+            if (!arguments.TryGetProperty("path", out var pathProp) || pathProp.ValueKind == JsonValueKind.Null || pathProp.GetString() is null)
+            {
+                throw new ArgumentException("path is required");
+            }
+            string path = pathProp.GetString();
             bool recursive = false;
             if (arguments.TryGetProperty("recursive", out var recursiveProp))
             {
