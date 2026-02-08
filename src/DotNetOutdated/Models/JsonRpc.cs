@@ -26,9 +26,11 @@ namespace DotNetOutdated.Models
         public string JsonRpc { get; set; } = "2.0";
 
         [JsonPropertyName("result")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public object? Result { get; set; }
 
         [JsonPropertyName("error")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public JsonRpcError? Error { get; set; }
 
         [JsonPropertyName("id")]
