@@ -10,18 +10,18 @@ namespace DotNetOutdated.Core.Services
         private readonly IDotNetRunner _dotNetRunner = dotNetRunner;
         private readonly IFileSystem _fileSystem = fileSystem;
 
-        public RunStatus AddPackage(string projectPath, string packageName, string frameworkName, NuGetVersion version)
+        public RunStatus AddPackage(string projectPath, string packageName, string frameworkName, VersionRange versionRange)
         {
-            return AddPackage(projectPath, packageName, frameworkName, version, false);
+            return AddPackage(projectPath, packageName, frameworkName, versionRange, false);
         }
 
-        public RunStatus AddPackage(string projectPath, string packageName, string frameworkName, NuGetVersion version, bool noRestore, bool ignoreFailedSources = false)
+        public RunStatus AddPackage(string projectPath, string packageName, string frameworkName, VersionRange versionRange, bool noRestore, bool ignoreFailedSources = false)
         {
-            ArgumentNullException.ThrowIfNull(version);
+            ArgumentNullException.ThrowIfNull(versionRange);
 
             string projectName = _fileSystem.Path.GetFileName(projectPath);
 
-            List<string> arguments = ["add", projectName, "package", packageName, "-v", version.ToString(), "-f", frameworkName];
+            List<string> arguments = ["add", projectName, "package", packageName, "-v", versionRange.ToShortString(), "-f", frameworkName];
             if (noRestore)
             {
                 arguments.Add("--no-restore");
@@ -36,10 +36,10 @@ namespace DotNetOutdated.Core.Services
 
         public RunStatus RemovePackage(string projectPath, string packageName)
         {
-           var projectName = _fileSystem.Path.GetFileName(projectPath);
-           string[] arguments = ["remove", projectName, "package", packageName];
+            var projectName = _fileSystem.Path.GetFileName(projectPath);
+            string[] arguments = ["remove", projectName, "package", packageName];
 
-           return _dotNetRunner.Run(_fileSystem.Path.GetDirectoryName(projectPath), arguments);
+            return _dotNetRunner.Run(_fileSystem.Path.GetDirectoryName(projectPath), arguments);
         }
     }
 }
