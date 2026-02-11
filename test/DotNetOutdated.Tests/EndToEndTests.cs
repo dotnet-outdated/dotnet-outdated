@@ -3,7 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
-using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Xml.Linq;
 using Xunit;
 
 namespace DotNetOutdated.Tests;
@@ -21,11 +22,11 @@ public static class EndToEndTests
         var actual = Program.Main([project.Path]);
         Assert.Equal(0, actual);
     }
-    
+
     [Theory]
-    [InlineData("development-dependencies-lock",  "", 0)]
-    [InlineData("development-dependencies-lock",  "linux-x64", 0)]
-    [InlineData("development-dependencies-lock",  "windows-x64", 1)]
+    [InlineData("development-dependencies-lock", "", 0)]
+    [InlineData("development-dependencies-lock", "linux-x64", 0)]
+    [InlineData("development-dependencies-lock", "windows-x64", 1)]
     public static void Can_Upgrade_Lock_Project(string testProjectName, string runtime, int expectedExitCode)
     {
         using var project = TestSetup(testProjectName);
@@ -36,7 +37,7 @@ public static class EndToEndTests
         {
             list.Add($"--runtime {runtime}");
         }
-        
+
         var actual = Program.Main([.. list]);
         Assert.Equal(expectedExitCode, actual);
     }
@@ -72,15 +73,15 @@ public static class EndToEndTests
         var actual = Program.Main([directory.Path, "--maximum-version:8.0", "--output", outputPath, "--output-format:json"]);
         Assert.Equal(0, actual);
 
-        using var output = JsonDocument.Parse(File.ReadAllText(outputPath));
+        var output = JsonNode.Parse(File.ReadAllText(outputPath));
 
-        foreach (var project in output.RootElement.GetProperty("Projects").EnumerateArray())
+        foreach (var project in output["Projects"].AsArray())
         {
-            foreach (var tfm in project.GetProperty("TargetFrameworks").EnumerateArray())
+            foreach (var tfm in project["TargetFrameworks"].AsArray())
             {
-                foreach (var dependency in tfm.GetProperty("Dependencies").EnumerateArray())
+                foreach (var dependency in tfm["Dependencies"].AsArray())
                 {
-                    var latestVersionString = dependency.GetProperty("LatestVersion").GetString();
+                    var latestVersionString = (string)dependency["LatestVersion"];
 
                     Assert.True(Version.TryParse(latestVersionString, out var latestVersion));
                     Assert.Equal(8, latestVersion.Major);
@@ -89,6 +90,36 @@ public static class EndToEndTests
                 }
             }
         }
+    }
+
+    [Fact]
+    public static void Can_Upgrade_Project_With_Version_Ranges()
+    {
+        using var directory = TestSetup("version-range");
+
+        var outputPath = Path.Combine(directory.Path, "output.json");
+
+        var actual = Program.Main([directory.Path, "--upgrade", "--output", outputPath, "--output-format:json"]);
+        Assert.Equal(0, actual);
+
+        var output = JsonNode.Parse(File.ReadAllText(outputPath));
+
+        var jsonDependencyVersions = output["Projects"][0]["TargetFrameworks"][0]["Dependencies"].AsArray()
+            .ToDictionary(d => (string)d["Name"], d => (string)d["LatestVersion"]);
+
+        Assert.True(Version.TryParse(jsonDependencyVersions["System.Text.Json"], out var systemTextJsonVersion));
+        Assert.True(systemTextJsonVersion > new Version(6, 0, 0));
+        Assert.True(systemTextJsonVersion < new Version(8, 0, 0));
+
+        Assert.True(Version.TryParse(jsonDependencyVersions["Microsoft.Extensions.DependencyInjection"], out var dependencyInjectionVersion));
+        Assert.Equal(new Version(7, 0, 0), dependencyInjectionVersion);
+
+        var csproj = XDocument.Load(Path.Combine(directory.Path, "version-range.csproj"));
+        var csprojDependencyVersions = csproj.Descendants("PackageReference")
+            .ToDictionary(e => (string)e.Attribute("Include"), e => (string)e.Attribute("Version"));
+
+        Assert.Equal($"[{systemTextJsonVersion}, 8.0.0)", csprojDependencyVersions["System.Text.Json"]);
+        Assert.Equal("[7.0.0]", csprojDependencyVersions["Microsoft.Extensions.DependencyInjection"]);
     }
 
     private static TemporaryDirectory TestSetup(string testProjectName)
