@@ -70,7 +70,7 @@ public static class EndToEndTests
 
         var outputPath = Path.Combine(directory.Path, "output.json");
 
-        var actual = Program.Main([directory.Path, "--maximum-version:8.0", "--output", outputPath, "--output-format:json"]);
+        var actual = Program.Main([directory.Path, "--upgrade", "--maximum-version:8.0", "--output", outputPath, "--output-format:json"]);
         Assert.Equal(0, actual);
 
         var output = JsonNode.Parse(File.ReadAllText(outputPath));
@@ -90,6 +90,12 @@ public static class EndToEndTests
                 }
             }
         }
+
+        var csproj = XDocument.Load(Path.Combine(directory.Path, "Project.csproj"));
+        var csprojDependencyVersions = csproj.Descendants("PackageReference")
+            .ToDictionary(e => (string)e.Attribute("Include"), e => (string)e.Attribute("Version"));
+
+        Assert.StartsWith("8.0.", csprojDependencyVersions["System.Text.Json"]);
     }
 
     [Fact]
