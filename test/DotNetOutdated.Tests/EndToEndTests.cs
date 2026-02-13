@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -13,6 +13,7 @@ public static class EndToEndTests
     [Theory]
     [InlineData("build-props")]
     [InlineData("development-dependencies")]
+    [InlineData("direct-reference-variables")]
     [InlineData("multi-target", Skip = "Fails on Windows in GitHub Actions for some reason.")]
     public static void Can_Upgrade_Project(string testProjectName)
     {
@@ -89,6 +90,28 @@ public static class EndToEndTests
                 }
             }
         }
+    }
+
+    [Fact]
+    public static void Can_Upgrade_Direct_Reference_With_Variables_Preserves_Variable_References()
+    {
+        using var project = TestSetup("direct-reference-variables");
+
+        // Run the upgrade with --upgrade flag
+        var actual = Program.Main([project.Path, "--upgrade"]);
+        Assert.Equal(0, actual);
+
+        // Read the project file
+        var projectFilePath = Directory.GetFiles(project.Path, "*.csproj").First();
+        var content = File.ReadAllText(projectFilePath);
+
+        // Verify that variable references are still present
+        Assert.Contains("Version=\"$(NewtonsoftJsonVersion)\"", content);
+        Assert.Contains("Version=\"$(MicrosoftExtensionsVersion)\"", content);
+
+        // Verify that property values have been updated (not still 11.0.1 or 2.1.0)
+        Assert.DoesNotContain("<NewtonsoftJsonVersion>11.0.1</NewtonsoftJsonVersion>", content);
+        Assert.DoesNotContain("<MicrosoftExtensionsVersion>2.1.0</MicrosoftExtensionsVersion>", content);
     }
 
     private static TemporaryDirectory TestSetup(string testProjectName)
