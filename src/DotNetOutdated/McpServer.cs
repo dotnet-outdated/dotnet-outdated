@@ -47,7 +47,7 @@ namespace DotNetOutdated
         public async Task RunAsync(CancellationToken cancellationToken = default)
         {
             using var reader = new StreamReader(_inputStream);
-            
+
             while (!cancellationToken.IsCancellationRequested)
             {
                 string? line = await reader.ReadLineAsync(cancellationToken);
@@ -197,7 +197,7 @@ namespace DotNetOutdated
 
             object result = null;
 
-            try 
+            try
             {
                 switch (toolCall.Name)
                 {
@@ -238,7 +238,7 @@ namespace DotNetOutdated
             }
 
             var projects = _projectDiscoveryService.DiscoverProjects(path, recursive);
-            
+
             return new
             {
                 content = new[]
@@ -265,7 +265,7 @@ namespace DotNetOutdated
             string runtime = null;
 
             var projects = await _projectAnalysisService.AnalyzeProjectAsync(projectPath, false, includeTransitive, transitiveDepth, runtime);
-            
+
             var result = new List<object>();
             foreach (var project in projects)
             {
@@ -277,10 +277,10 @@ namespace DotNetOutdated
                     {
                         var referencedVersion = dep.ResolvedVersion;
                         NuGetVersion latestVersion = null;
-                        
+
                         if (referencedVersion != null)
                         {
-                            try 
+                            try
                             {
                                 latestVersion = await _nugetService.ResolvePackageVersions(
                                     dep.Name,
@@ -353,15 +353,15 @@ namespace DotNetOutdated
             {
                 framework = frameworkProp.GetString();
             }
-            
-            if (!NuGetVersion.TryParse(versionString, out var version))
+
+            if (!VersionRange.TryParse(versionString, out var version))
             {
-                 throw new ArgumentException($"Invalid version: {versionString}");
+                throw new ArgumentException($"Invalid version: {versionString}");
             }
 
             if (string.IsNullOrEmpty(framework))
             {
-                 throw new ArgumentException("framework is required");
+                throw new ArgumentException("framework is required");
             }
 
             RunStatus status = _dotNetPackageService.AddPackage(projectPath, packageName, framework, version);
