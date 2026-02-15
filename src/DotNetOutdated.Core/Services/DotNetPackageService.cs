@@ -3,9 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Abstractions;
-using System.Linq;
 using System.Text.RegularExpressions;
-using System.Xml.Linq;
 
 namespace DotNetOutdated.Core.Services
 {
@@ -26,8 +24,7 @@ namespace DotNetOutdated.Core.Services
 
             // Check if this package uses a variable reference
             var variables = _variableTrackingService.DiscoverPackageVariables(projectPath);
-            PackageVariableInfo variableInfo = null;
-            variables.TryGetValue(packageName, out variableInfo);
+            variables.TryGetValue(packageName, out PackageVariableInfo variableInfo);
 
             // When --no-restore is used, `dotnet add package` has an upstream bug where it writes
             // version info to .csproj instead of Directory.Packages.props for CPM projects.
@@ -38,7 +35,7 @@ namespace DotNetOutdated.Core.Services
                 // This avoids the dotnet CPM bug AND preserves the variable reference.
                 if (variableInfo != null && variableInfo.ElementType != "PackageReference")
                 {
-                    RestoreVariableReference(projectPath, packageName, variableInfo, version);
+                    _variableTrackingService.UpdatePackageVariable(variableInfo, version);
                     return new RunStatus(string.Empty, string.Empty, 0);
                 }
 
@@ -66,7 +63,7 @@ namespace DotNetOutdated.Core.Services
             // If the package originally used a variable reference, restore it after the update
             if (result.IsSuccess && variableInfo != null)
             {
-                RestoreVariableReference(projectPath, packageName, variableInfo, version);
+                _variableTrackingService.UpdatePackageVariable(variableInfo, version);
             }
 
             return result;
@@ -78,59 +75,6 @@ namespace DotNetOutdated.Core.Services
            string[] arguments = ["remove", projectName, "package", packageName];
 
            return _dotNetRunner.Run(_fileSystem.Path.GetDirectoryName(projectPath), arguments);
-        }
-
-        private void RestoreVariableReference(string projectPath, string packageName, PackageVariableInfo variableInfo, NuGetVersion newVersion)
-        {
-            try
-            {
-                string fileToUpdate = variableInfo.FilePath;
-
-                if (!_fileSystem.File.Exists(fileToUpdate))
-                {
-                    fileToUpdate = projectPath;
-                }
-
-                string content = _fileSystem.File.ReadAllText(fileToUpdate);
-                var doc = XDocument.Parse(content);
-
-                var propertyElement = doc.Descendants()
-                    .Where(e => e.Name.LocalName == variableInfo.VariableName &&
-                               e.Parent?.Name.LocalName == "PropertyGroup")
-                    .FirstOrDefault();
-
-                if (propertyElement != null)
-                {
-                    string oldValue = propertyElement.Value;
-                    string pattern = $@"<{Regex.Escape(variableInfo.VariableName)}>{Regex.Escape(oldValue)}</{Regex.Escape(variableInfo.VariableName)}>";
-                    string replacement = $"<{variableInfo.VariableName}>{newVersion}</{variableInfo.VariableName}>";
-                    content = Regex.Replace(content, pattern, replacement);
-                }
-
-                var packageElements = doc.Descendants()
-                    .Where(e => e.Name.LocalName == variableInfo.ElementType &&
-                               (e.Attribute("Include")?.Value.Equals(packageName, StringComparison.OrdinalIgnoreCase) == true ||
-                                e.Attribute("Update")?.Value.Equals(packageName, StringComparison.OrdinalIgnoreCase) == true))
-                    .ToList();
-
-                foreach (var packageElement in packageElements)
-                {
-                    var versionAttr = packageElement.Attribute("Version");
-                    if (versionAttr != null)
-                    {
-                        string variableReference = $"$({variableInfo.VariableName})";
-                        string packagePattern = $@"(<{Regex.Escape(variableInfo.ElementType)}\s+(?:Include|Update)=""{Regex.Escape(packageName)}""\s+Version="")[^""]*("")";
-                        string packageReplacement = $"$1{variableReference}$2";
-                        content = Regex.Replace(content, packagePattern, packageReplacement, RegexOptions.IgnoreCase);
-                    }
-                }
-
-                _fileSystem.File.WriteAllText(fileToUpdate, content);
-            }
-            catch
-            {
-                // Silently ignore errors - the package was still upgraded, just without variable reference
-            }
         }
 
         private bool TryUpdateCentralPackageVersion(string projectPath, string packageName, NuGetVersion version)
