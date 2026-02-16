@@ -130,6 +130,31 @@ public static class EndToEndTests
         Assert.DoesNotContain("<MicrosoftExtensionsVersion>2.1.0</MicrosoftExtensionsVersion>", content);
     }
 
+    [Fact]
+    public static void Can_Upgrade_Cross_File_Variables_Preserves_Variable_References()
+    {
+        using var project = TestSetup("cross-file-variables");
+
+        var actual = Program.Main([project.Path, "--upgrade"]);
+        Assert.Equal(0, actual);
+
+        // Variables are defined in Directory.Build.props
+        var propsFilePath = Path.Combine(project.Path, "Directory.Build.props");
+        var propsContent = File.ReadAllText(propsFilePath);
+
+        // But used in the project file
+        var projectFilePath = Directory.GetFiles(project.Path, "*.csproj").First();
+        var projectContent = File.ReadAllText(projectFilePath);
+
+        // Verify variable references are preserved in project file
+        Assert.Contains("Version=\"$(NewtonsoftJsonVersion)\"", projectContent);
+        Assert.Contains("Version=\"$(MicrosoftExtensionsVersion)\"", projectContent);
+
+        // Verify old versions are not present in Directory.Build.props
+        Assert.DoesNotContain("<NewtonsoftJsonVersion>11.0.1</NewtonsoftJsonVersion>", propsContent);
+        Assert.DoesNotContain("<MicrosoftExtensionsVersion>2.1.0</MicrosoftExtensionsVersion>", propsContent);
+    }
+
     private static TemporaryDirectory TestSetup(string testProjectName)
     {
         var solutionRoot = typeof(EndToEndTests).Assembly
