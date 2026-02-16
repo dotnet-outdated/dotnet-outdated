@@ -29,17 +29,16 @@ public interface IVariableTrackingService
     void ClearCache();
 }
 
+// <summary>
+// This service provides a simple implementation for tracking and updating versions that are defined using variables in MSBuild project files. 
+// It scans the project file and its imports for any PackageReference elements that use variable references for their version, and allows updating those variables while preserving the variable reference syntax in the project file. 
+// This is a limited implementation that focuses on variables defined in the same file as the PackageReference or PackageVersion, and does not handle more complex scenarios like variables defined in other files or conditional imports. 
+// It also uses regex to update the XML content while preserving formatting, which may not cover all edge cases. However, it should work for common scenarios.
+// </summary>
 public sealed class VariableTrackingService : IVariableTrackingService
 {
     private readonly IFileSystem _fileSystem;
     private readonly Dictionary<string, Dictionary<string, PackageVariableInfo>> _cache;
-    
-    private static readonly string[] _fileExtensions =
-    [
-        ".csproj",
-        ".fsproj",
-        ".props",
-    ];
 
     public VariableTrackingService(IFileSystem fileSystem)
     {
@@ -58,7 +57,7 @@ public sealed class VariableTrackingService : IVariableTrackingService
         {
             // Determine which file to update
             string fileToUpdate = variableInfo.FilePath;
-            
+
             // Verify the file exists
             if (!_fileSystem.File.Exists(fileToUpdate))
             {
@@ -70,9 +69,8 @@ public sealed class VariableTrackingService : IVariableTrackingService
 
             // Update the property value
             var propertyElement = doc.Descendants()
-                .Where(e => e.Name.LocalName == variableInfo.VariableName && 
-                           e.Parent?.Name.LocalName == "PropertyGroup")
-                .FirstOrDefault();
+                .FirstOrDefault(e => e.Name.LocalName == variableInfo.VariableName &&
+                           e.Parent?.Name.LocalName == "PropertyGroup");
 
             if (propertyElement != null)
             {
@@ -98,7 +96,7 @@ public sealed class VariableTrackingService : IVariableTrackingService
                 {
                     // Replace the literal version with the variable reference using regex
                     string variableReference = $"$({variableInfo.VariableName})";
-                    
+
                     // Use regex to replace only the Version attribute value for this specific package
                     string packagePattern = $@"(<{Regex.Escape(variableInfo.ElementType)}\s+(?:Include|Update)=""{Regex.Escape(variableInfo.PackageName)}""\s+Version="")[^""]*("")";
                     string packageReplacement = $"$1{variableReference}$2";
@@ -107,14 +105,14 @@ public sealed class VariableTrackingService : IVariableTrackingService
             }
 
             _fileSystem.File.WriteAllText(fileToUpdate, content);
-            
+
             // Invalidate cache for the affected project since we modified the file
             // Find and remove any cached entries that might have scanned this file
-            var keysToRemove = _cache.Keys.Where(key => 
+            var keysToRemove = _cache.Keys.Where(key =>
             {
                 var projectFile = _fileSystem.FileInfo.New(key);
                 if (!projectFile.Exists) return false;
-                
+
                 // Check if this project or any parent directory contains the modified file
                 var directory = projectFile.Directory;
                 while (directory != null)
@@ -128,7 +126,7 @@ public sealed class VariableTrackingService : IVariableTrackingService
                 }
                 return false;
             }).ToList();
-            
+
             foreach (var key in keysToRemove)
             {
                 _cache.Remove(key);
@@ -149,7 +147,7 @@ public sealed class VariableTrackingService : IVariableTrackingService
         }
 
         var result = new Dictionary<string, PackageVariableInfo>(StringComparer.OrdinalIgnoreCase);
-        
+
         var projectFile = _fileSystem.FileInfo.New(projectFilePath);
         if (!projectFile.Exists)
         {
@@ -169,7 +167,7 @@ public sealed class VariableTrackingService : IVariableTrackingService
             {
                 ScanFileForVariables(propsFile.FullName, result);
             }
-            
+
             directory = directory.Parent;
         }
 
@@ -186,9 +184,8 @@ public sealed class VariableTrackingService : IVariableTrackingService
             string content = _fileSystem.File.ReadAllText(filePath);
             var doc = XDocument.Parse(content);
 
-            // Find all PackageReference and PackageVersion elements with variable-based versions
             var packageElements = doc.Descendants()
-                .Where(e => (e.Name.LocalName == "PackageReference" || 
+                .Where(e => (e.Name.LocalName == "PackageReference" ||
                             e.Name.LocalName == "PackageVersion" ||
                             e.Name.LocalName == "GlobalPackageReference") &&
                            (e.Attribute("Include") != null || e.Attribute("Update") != null) &&
@@ -203,16 +200,15 @@ public sealed class VariableTrackingService : IVariableTrackingService
                     continue;
 
                 // Check if version uses a variable reference like $(VariableName)
-                var match = System.Text.RegularExpressions.Regex.Match(versionValue, @"\$\(([^)]+)\)");
+                var match = Regex.Match(versionValue, @"\$\(([^)]+)\)");
                 if (match.Success)
                 {
                     string variableName = match.Groups[1].Value;
-                    
+
                     // Find the property definition
                     var propertyElement = doc.Descendants()
-                        .Where(e => e.Name.LocalName == variableName && 
-                                   e.Parent?.Name.LocalName == "PropertyGroup")
-                        .FirstOrDefault();
+                        .FirstOrDefault(e => e.Name.LocalName == variableName &&
+                                   e.Parent?.Name.LocalName == "PropertyGroup");
 
                     if (propertyElement != null && !result.ContainsKey(packageName))
                     {
