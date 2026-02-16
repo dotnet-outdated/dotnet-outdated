@@ -110,6 +110,26 @@ public static class EndToEndTests
         Assert.DoesNotContain("<MicrosoftExtensionsVersion>2.1.0</MicrosoftExtensionsVersion>", content);
     }
 
+    [Fact]
+    public static void Can_Upgrade_CPVM_With_Variables_Preserves_Variable_References()
+    {
+        using var project = TestSetup("cpvm-variables");
+
+        var actual = Program.Main([project.Path, "--upgrade"]);
+        Assert.Equal(0, actual);
+
+        var propsFilePath = Path.Combine(project.Path, "Directory.Packages.props");
+        var content = File.ReadAllText(propsFilePath);
+
+        // Verify variable references are preserved in Directory.Packages.props
+        Assert.Contains("Version=\"$(NewtonsoftJsonVersion)\"", content);
+        Assert.Contains("Version=\"$(MicrosoftExtensionsVersion)\"", content);
+
+        // Verify old versions are not present
+        Assert.DoesNotContain("<NewtonsoftJsonVersion>11.0.1</NewtonsoftJsonVersion>", content);
+        Assert.DoesNotContain("<MicrosoftExtensionsVersion>2.1.0</MicrosoftExtensionsVersion>", content);
+    }
+
     private static TemporaryDirectory TestSetup(string testProjectName)
     {
         var solutionRoot = typeof(EndToEndTests).Assembly
