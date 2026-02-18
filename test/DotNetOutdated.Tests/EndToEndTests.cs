@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -13,6 +13,7 @@ public static class EndToEndTests
     [Theory]
     [InlineData("build-props")]
     [InlineData("development-dependencies")]
+    [InlineData("direct-reference-variables")]
     [InlineData("multi-target", Skip = "Fails on Windows in GitHub Actions for some reason.")]
     public static void Can_Upgrade_Project(string testProjectName)
     {
@@ -21,11 +22,11 @@ public static class EndToEndTests
         var actual = Program.Main([project.Path]);
         Assert.Equal(0, actual);
     }
-    
+
     [Theory]
-    [InlineData("development-dependencies-lock",  "", 0)]
-    [InlineData("development-dependencies-lock",  "linux-x64", 0)]
-    [InlineData("development-dependencies-lock",  "windows-x64", 1)]
+    [InlineData("development-dependencies-lock", "", 0)]
+    [InlineData("development-dependencies-lock", "linux-x64", 0)]
+    [InlineData("development-dependencies-lock", "windows-x64", 1)]
     public static void Can_Upgrade_Lock_Project(string testProjectName, string runtime, int expectedExitCode)
     {
         using var project = TestSetup(testProjectName);
@@ -36,7 +37,7 @@ public static class EndToEndTests
         {
             list.Add($"--runtime {runtime}");
         }
-        
+
         var actual = Program.Main([.. list]);
         Assert.Equal(expectedExitCode, actual);
     }
@@ -89,6 +90,69 @@ public static class EndToEndTests
                 }
             }
         }
+    }
+
+    [Fact]
+    public static void Can_Upgrade_Direct_Reference_With_Variables_Preserves_Variable_References()
+    {
+        using var project = TestSetup("direct-reference-variables");
+
+        var actual = Program.Main([project.Path, "--upgrade"]);
+        Assert.Equal(0, actual);
+
+        var projectFilePath = Directory.GetFiles(project.Path, "*.csproj").First();
+        var content = File.ReadAllText(projectFilePath);
+
+        Assert.Contains("Version=\"$(NewtonsoftJsonVersion)\"", content);
+        Assert.Contains("Version=\"$(MicrosoftExtensionsVersion)\"", content);
+
+        Assert.DoesNotContain("<NewtonsoftJsonVersion>11.0.1</NewtonsoftJsonVersion>", content);
+        Assert.DoesNotContain("<MicrosoftExtensionsVersion>2.1.0</MicrosoftExtensionsVersion>", content);
+    }
+
+    [Fact]
+    public static void Can_Upgrade_CPVM_With_Variables_Preserves_Variable_References()
+    {
+        using var project = TestSetup("cpvm-variables");
+
+        var actual = Program.Main([project.Path, "--upgrade"]);
+        Assert.Equal(0, actual);
+
+        var propsFilePath = Path.Combine(project.Path, "Directory.Packages.props");
+        var content = File.ReadAllText(propsFilePath);
+
+        // Verify variable references are preserved in Directory.Packages.props
+        Assert.Contains("Version=\"$(NewtonsoftJsonVersion)\"", content);
+        Assert.Contains("Version=\"$(MicrosoftExtensionsVersion)\"", content);
+
+        // Verify old versions are not present
+        Assert.DoesNotContain("<NewtonsoftJsonVersion>11.0.1</NewtonsoftJsonVersion>", content);
+        Assert.DoesNotContain("<MicrosoftExtensionsVersion>2.1.0</MicrosoftExtensionsVersion>", content);
+    }
+
+    [Fact]
+    public static void Can_Upgrade_Cross_File_Variables_Preserves_Variable_References()
+    {
+        using var project = TestSetup("cross-file-variables");
+
+        var actual = Program.Main([project.Path, "--upgrade"]);
+        Assert.Equal(0, actual);
+
+        // Variables are defined in Directory.Build.props
+        var propsFilePath = Path.Combine(project.Path, "Directory.Build.props");
+        var propsContent = File.ReadAllText(propsFilePath);
+
+        // But used in the project file
+        var projectFilePath = Directory.GetFiles(project.Path, "*.csproj").First();
+        var projectContent = File.ReadAllText(projectFilePath);
+
+        // Verify variable references are preserved in project file
+        Assert.Contains("Version=\"$(NewtonsoftJsonVersion)\"", projectContent);
+        Assert.Contains("Version=\"$(MicrosoftExtensionsVersion)\"", projectContent);
+
+        // Verify old versions are not present in Directory.Build.props
+        Assert.DoesNotContain("<NewtonsoftJsonVersion>11.0.1</NewtonsoftJsonVersion>", propsContent);
+        Assert.DoesNotContain("<MicrosoftExtensionsVersion>2.1.0</MicrosoftExtensionsVersion>", propsContent);
     }
 
     private static TemporaryDirectory TestSetup(string testProjectName)

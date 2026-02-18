@@ -30,6 +30,13 @@ namespace DotNetOutdated.Tests
   </ItemGroup>
 </Project>";
 
+        private static IVariableTrackingService EmptyVariableTrackingService()
+        {
+            var mock = Substitute.For<IVariableTrackingService>();
+            mock.DiscoverPackageVariables(default).ReturnsForAnyArgs(new Dictionary<string, PackageVariableInfo>());
+            return mock;
+        }
+
         [Fact]
         public void CpmProjectWithNoRestore_UpdatesDirectoryPackagesProps_DoesNotCallDotNet()
         {
@@ -44,7 +51,7 @@ namespace DotNetOutdated.Tests
             });
 
             var dotNetRunner = Substitute.For<IDotNetRunner>();
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem, EmptyVariableTrackingService());
 
             // Act
             var result = service.AddPackage(projectPath, "Newtonsoft.Json", "net8.0",
@@ -76,7 +83,7 @@ namespace DotNetOutdated.Tests
 
             var dotNetRunner = Substitute.For<IDotNetRunner>();
             dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem, EmptyVariableTrackingService());
 
             // Act
             var result = service.AddPackage(projectPath, "Newtonsoft.Json", "net8.0",
@@ -103,7 +110,7 @@ namespace DotNetOutdated.Tests
 
             var dotNetRunner = Substitute.For<IDotNetRunner>();
             dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem, EmptyVariableTrackingService());
 
             // Act
             var result = service.AddPackage(projectPath, "Newtonsoft.Json", "net8.0",
@@ -127,7 +134,7 @@ namespace DotNetOutdated.Tests
             });
 
             var dotNetRunner = Substitute.For<IDotNetRunner>();
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem, EmptyVariableTrackingService());
 
             // Act
             var result = service.AddPackage(projectPath, "Newtonsoft.Json", "net8.0",
@@ -155,7 +162,7 @@ namespace DotNetOutdated.Tests
             });
 
             var dotNetRunner = Substitute.For<IDotNetRunner>();
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem, EmptyVariableTrackingService());
 
             // Act
             var result = service.AddPackage(projectPath, "SomeAnalyzer", "net8.0",
@@ -185,7 +192,7 @@ namespace DotNetOutdated.Tests
 
             var dotNetRunner = Substitute.For<IDotNetRunner>();
             dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem, EmptyVariableTrackingService());
 
             // Act - package "UnknownPackage" is not in Directory.Packages.props
             var result = service.AddPackage(projectPath, "UnknownPackage", "net8.0",
