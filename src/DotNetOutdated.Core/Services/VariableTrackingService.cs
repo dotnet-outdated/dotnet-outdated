@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Abstractions;
@@ -162,7 +162,7 @@ public sealed class VariableTrackingService : IVariableTrackingService
 
         // First, collect all property definitions from all relevant files
         var propertyDefinitions = new Dictionary<string, (string Value, string FilePath)>(StringComparer.OrdinalIgnoreCase);
-        
+
         // Collect files to scan (project file + all .props files in parent hierarchy)
         var filesToScan = new List<string> { projectFilePath };
         var directory = projectFile.Directory;

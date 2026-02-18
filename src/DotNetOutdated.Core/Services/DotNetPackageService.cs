@@ -1,4 +1,4 @@
-using NuGet.Versioning;
+﻿using NuGet.Versioning;
 using System;
 using System.Collections.Generic;
 using System.IO;
