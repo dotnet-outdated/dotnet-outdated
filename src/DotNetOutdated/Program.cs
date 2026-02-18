@@ -24,19 +24,19 @@ using System.Threading.Tasks;
 
 namespace DotNetOutdated
 {
-    [Command(
-       Name = "dotnet outdated",
-       FullName = "A .NET Core global tool to list outdated Nuget packages.")]
+   [Command(
+      Name = "dotnet outdated",
+      FullName = "A .NET Core global tool to list outdated Nuget packages.")]
    [VersionOptionFromMember(MemberName = nameof(GetVersion))]
    [Subcommand(typeof(McpCommand))]
    internal class Program(
-        IFileSystem fileSystem,
-        IReporter reporter,
-        INuGetPackageResolutionService nugetService,
-        IProjectAnalysisService projectAnalysisService,
-        IProjectDiscoveryService projectDiscoveryService,
-        IDotNetPackageService dotNetPackageService,
-        DotNetRunnerOptions dotNetRunnerOptions) : CommandBase
+       IFileSystem fileSystem,
+       IReporter reporter,
+       INuGetPackageResolutionService nugetService,
+       IProjectAnalysisService projectAnalysisService,
+       IProjectDiscoveryService projectDiscoveryService,
+       IDotNetPackageService dotNetPackageService,
+       DotNetRunnerOptions dotNetRunnerOptions) : CommandBase
    {
       private readonly IFileSystem _fileSystem = fileSystem;
       private readonly IReporter _reporter = reporter;
@@ -128,7 +128,7 @@ namespace DotNetOutdated
                                                             "Possible values: debug, verbose, information, warning (default), or error",
           ShortName = "ncll", LongName = "nuget-cred-log-level")]
       public LogLevel NuGetCredLogLevel { get; set; } = LogLevel.Warning;
-      
+
       [Option(CommandOptionType.SingleValue, Description = "Specifies an optional runtime identifier to be used during the restore target when projects are analyzed. " +
                                                            "More information available on https://learn.microsoft.com/dotnet/core/rid-catalog",
          ShortName = "rt", LongName = "runtime")]
@@ -143,7 +143,7 @@ namespace DotNetOutdated
                                                            "Default is 120 seconds.",
           ShortName = "it", LongName = "idle-timeout")]
       public int IdleTimeout { get; set; } = 120;
-      
+
       public static int Main(string[] args)
       {
          using var services = new ServiceCollection()
@@ -178,7 +178,7 @@ namespace DotNetOutdated
       {
          ArgumentNullException.ThrowIfNull(app);
          ArgumentNullException.ThrowIfNull(console);
-         
+
          _dotNetRunnerOptions.IdleTimeout = TimeSpan.FromSeconds(IdleTimeout);
 
          try
@@ -202,7 +202,7 @@ namespace DotNetOutdated
             var projectLists = new ConcurrentBag<List<Project>>();
             await Parallel.ForEachAsync(projectPaths, async (path, _) =>
             {
-                projectLists.Add(await _projectAnalysisService.AnalyzeProjectAsync(path, false, Transitive, TransitiveDepth, Runtime));
+               projectLists.Add(await _projectAnalysisService.AnalyzeProjectAsync(path, false, Transitive, TransitiveDepth, Runtime));
             });
 
             var projects = projectLists.SelectMany(p => p).ToList();
@@ -300,7 +300,16 @@ namespace DotNetOutdated
                   }
 
                   if (status is null || status.IsSuccess)
-                     status = _dotNetPackageService.AddPackage(project.ProjectFilePath, package.Name, project.Framework.ToString(), package.LatestVersion, NoRestore, IgnoreFailedSources);
+                  {
+                     var newVersionRange = project.OriginalVersionRange.Satisfies(package.LatestVersion)
+                        ? new VersionRange(
+                           minVersion: package.LatestVersion,
+                           maxVersion: project.OriginalVersionRange.MaxVersion,
+                           includeMaxVersion: project.OriginalVersionRange.IsMaxInclusive)
+                        : new VersionRange(package.LatestVersion);
+
+                     status = _dotNetPackageService.AddPackage(project.ProjectFilePath, package.Name, project.Framework.ToString(), newVersionRange, NoRestore, IgnoreFailedSources);
+                  }
 
                   if (status.IsSuccess)
                   {
@@ -466,7 +475,7 @@ namespace DotNetOutdated
          var outdatedDependencies = new ConcurrentBag<AnalyzedDependency>();
 
          IEnumerable<Dependency> deps = targetFramework.Dependencies.Values;
-         
+
          if (!this.IncludeAutoReferences)
          {
             deps = deps.Where(d => !d.IsAutoReferenced);
@@ -482,21 +491,21 @@ namespace DotNetOutdated
 
          if (!string.IsNullOrEmpty(MaxVersion))
          {
-             if (!Version.TryParse(MaxVersion, out var maxVersion))
-             {
-                 throw new CommandValidationException($"The specified maximum version '{MaxVersion}' is not a valid version string.");
-             }
+            if (!Version.TryParse(MaxVersion, out var maxVersion))
+            {
+               throw new CommandValidationException($"The specified maximum version '{MaxVersion}' is not a valid version string.");
+            }
 
-             // NuGetVersion normalizes no build or revision to 0, when we actually want
-             // those to mean "any version", so we need to force them to int.MaxValue.
-             if (maxVersion.Build is -1 || maxVersion.Revision is -1)
-             {
-                 var build = maxVersion.Build == -1 ? int.MaxValue : maxVersion.Build;
-                 var revision = maxVersion.Revision == -1 ? int.MaxValue : maxVersion.Revision;
-                 maxVersion = new(maxVersion.Major, maxVersion.Minor, build, revision);
-             }
+            // NuGetVersion normalizes no build or revision to 0, when we actually want
+            // those to mean "any version", so we need to force them to int.MaxValue.
+            if (maxVersion.Build is -1 || maxVersion.Revision is -1)
+            {
+               var build = maxVersion.Build == -1 ? int.MaxValue : maxVersion.Build;
+               var revision = maxVersion.Revision == -1 ? int.MaxValue : maxVersion.Revision;
+               maxVersion = new(maxVersion.Major, maxVersion.Minor, build, revision);
+            }
 
-             maximumVersion = new NuGetVersion(maxVersion);
+            maximumVersion = new NuGetVersion(maxVersion);
          }
 
          var dependencies = deps.OrderBy(dependency => dependency.IsTransitive)
@@ -529,9 +538,9 @@ namespace DotNetOutdated
          var versionRange = dependency.VersionRange;
          NuGetVersion latestVersion = null;
 
-        if (maximumVersion is not null &&
-            (versionRange.MaxVersion is null || maximumVersion > versionRange.MaxVersion))
-        {
+         if (maximumVersion is not null &&
+             (versionRange.MaxVersion is null || maximumVersion > versionRange.MaxVersion))
+         {
             // Patch the version range to include the user-specified maximum
             versionRange = new(
                 versionRange.MinVersion,
@@ -540,7 +549,7 @@ namespace DotNetOutdated
                 includeMaxVersion: true,
                 versionRange.Float,
                 versionRange.OriginalString);
-        }
+         }
 
          if (referencedVersion != null)
          {
