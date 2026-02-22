@@ -29,20 +29,20 @@ public interface IVariableTrackingService
     void ClearCache();
 }
 
-// <summary>
-// This service provides a simple implementation for tracking and updating versions that are defined using variables in MSBuild project files. 
-// It scans the project file and its imports for any PackageReference elements that use variable references for their version, and allows updating those variables while preserving the variable reference syntax in the project file. 
-// This is a limited implementation that focuses on variables defined in the same file as the PackageReference or PackageVersion, and does not handle more complex scenarios like variables defined in other files or conditional imports. 
-// It also uses regex to update the XML content while preserving formatting, which may not cover all edge cases. However, it should work for common scenarios.
-// </summary>
+// Scans project files and their .props imports for MSBuild variable-based package versions,
+// and restores those variable references after dotnet add package overwrites them with literals.
+// Uses a hybrid approach: XDocument to locate values, regex to update files while preserving formatting.
+// Limitations: no second-order variable resolution, no conditional property handling.
 public sealed class VariableTrackingService : IVariableTrackingService
 {
     private readonly IFileSystem _fileSystem;
+    private readonly Action<string>? _onWarning;
     private readonly Dictionary<string, Dictionary<string, PackageVariableInfo>> _cache;
 
-    public VariableTrackingService(IFileSystem fileSystem)
+    public VariableTrackingService(IFileSystem fileSystem, Action<string>? onWarning = null)
     {
         _fileSystem = fileSystem;
+        _onWarning = onWarning;
         _cache = new Dictionary<string, Dictionary<string, PackageVariableInfo>>(StringComparer.OrdinalIgnoreCase);
     }
 
@@ -137,9 +137,9 @@ public sealed class VariableTrackingService : IVariableTrackingService
                 _cache.Remove(key);
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // Silently ignore errors - the package was still upgraded, just without variable reference preservation
+            _onWarning?.Invoke($"Failed to preserve variable reference for '{variableInfo.PackageName}': {ex.Message}");
         }
     }
 
