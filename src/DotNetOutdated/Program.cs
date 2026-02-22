@@ -96,7 +96,7 @@ namespace DotNetOutdated
       public string OutputFilename { get; set; } = null;
 
       [Option(CommandOptionType.SingleValue, Description = "Specifies the output format for the generated report. " +
-                                                           "Possible values: json (default), csv, or markdown.",
+                                                           "Possible values: json (default), csv, markdown, or html.",
           ShortName = "of", LongName = "output-format")]
       public OutputFormat OutputFileFormat { get; set; } = OutputFormat.Json;
 
@@ -616,7 +616,8 @@ namespace DotNetOutdated
                {
                   OutputFormat.Csv => new Formatters.CsvFormatter(),
                   OutputFormat.Markdown => new Formatters.MarkdownFormatter(),
-                  _ => new Formatters.JsonFormatter(),
+                  OutputFormat.Html => new Formatters.HtmlFormatter(),
+                   _ => new Formatters.JsonFormatter(),
                };
                await formatter.FormatAsync(projects, sw).ConfigureAwait(false);
                Console.WriteLine($"Report written to {OutputFilename}");

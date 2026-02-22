@@ -4,6 +4,7 @@
     {
         Json,
         Csv,
-        Markdown
+        Markdown,
+        Html
     }
 }
