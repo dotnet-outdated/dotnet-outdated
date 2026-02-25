@@ -2,6 +2,7 @@ using NuGet.Versioning;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 
 namespace DotNetOutdated
 {
@@ -25,6 +26,25 @@ namespace DotNetOutdated
                     yield return label;
                 }
             }
+        }
+
+        public static (string matching, string rest) MatchVersionString(this NuGetVersion resolvedVersion, NuGetVersion latestVersion, string latestString)
+        {
+            var matching = string.Join('.', resolvedVersion.GetParts()
+                .Zip(latestVersion.GetParts(), (p1, p2) => (part: p2, matches: p1 == p2))
+                .TakeWhile(p => p.matches)
+                .Select(p => p.part));
+            
+            if (matching.Length > 0) 
+            { 
+                matching += '.';
+                if (latestString.StartsWith(matching, StringComparison.Ordinal))
+                {
+                    return (matching, latestString[matching.Length..]);
+                }
+            }
+            
+            return (matching, latestString);
         }
     }
 }
