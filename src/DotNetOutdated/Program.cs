@@ -534,7 +534,7 @@ namespace DotNetOutdated
          NuGetVersion latestVersion = null;
 
         if (maximumVersion is not null &&
-            (versionRange.MaxVersion is null || maximumVersion > versionRange.MaxVersion))
+            (versionRange.MaxVersion is null || maximumVersion < versionRange.MaxVersion))
         {
             // Patch the version range to include the user-specified maximum
             versionRange = new(
