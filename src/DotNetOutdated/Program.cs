@@ -150,6 +150,7 @@ namespace DotNetOutdated
                  .AddSingleton(PhysicalConsole.Singleton)
                  .AddSingleton<IReporter>(provider => new ConsoleReporter(provider.GetService<IConsole>()))
                  .AddSingleton<IFileSystem, FileSystem>()
+                 .AddSingleton<ILogger>(provider => new ConsoleLogger(provider.GetService<IConsole>(), LogLevel.Warning))
                  .AddSingleton<IProjectDiscoveryService, ProjectDiscoveryService>()
                  .AddSingleton<IProjectAnalysisService, ProjectAnalysisService>()
                  .AddSingleton<DotNetRunnerOptions>()

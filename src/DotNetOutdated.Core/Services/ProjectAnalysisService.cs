@@ -16,12 +16,19 @@ namespace DotNetOutdated.Core.Services
         private readonly IDependencyGraphService _dependencyGraphService;
         private readonly IDotNetRestoreService _dotNetRestoreService;
         private readonly IFileSystem _fileSystem;
+        private readonly ILogger _logger;
 
         public ProjectAnalysisService(IDependencyGraphService dependencyGraphService, IDotNetRestoreService dotNetRestoreService, IFileSystem fileSystem)
+            : this(dependencyGraphService, dotNetRestoreService, fileSystem, NullLogger.Instance)
+        {
+        }
+
+        public ProjectAnalysisService(IDependencyGraphService dependencyGraphService, IDotNetRestoreService dotNetRestoreService, IFileSystem fileSystem, ILogger logger)
         {
             _dependencyGraphService = dependencyGraphService;
             _dotNetRestoreService = dotNetRestoreService;
             _fileSystem = fileSystem;
+            _logger = logger;
         }
 
         public async Task<List<Project>> AnalyzeProjectAsync(string projectPath, bool runRestore, bool includeTransitiveDependencies, int transitiveDepth,  string runtime)
@@ -41,7 +48,9 @@ namespace DotNetOutdated.Core.Services
 
                 // Load the lock file
                 string lockFilePath = _fileSystem.Path.Combine(packageSpec.RestoreMetadata.OutputPath, "project.assets.json");
-                var lockFile = LockFileUtilities.GetLockFile(lockFilePath, NullLogger.Instance);
+                var lockFile = LockFileUtilities.GetLockFile(lockFilePath, _logger);
+                if (lockFile == null)
+                    throw new InvalidOperationException($"Could not load lock file '{lockFilePath}' for project '{packageSpec.FilePath}'. The file may be missing, unreadable, or in an unsupported format. Try running 'dotnet restore' on the project.");
 
                 // Create a project
                 var project = new Project(packageSpec.Name, packageSpec.FilePath, packageSpec.RestoreMetadata.Sources.Select(s => s.SourceUri).ToList(), packageSpec.Version);
