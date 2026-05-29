@@ -111,6 +111,22 @@ public static class EndToEndTests
         Assert.DoesNotContain("#:property NewtonsoftJsonPackageVersion=11.0.1", content);
     }
 
+    [RequiresFileBasedAppSdk]
+    public static void Can_Upgrade_File_Based_App_With_Direct_Package_Directive()
+    {
+        using var project = TestSetup("file-based-app-direct-package");
+
+        var appPath = Path.Combine(project.Path, "app.cs");
+
+        var actual = Program.Main([appPath, "--upgrade", "--no-restore"]);
+        Assert.Equal(0, actual);
+
+        var content = File.ReadAllText(appPath);
+
+        Assert.Contains("#:package Newtonsoft.Json@", content);
+        Assert.DoesNotContain("#:package Newtonsoft.Json@11.0.1", content);
+    }
+
     [Fact]
     public static void Can_Upgrade_Project_With_Maximum_Version()
     {

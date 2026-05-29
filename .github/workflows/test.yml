@@ -81,4 +81,4 @@ jobs:
         exit 0
 
     - name: File-based app tests
-      run: dotnet test --configuration Release --framework net9.0 --filter "FullyQualifiedName~File_Based_App"
+      run: dotnet test --configuration Release --framework net9.0 --filter "FullyQualifiedName~FileBasedApp|FullyQualifiedName~File_Based_App"
