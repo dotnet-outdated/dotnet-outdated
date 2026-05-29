@@ -50,7 +50,7 @@ namespace DotNetOutdated
           LongName = "include-auto-references")]
       public bool IncludeAutoReferences { get; set; } = false;
 
-      [Argument(0, Description = "The path to a .sln, .slnx, .slnf, .csproj or .fsproj file, or to a directory containing a .NET Core solution/project. " +
+      [Argument(0, Description = "The path to a .sln, .slnx, .slnf, .csproj, .fsproj or .cs file-based app, or to a directory containing a .NET Core solution/project. " +
                                  "If none is specified, the current directory will be used.")]
       public string Path { get; set; }
 
@@ -111,6 +111,10 @@ namespace DotNetOutdated
       [Option(CommandOptionType.NoValue, Description = "Recursively search for all projects within the provided directory.",
           ShortName = "r", LongName = "recursive")]
       public bool Recursive { get; set; } = false;
+
+      [Option(CommandOptionType.NoValue, Description = "Include loose file-based apps when recursively searching a directory.",
+          ShortName = "fba", LongName = "include-file-based-apps")]
+      public bool IncludeFileBasedApps { get; set; } = false;
 
       [Option(CommandOptionType.NoValue, Description = "Treat package source failures as warnings.", ShortName = "ifs", LongName = "ignore-failed-sources")]
       public bool IgnoreFailedSources { get; set; } = false;
@@ -199,7 +203,7 @@ namespace DotNetOutdated
 
             DefaultCredentialServiceUtility.SetupDefaultCredentialService(new ConsoleLogger(console, NuGetCredLogLevel), true);
 
-            var projectPaths = _projectDiscoveryService.DiscoverProjects(Path, Recursive);
+            var projectPaths = _projectDiscoveryService.DiscoverProjects(Path, Recursive, IncludeFileBasedApps);
 
             // Analyze the projects
             console.WriteLine("Analyzing project(s)...");
@@ -305,7 +309,7 @@ namespace DotNetOutdated
                   }
 
                   if (status is null || status.IsSuccess)
-                     status = _dotNetPackageService.AddPackage(project.ProjectFilePath, package.Name, project.Framework.ToString(), package.LatestVersion, NoRestore, IgnoreFailedSources);
+                     status = _dotNetPackageService.AddPackage(project.ProjectFilePath, package.Name, project.Framework.GetShortFolderName(), package.LatestVersion, NoRestore, IgnoreFailedSources);
 
                   if (status.IsSuccess)
                   {

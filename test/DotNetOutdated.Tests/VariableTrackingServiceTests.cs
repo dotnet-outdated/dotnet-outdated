@@ -515,5 +515,88 @@ namespace DotNetOutdated.Tests
             var after = service.DiscoverPackageVariables(projectPath);
             Assert.Equal("13.0.1", after["Newtonsoft.Json"].VariableValue);
         }
+
+        [Fact]
+        public void Discover_FileBasedApp_VariablePackageDirective()
+        {
+            var appPath = XFS.Path(@"c:\repo\app.cs");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                {
+                    appPath, new MockFileData(@"#!/usr/bin/env dotnet
+#:property HumanizerPackageId=Humanizer
+#:property HumanizerPackageVersion=3.0.10
+#:package $(HumanizerPackageId)@$(HumanizerPackageVersion)
+Console.WriteLine();")
+                }
+            });
+
+            var service = new VariableTrackingService(mockFileSystem);
+            var result = service.DiscoverPackageVariables(appPath);
+
+            var info = Assert.Contains("Humanizer", result);
+            Assert.Equal("HumanizerPackageVersion", info.VariableName);
+            Assert.Equal("3.0.10", info.VariableValue);
+            Assert.Equal(appPath, info.FilePath);
+            Assert.Equal(appPath, info.PackageReferenceFilePath);
+            Assert.Equal(PackageVariableInfo.FileBasedPackageDirectiveElementType, info.ElementType);
+            Assert.Equal("$(HumanizerPackageId)", info.PackageReferenceName);
+            Assert.Equal("$(HumanizerPackageVersion)", info.PackageReferenceVersion);
+        }
+
+        [Fact]
+        public void Update_FileBasedApp_UpdatesPropertyAndPreservesPackageDirectiveVariables()
+        {
+            var appPath = XFS.Path(@"c:\repo\app.cs");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                {
+                    appPath, new MockFileData(@"#!/usr/bin/env dotnet
+#:property HumanizerPackageId=Humanizer
+#:property HumanizerPackageVersion=3.0.10
+#:package $(HumanizerPackageId)@$(HumanizerPackageVersion)
+Console.WriteLine();")
+                }
+            });
+
+            var service = new VariableTrackingService(mockFileSystem);
+            var variableInfo = service.DiscoverPackageVariables(appPath)["Humanizer"];
+
+            service.UpdatePackageVariable(variableInfo, new NuGetVersion("3.0.11"));
+
+            var content = mockFileSystem.File.ReadAllText(appPath);
+            Assert.Contains("#:property HumanizerPackageVersion=3.0.11", content);
+            Assert.Contains("#:package $(HumanizerPackageId)@$(HumanizerPackageVersion)", content);
+            Assert.DoesNotContain("3.0.10", content);
+        }
+
+        [Fact]
+        public void Discover_FileBasedApp_PackageVersionVariableCanComeFromPropsFile()
+        {
+            var propsPath = XFS.Path(@"c:\repo\Directory.Build.props");
+            var appPath = XFS.Path(@"c:\repo\app.cs");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                {
+                    propsPath, new MockFileData(@"<Project>
+  <PropertyGroup>
+    <HumanizerPackageVersion>3.0.10</HumanizerPackageVersion>
+  </PropertyGroup>
+</Project>")
+                },
+                {
+                    appPath, new MockFileData(@"#!/usr/bin/env dotnet
+#:package Humanizer@$(HumanizerPackageVersion)
+Console.WriteLine();")
+                }
+            });
+
+            var service = new VariableTrackingService(mockFileSystem);
+            var result = service.DiscoverPackageVariables(appPath);
+
+            var info = Assert.Contains("Humanizer", result);
+            Assert.Equal(propsPath, info.FilePath);
+            Assert.Equal("3.0.10", info.VariableValue);
+        }
     }
 }

@@ -1,4 +1,5 @@
-﻿using DotNetOutdated.Core.Models;
+﻿using DotNetOutdated.Core;
+using DotNetOutdated.Core.Models;
 using NuGet.Common;
 using NuGet.Packaging.Core;
 using NuGet.ProjectModel;
@@ -37,23 +38,28 @@ namespace DotNetOutdated.Core.Services
             if (dependencyGraph == null)
                 return null;
 
+            var isFileBasedApp = projectPath.IsCSharpFile();
+            var projectFilePath = isFileBasedApp ? _fileSystem.Path.GetFullPath(projectPath) : null;
             var projects = new List<Project>();
             foreach (var packageSpec in dependencyGraph.Projects.Where(p => p.RestoreMetadata.ProjectStyle == ProjectStyle.PackageReference))
             {
+                var analyzedProjectPath = isFileBasedApp ? projectFilePath : packageSpec.FilePath;
+
                 // Restore the packages
                 if (runRestore)
                 {
-                    _dotNetRestoreService.Restore(packageSpec.FilePath);
+                    _dotNetRestoreService.Restore(analyzedProjectPath);
                 }
 
                 // Load the lock file
                 string lockFilePath = _fileSystem.Path.Combine(packageSpec.RestoreMetadata.OutputPath, "project.assets.json");
                 var lockFile = LockFileUtilities.GetLockFile(lockFilePath, _logger);
                 if (lockFile == null)
-                    throw new InvalidOperationException($"Could not load lock file '{lockFilePath}' for project '{packageSpec.FilePath}'. The file may be missing, unreadable, or in an unsupported format. Try running 'dotnet restore' on the project.");
+                    throw new InvalidOperationException($"Could not load lock file '{lockFilePath}' for project '{analyzedProjectPath}'. The file may be missing, unreadable, or in an unsupported format. Try running 'dotnet restore' on the project.");
 
                 // Create a project
-                var project = new Project(packageSpec.Name, packageSpec.FilePath, packageSpec.RestoreMetadata.Sources.Select(s => s.SourceUri).ToList(), packageSpec.Version);
+                var projectName = isFileBasedApp ? _fileSystem.Path.GetFileName(projectPath) : packageSpec.Name;
+                var project = new Project(projectName, analyzedProjectPath, packageSpec.RestoreMetadata.Sources.Select(s => s.SourceUri).ToList(), packageSpec.Version);
                 projects.Add(project);
 
                 // Get the target frameworks with their dependencies
