@@ -37,11 +37,32 @@ jobs:
         dotnet-version: | 
             8.0.x
             9.0.x
-            10.0.300
 
     - name: Smoke test
       run: |
         dotnet run --configuration Release --framework ${{ matrix.framework }} --project src/DotNetOutdated test-projects/development-dependencies
+
+    - name: Tests
+      run: dotnet test --configuration Release --framework ${{ matrix.framework }}
+
+  file-based-app:
+    name: File-based app tests with .NET SDK 10.0.300 on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    timeout-minutes: 30
+
+    steps:
+    - uses: actions/checkout@v6
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v5.2.0
+      with:
+        dotnet-version: |
+            9.0.x
+            10.0.300
 
     - name: File-based app smoke test
       shell: pwsh
@@ -50,7 +71,7 @@ jobs:
           $PSNativeCommandUseErrorActionPreference = $false
         }
 
-        & dotnet run --configuration Release --framework ${{ matrix.framework }} --project src/DotNetOutdated -- test-projects/file-based-app/app.cs --fail-on-updates
+        & dotnet run --configuration Release --framework net9.0 --project src/DotNetOutdated -- test-projects/file-based-app/app.cs --fail-on-updates
         $exitCode = $LASTEXITCODE
 
         if ($exitCode -ne 2) {
@@ -59,5 +80,5 @@ jobs:
 
         exit 0
 
-    - name: Tests
-      run: dotnet test --configuration Release --framework ${{ matrix.framework }}
+    - name: File-based app tests
+      run: dotnet test --configuration Release --framework net9.0 --filter "FullyQualifiedName~File_Based_App"
