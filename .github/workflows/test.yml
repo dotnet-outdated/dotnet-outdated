@@ -37,10 +37,27 @@ jobs:
         dotnet-version: | 
             8.0.x
             9.0.x
+            10.0.300
 
     - name: Smoke test
       run: |
         dotnet run --configuration Release --framework ${{ matrix.framework }} --project src/DotNetOutdated test-projects/development-dependencies
+
+    - name: File-based app smoke test
+      shell: pwsh
+      run: |
+        if (Get-Variable PSNativeCommandUseErrorActionPreference -ErrorAction SilentlyContinue) {
+          $PSNativeCommandUseErrorActionPreference = $false
+        }
+
+        & dotnet run --configuration Release --framework ${{ matrix.framework }} --project src/DotNetOutdated -- test-projects/file-based-app/app.cs --fail-on-updates
+        $exitCode = $LASTEXITCODE
+
+        if ($exitCode -ne 2) {
+          throw "Expected file-based app smoke test to exit with 2 because outdated dependencies were found, but got $exitCode."
+        }
+
+        exit 0
 
     - name: Tests
       run: dotnet test --configuration Release --framework ${{ matrix.framework }}
