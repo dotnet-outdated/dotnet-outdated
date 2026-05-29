@@ -305,7 +305,7 @@ namespace DotNetOutdated
                   }
 
                   if (status is null || status.IsSuccess)
-                     status = _dotNetPackageService.AddPackage(project.ProjectFilePath, package.Name, project.Framework.ToString(), package.LatestVersion, NoRestore, IgnoreFailedSources);
+                     status = _dotNetPackageService.AddPackage(project.ProjectFilePath, package.Name, project.Framework.GetShortFolderName(), package.LatestVersion, NoRestore, IgnoreFailedSources);
 
                   if (status.IsSuccess)
                   {
