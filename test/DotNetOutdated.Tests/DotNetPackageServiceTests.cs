@@ -201,5 +201,87 @@ namespace DotNetOutdated.Tests
             // Assert - should fall through to dotnet add package
             dotNetRunner.ReceivedWithAnyArgs(1).Run(default, default);
         }
+
+        [Fact]
+        public void FileBasedAppVariablePackageWithNoRestore_UpdatesVariableWithoutCallingDotNet()
+        {
+            var appPath = XFS.Path(@"c:\repo\app.cs");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                {
+                    appPath, new MockFileData(@"#!/usr/bin/env dotnet
+#:property HumanizerPackageId=Humanizer
+#:property HumanizerPackageVersion=3.0.10
+#:package $(HumanizerPackageId)@$(HumanizerPackageVersion)
+Console.WriteLine();")
+                }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem, new VariableTrackingService(mockFileSystem));
+
+            var result = service.AddPackage(appPath, "Humanizer", "net10.0", new NuGetVersion("3.0.11"), noRestore: true);
+
+            Assert.True(result.IsSuccess);
+            dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
+            var content = mockFileSystem.File.ReadAllText(appPath);
+            Assert.Contains("#:property HumanizerPackageVersion=3.0.11", content);
+            Assert.Contains("#:package $(HumanizerPackageId)@$(HumanizerPackageVersion)", content);
+        }
+
+        [Fact]
+        public void FileBasedAppVariablePackageWithRestore_UpdatesVariableAndRunsRestore()
+        {
+            var appPath = XFS.Path(@"c:\repo\app.cs");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                {
+                    appPath, new MockFileData(@"#!/usr/bin/env dotnet
+#:property HumanizerPackageVersion=3.0.10
+#:package Humanizer@$(HumanizerPackageVersion)
+Console.WriteLine();")
+                }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem, new VariableTrackingService(mockFileSystem));
+
+            var result = service.AddPackage(appPath, "Humanizer", "net10.0", new NuGetVersion("3.0.11"), noRestore: false);
+
+            Assert.True(result.IsSuccess);
+            dotNetRunner.Received().Run(XFS.Path(@"c:\repo"), Arg.Is<string[]>(a => a[0] == "restore" && a[1] == "app.cs"));
+        }
+
+        [Fact]
+        public void FileBasedAppDirectPackage_FallsThroughToDotNetAddPackage()
+        {
+            var appPath = XFS.Path(@"c:\repo\app.cs");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                {
+                    appPath, new MockFileData(@"#!/usr/bin/env dotnet
+#:package Humanizer@3.0.10
+Console.WriteLine();")
+                }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem, new VariableTrackingService(mockFileSystem));
+
+            var result = service.AddPackage(appPath, "Humanizer", "net10.0", new NuGetVersion("3.0.11"), noRestore: true);
+
+            Assert.True(result.IsSuccess);
+            dotNetRunner.Received().Run(
+                XFS.Path(@"c:\repo"),
+                Arg.Is<string[]>(a =>
+                    a[0] == "add" &&
+                    a[1] == "app.cs" &&
+                    a[2] == "package" &&
+                    a[3] == "Humanizer" &&
+                    a[4] == "-v" &&
+                    a[5] == "3.0.11" &&
+                    a[6] == "-f" &&
+                    a[7] == "net10.0" &&
+                    a[8] == "--no-restore"));
+        }
     }
 }

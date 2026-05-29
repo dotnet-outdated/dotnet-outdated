@@ -5,6 +5,7 @@ using System.IO.Abstractions;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
+using DotNetOutdated.Core;
 using NuGet.Versioning;
 
 namespace DotNetOutdated.Core.Services;
@@ -36,10 +37,10 @@ public interface IVariableTrackingService
 public sealed class VariableTrackingService : IVariableTrackingService
 {
     private readonly IFileSystem _fileSystem;
-    private readonly Action<string>? _onWarning;
+    private readonly Action<string> _onWarning;
     private readonly Dictionary<string, Dictionary<string, PackageVariableInfo>> _cache;
 
-    public VariableTrackingService(IFileSystem fileSystem, Action<string>? onWarning = null)
+    public VariableTrackingService(IFileSystem fileSystem, Action<string> onWarning = null)
     {
         _fileSystem = fileSystem;
         _onWarning = onWarning;
@@ -55,6 +56,13 @@ public sealed class VariableTrackingService : IVariableTrackingService
     {
         try
         {
+            if (variableInfo.ElementType == PackageVariableInfo.FileBasedPackageDirectiveElementType)
+            {
+                UpdateFileBasedAppPackageVariable(variableInfo, newVersion);
+                InvalidateCache(variableInfo.FilePath, variableInfo.PackageReferenceFilePath);
+                return;
+            }
+
             // Step 1: Update the property value in the file where it's defined
             string propertyFilePath = variableInfo.FilePath;
             if (_fileSystem.File.Exists(propertyFilePath))
@@ -108,38 +116,104 @@ public sealed class VariableTrackingService : IVariableTrackingService
                 _fileSystem.File.WriteAllText(packageRefFilePath, packageRefContent);
             }
 
-            // Invalidate cache for the affected project since we modified files
-            var keysToRemove = _cache.Keys.Where(key =>
-            {
-                var projectFile = _fileSystem.FileInfo.New(key);
-                if (!projectFile.Exists) return false;
-
-                // Check if this project or any parent directory contains the modified files
-                var directory = projectFile.Directory;
-                while (directory != null)
-                {
-                    var propertyFileInDir = _fileSystem.Path.Combine(directory.FullName, _fileSystem.Path.GetFileName(propertyFilePath))
-                        .Equals(propertyFilePath, StringComparison.OrdinalIgnoreCase);
-                    var packageFileInDir = _fileSystem.Path.Combine(directory.FullName, _fileSystem.Path.GetFileName(packageRefFilePath))
-                        .Equals(packageRefFilePath, StringComparison.OrdinalIgnoreCase);
-
-                    if (propertyFileInDir || packageFileInDir)
-                    {
-                        return true;
-                    }
-                    directory = directory.Parent;
-                }
-                return false;
-            }).ToList();
-
-            foreach (var key in keysToRemove)
-            {
-                _cache.Remove(key);
-            }
+            InvalidateCache(propertyFilePath, packageRefFilePath);
         }
         catch (Exception ex)
         {
             _onWarning?.Invoke($"Failed to preserve variable reference for '{variableInfo.PackageName}': {ex.Message}");
+        }
+    }
+
+    private void UpdateFileBasedAppPackageVariable(PackageVariableInfo variableInfo, NuGetVersion newVersion)
+    {
+        if (_fileSystem.File.Exists(variableInfo.FilePath))
+        {
+            if (variableInfo.FilePath.IsCSharpFile())
+            {
+                var propertyContent = _fileSystem.File.ReadAllText(variableInfo.FilePath);
+                var propertyPattern = $@"(^[ \t]*#:[ \t]*property[ \t]+{Regex.Escape(variableInfo.VariableName)}[ \t]*=[ \t]*)([^\r\n]*)(\r?\n|$)";
+                propertyContent = Regex.Replace(
+                    propertyContent,
+                    propertyPattern,
+                    match => match.Groups[1].Value + newVersion + match.Groups[3].Value,
+                    RegexOptions.Multiline);
+                _fileSystem.File.WriteAllText(variableInfo.FilePath, propertyContent);
+            }
+            else
+            {
+                var propertyContent = _fileSystem.File.ReadAllText(variableInfo.FilePath);
+                var propertyDoc = XDocument.Parse(propertyContent);
+                var propertyElement = propertyDoc.Descendants()
+                    .FirstOrDefault(e => e.Name.LocalName == variableInfo.VariableName &&
+                                         e.Parent?.Name.LocalName == "PropertyGroup");
+
+                if (propertyElement != null)
+                {
+                    string oldValue = propertyElement.Value;
+                    string pattern = $@"<{Regex.Escape(variableInfo.VariableName)}>{Regex.Escape(oldValue)}</{Regex.Escape(variableInfo.VariableName)}>";
+                    string replacement = $"<{variableInfo.VariableName}>{newVersion}</{variableInfo.VariableName}>";
+                    propertyContent = Regex.Replace(propertyContent, pattern, replacement);
+                    _fileSystem.File.WriteAllText(variableInfo.FilePath, propertyContent);
+                }
+            }
+        }
+
+        if (_fileSystem.File.Exists(variableInfo.PackageReferenceFilePath) && variableInfo.PackageReferenceFilePath.IsCSharpFile())
+        {
+            var packageContent = _fileSystem.File.ReadAllText(variableInfo.PackageReferenceFilePath);
+            var propertyDefinitions = new Dictionary<string, (string Value, string FilePath)>(StringComparer.OrdinalIgnoreCase);
+            CollectFileBasedAppPropertyDefinitions(variableInfo.PackageReferenceFilePath, propertyDefinitions);
+
+            packageContent = Regex.Replace(
+                packageContent,
+                @"(^[ \t]*#:[ \t]*package[ \t]+)([^\r\n]*)(\r?\n|$)",
+                match =>
+                {
+                    var packageDirective = match.Groups[2].Value;
+                    if (!TryParsePackageDirective(packageDirective, out var packageExpression, out _) ||
+                        (!string.Equals(packageExpression, variableInfo.PackageReferenceName, StringComparison.OrdinalIgnoreCase) &&
+                         (!TryResolveProperties(packageExpression, propertyDefinitions, out var packageName) ||
+                          !string.Equals(packageName, variableInfo.PackageName, StringComparison.OrdinalIgnoreCase))))
+                    {
+                        return match.Value;
+                    }
+
+                    return match.Groups[1].Value + variableInfo.PackageReferenceName + "@" + variableInfo.PackageReferenceVersion + match.Groups[3].Value;
+                },
+                RegexOptions.Multiline);
+
+            _fileSystem.File.WriteAllText(variableInfo.PackageReferenceFilePath, packageContent);
+        }
+    }
+
+    private void InvalidateCache(string propertyFilePath, string packageRefFilePath)
+    {
+        var keysToRemove = _cache.Keys.Where(key =>
+        {
+            var projectFile = _fileSystem.FileInfo.New(key);
+            if (!projectFile.Exists) return false;
+
+            // Check if this project or any parent directory contains the modified files
+            var directory = projectFile.Directory;
+            while (directory != null)
+            {
+                var propertyFileInDir = _fileSystem.Path.Combine(directory.FullName, _fileSystem.Path.GetFileName(propertyFilePath))
+                    .Equals(propertyFilePath, StringComparison.OrdinalIgnoreCase);
+                var packageFileInDir = _fileSystem.Path.Combine(directory.FullName, _fileSystem.Path.GetFileName(packageRefFilePath))
+                    .Equals(packageRefFilePath, StringComparison.OrdinalIgnoreCase);
+
+                if (propertyFileInDir || packageFileInDir)
+                {
+                    return true;
+                }
+                directory = directory.Parent;
+            }
+            return false;
+        }).ToList();
+
+        foreach (var key in keysToRemove)
+        {
+            _cache.Remove(key);
         }
     }
 
@@ -163,8 +237,10 @@ public sealed class VariableTrackingService : IVariableTrackingService
         // First, collect all property definitions from all relevant files
         var propertyDefinitions = new Dictionary<string, (string Value, string FilePath)>(StringComparer.OrdinalIgnoreCase);
 
+        var isFileBasedApp = projectFilePath.IsCSharpFile();
+
         // Collect files to scan (project file + all .props files in parent hierarchy)
-        var filesToScan = new List<string> { projectFilePath };
+        var filesToScan = isFileBasedApp ? new List<string>() : new List<string> { projectFilePath };
         var directory = projectFile.Directory;
         while (directory != null)
         {
@@ -176,10 +252,20 @@ public sealed class VariableTrackingService : IVariableTrackingService
             directory = directory.Parent;
         }
 
+        if (isFileBasedApp)
+        {
+            CollectFileBasedAppPropertyDefinitions(projectFilePath, propertyDefinitions);
+        }
+
         // Scan all files for property definitions
         foreach (var fileToScan in filesToScan)
         {
             CollectPropertyDefinitions(fileToScan, propertyDefinitions);
+        }
+
+        if (isFileBasedApp)
+        {
+            ScanFileBasedAppForVariables(projectFilePath, result, propertyDefinitions);
         }
 
         // Now scan all files for package references that use variables
@@ -220,6 +306,24 @@ public sealed class VariableTrackingService : IVariableTrackingService
         catch
         {
             // Silently ignore files that can't be parsed
+        }
+    }
+
+    private void CollectFileBasedAppPropertyDefinitions(string filePath, Dictionary<string, (string Value, string FilePath)> propertyDefinitions)
+    {
+        foreach (var line in _fileSystem.File.ReadLines(filePath))
+        {
+            var match = Regex.Match(line, @"^[ \t]*#:[ \t]*property[ \t]+([^=\s]+)[ \t]*=[ \t]*(.*?)\s*$");
+            if (!match.Success)
+            {
+                continue;
+            }
+
+            var propertyName = match.Groups[1].Value;
+            if (!propertyDefinitions.ContainsKey(propertyName))
+            {
+                propertyDefinitions[propertyName] = (match.Groups[2].Value, filePath);
+            }
         }
     }
 
@@ -272,14 +376,91 @@ public sealed class VariableTrackingService : IVariableTrackingService
             // Silently ignore files that can't be parsed
         }
     }
+
+    private void ScanFileBasedAppForVariables(string filePath, Dictionary<string, PackageVariableInfo> result, Dictionary<string, (string Value, string FilePath)> propertyDefinitions)
+    {
+        foreach (var line in _fileSystem.File.ReadLines(filePath))
+        {
+            var match = Regex.Match(line, @"^[ \t]*#:[ \t]*package[ \t]+(.+?)\s*$");
+            if (!match.Success)
+            {
+                continue;
+            }
+
+            if (!TryParsePackageDirective(match.Groups[1].Value, out var packageExpression, out var versionExpression) ||
+                !TryResolveProperties(packageExpression, propertyDefinitions, out var packageName) ||
+                result.ContainsKey(packageName))
+            {
+                continue;
+            }
+
+            var versionMatch = Regex.Match(versionExpression, @"\$\(([^)]+)\)");
+            if (!versionMatch.Success)
+            {
+                continue;
+            }
+
+            string variableName = versionMatch.Groups[1].Value;
+            if (propertyDefinitions.TryGetValue(variableName, out var propertyInfo))
+            {
+                result[packageName] = new PackageVariableInfo
+                {
+                    PackageName = packageName,
+                    VariableName = variableName,
+                    VariableValue = propertyInfo.Value,
+                    FilePath = propertyInfo.FilePath,
+                    PackageReferenceFilePath = filePath,
+                    ElementType = PackageVariableInfo.FileBasedPackageDirectiveElementType,
+                    PackageReferenceName = packageExpression,
+                    PackageReferenceVersion = versionExpression
+                };
+            }
+        }
+    }
+
+    private static bool TryParsePackageDirective(string directive, out string packageExpression, out string versionExpression)
+    {
+        var separatorIndex = directive.LastIndexOf('@');
+        if (separatorIndex <= 0 || separatorIndex == directive.Length - 1)
+        {
+            packageExpression = string.Empty;
+            versionExpression = string.Empty;
+            return false;
+        }
+
+        packageExpression = directive[..separatorIndex].Trim();
+        versionExpression = directive[(separatorIndex + 1)..].Trim();
+        return !string.IsNullOrEmpty(packageExpression) && !string.IsNullOrEmpty(versionExpression);
+    }
+
+    private static bool TryResolveProperties(string expression, Dictionary<string, (string Value, string FilePath)> propertyDefinitions, out string resolvedValue)
+    {
+        var unresolved = false;
+        resolvedValue = Regex.Replace(expression, @"\$\(([^)]+)\)", match =>
+        {
+            if (propertyDefinitions.TryGetValue(match.Groups[1].Value, out var propertyInfo))
+            {
+                return propertyInfo.Value;
+            }
+
+            unresolved = true;
+            return match.Value;
+        });
+
+        return !unresolved;
+    }
 }
 
 public class PackageVariableInfo
 {
+    public const string FileBasedPackageDirectiveElementType = "FileBasedPackageDirective";
+
     public string PackageName { get; set; }
     public string VariableName { get; set; }
     public string VariableValue { get; set; }
     public string FilePath { get; set; }  // Where the property is DEFINED
     public string PackageReferenceFilePath { get; set; }  // Where the PackageReference/PackageVersion is USED
     public string ElementType { get; set; }
+    public string PackageReferenceName { get; set; }
+    public string PackageReferenceVersion { get; set; }
 }

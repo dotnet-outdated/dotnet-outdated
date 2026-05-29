@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -61,6 +63,68 @@ public static class EndToEndTests
 
         var actual = Program.Main([project.Path, "--output", outputPath, "--output-format", format.ToString()]);
         Assert.Equal(0, actual);
+    }
+
+    [RequiresFileBasedAppSdk]
+    public static void Can_Analyze_File_Based_App()
+    {
+        using var project = TestSetup("file-based-app");
+
+        var appPath = Path.Combine(project.Path, "app.cs");
+        var outputPath = Path.Combine(project.Path, "output.json");
+
+        var actual = Program.Main([appPath, "--output", outputPath, "--output-format:json"]);
+        Assert.Equal(0, actual);
+
+        using var output = JsonDocument.Parse(File.ReadAllText(outputPath));
+        var analyzedProject = Assert.Single(output.RootElement.GetProperty("Projects").EnumerateArray());
+
+        Assert.Equal("app.cs", analyzedProject.GetProperty("Name").GetString());
+        Assert.Equal(Path.GetFullPath(appPath), analyzedProject.GetProperty("FilePath").GetString());
+
+        var analyzedDependency = Assert.Single(
+            analyzedProject
+                .GetProperty("TargetFrameworks")
+                .EnumerateArray()
+                .SelectMany(targetFramework => targetFramework.GetProperty("Dependencies").EnumerateArray()),
+            dependency => dependency.GetProperty("Name").GetString() == "Newtonsoft.Json");
+
+        Assert.Equal("11.0.1", analyzedDependency.GetProperty("ResolvedVersion").GetString());
+        Assert.False(string.IsNullOrWhiteSpace(analyzedDependency.GetProperty("LatestVersion").GetString()));
+    }
+
+    [RequiresFileBasedAppSdk]
+    public static void Can_Upgrade_File_Based_App_With_Variables_Preserves_Variable_References()
+    {
+        using var project = TestSetup("file-based-app");
+
+        var appPath = Path.Combine(project.Path, "app.cs");
+
+        var actual = Program.Main([appPath, "--upgrade", "--no-restore"]);
+        Assert.Equal(0, actual);
+
+        var content = File.ReadAllText(appPath);
+
+        Assert.Contains("#:property NewtonsoftJsonPackageId=Newtonsoft.Json", content);
+        Assert.Contains("#:property NewtonsoftJsonPackageVersion=", content);
+        Assert.Contains("#:package $(NewtonsoftJsonPackageId)@$(NewtonsoftJsonPackageVersion)", content);
+        Assert.DoesNotContain("#:property NewtonsoftJsonPackageVersion=11.0.1", content);
+    }
+
+    [RequiresFileBasedAppSdk]
+    public static void Can_Upgrade_File_Based_App_With_Direct_Package_Directive()
+    {
+        using var project = TestSetup("file-based-app-direct-package");
+
+        var appPath = Path.Combine(project.Path, "app.cs");
+
+        var actual = Program.Main([appPath, "--upgrade", "--no-restore"]);
+        Assert.Equal(0, actual);
+
+        var content = File.ReadAllText(appPath);
+
+        Assert.Contains("#:package Newtonsoft.Json@", content);
+        Assert.DoesNotContain("#:package Newtonsoft.Json@11.0.1", content);
     }
 
     [Fact]
@@ -198,6 +262,64 @@ public static class EndToEndTests
         {
             const string Prefix = "dotnet-bumper-";
             return Directory.CreateTempSubdirectory(Prefix);
+        }
+    }
+
+    public sealed class RequiresFileBasedAppSdkAttribute : FactAttribute
+    {
+        private static readonly Version MinimumSdkVersion = new(10, 0, 300);
+
+        public RequiresFileBasedAppSdkAttribute()
+        {
+            if (!DotNetSdkDetector.HasSdkVersionAtLeast(MinimumSdkVersion))
+            {
+                Skip = $"Requires .NET SDK {MinimumSdkVersion} or newer.";
+            }
+        }
+    }
+
+    internal static class DotNetSdkDetector
+    {
+        public static bool HasSdkVersionAtLeast(Version minimumVersion)
+        {
+            try
+            {
+                using var process = Process.Start(new ProcessStartInfo("dotnet", "--list-sdks")
+                {
+                    CreateNoWindow = true,
+                    RedirectStandardOutput = true,
+                    UseShellExecute = false
+                });
+
+                if (process is null)
+                {
+                    return false;
+                }
+
+                var output = process.StandardOutput.ReadToEnd();
+
+                if (!process.WaitForExit(milliseconds: 10_000))
+                {
+                    process.Kill(entireProcessTree: true);
+                    return false;
+                }
+
+                if (process.ExitCode != 0)
+                {
+                    return false;
+                }
+
+                return output
+                    .Split([Environment.NewLine], StringSplitOptions.RemoveEmptyEntries)
+                    .Select(line => line.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault())
+                    .Where(sdkVersion => !string.IsNullOrWhiteSpace(sdkVersion))
+                    .Select(sdkVersion => sdkVersion!.Split('-')[0])
+                    .Any(sdkVersion => Version.TryParse(sdkVersion, out var version) && version.CompareTo(minimumVersion) >= 0);
+            }
+            catch (Win32Exception)
+            {
+                return false;
+            }
         }
     }
 }

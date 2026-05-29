@@ -44,3 +44,41 @@ jobs:
 
     - name: Tests
       run: dotnet test --configuration Release --framework ${{ matrix.framework }}
+
+  file-based-app:
+    name: File-based app tests with .NET SDK 10.0.300 on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    timeout-minutes: 30
+
+    steps:
+    - uses: actions/checkout@v6
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v5.2.0
+      with:
+        dotnet-version: |
+            9.0.x
+            10.0.300
+
+    - name: File-based app smoke test
+      shell: pwsh
+      run: |
+        if (Get-Variable PSNativeCommandUseErrorActionPreference -ErrorAction SilentlyContinue) {
+          $PSNativeCommandUseErrorActionPreference = $false
+        }
+
+        & dotnet run --configuration Release --framework net9.0 --project src/DotNetOutdated -- test-projects/file-based-app/app.cs --fail-on-updates
+        $exitCode = $LASTEXITCODE
+
+        if ($exitCode -ne 2) {
+          throw "Expected file-based app smoke test to exit with 2 because outdated dependencies were found, but got $exitCode."
+        }
+
+        exit 0
+
+    - name: File-based app tests
+      run: dotnet test --configuration Release --framework net9.0 --filter "FullyQualifiedName~FileBasedApp|FullyQualifiedName~File_Based_App"

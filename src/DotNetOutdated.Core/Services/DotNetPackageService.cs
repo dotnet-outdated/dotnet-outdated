@@ -26,6 +26,14 @@ namespace DotNetOutdated.Core.Services
             var variables = _variableTrackingService.DiscoverPackageVariables(projectPath);
             variables.TryGetValue(packageName, out PackageVariableInfo variableInfo);
 
+            if (variableInfo?.ElementType == PackageVariableInfo.FileBasedPackageDirectiveElementType)
+            {
+                _variableTrackingService.UpdatePackageVariable(variableInfo, version);
+                return noRestore
+                    ? new RunStatus(string.Empty, string.Empty, 0)
+                    : RestoreProject(projectPath, ignoreFailedSources);
+            }
+
             // When --no-restore is used, `dotnet add package` has an upstream bug where it writes
             // version info to .csproj instead of Directory.Packages.props for CPM projects.
             // See: https://github.com/NuGet/Home/issues/12552
@@ -75,6 +83,18 @@ namespace DotNetOutdated.Core.Services
             string[] arguments = ["remove", projectName, "package", packageName];
 
             return _dotNetRunner.Run(_fileSystem.Path.GetDirectoryName(projectPath), arguments);
+        }
+
+        private RunStatus RestoreProject(string projectPath, bool ignoreFailedSources)
+        {
+            var projectName = _fileSystem.Path.GetFileName(projectPath);
+            List<string> arguments = ["restore", projectName];
+            if (ignoreFailedSources)
+            {
+                arguments.Add("--ignore-failed-sources");
+            }
+
+            return _dotNetRunner.Run(_fileSystem.Path.GetDirectoryName(projectPath), [.. arguments]);
         }
 
         private bool TryUpdateCentralPackageVersion(string projectPath, string packageName, NuGetVersion version)

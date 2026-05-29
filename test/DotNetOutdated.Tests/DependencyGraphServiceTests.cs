@@ -101,5 +101,35 @@ namespace DotNetOutdated.Tests
 
             dotNetRunner.Received().Run(_path, Arg.Is<string[]>(a => a[0] == "msbuild" && a[1] == _solutionPath && a[4] == "/t:Restore,GenerateRestoreGraphFile"));
         }
+
+        [Fact]
+        public async Task FileBasedAppGeneratesDependencyGraphWithRestoreThenBuild()
+        {
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>());
+            var appPath = XFS.Path(@"c:\path\app.cs");
+
+            // Arrange
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[0] == "restore"))
+                .Returns(new RunStatus(string.Empty, string.Empty, 0));
+            dotNetRunner.Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[0] == "build"))
+                .Returns(new RunStatus(string.Empty, string.Empty, 0))
+                .AndDoes(x =>
+                {
+                    var arguments = x.ArgAt<string[]>(1);
+                    string tempFileName = arguments[6].Replace("/p:RestoreGraphOutputPath=", string.Empty, StringComparison.OrdinalIgnoreCase).Trim('"');
+                    mockFileSystem.AddFileFromEmbeddedResource(tempFileName, GetType().Assembly, "DotNetOutdated.Tests.TestData.test.dg");
+                });
+
+            var graphService = new DependencyGraphService(dotNetRunner, mockFileSystem);
+
+            // Act
+            var dependencyGraph = await graphService.GenerateDependencyGraphAsync(appPath, string.Empty);
+
+            // Assert
+            Assert.NotNull(dependencyGraph);
+            dotNetRunner.Received().Run(_path, Arg.Is<string[]>(a => a[0] == "restore" && a[1] == appPath));
+            dotNetRunner.Received().Run(_path, Arg.Is<string[]>(a => a[0] == "build" && a[1] == appPath && a[2] == "--no-restore" && a[5] == "/t:GenerateRestoreGraphFile"));
+        }
     }
 }

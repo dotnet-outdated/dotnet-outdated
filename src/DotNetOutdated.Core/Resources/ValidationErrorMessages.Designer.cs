@@ -78,7 +78,7 @@ namespace DotNetOutdated.Core.Resources {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to The directory &apos;{0}&apos; does not contain any solutions or projects..
+        ///   Looks up a localized string similar to The directory &apos;{0}&apos; does not contain any solutions, projects, or file-based apps..
         /// </summary>
         internal static string DirectoryDoesNotContainSolutionsOrProjects {
             get {
@@ -96,7 +96,7 @@ namespace DotNetOutdated.Core.Resources {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to The file &apos;{0}&apos; is not a valid solution or project..
+        ///   Looks up a localized string similar to The file &apos;{0}&apos; is not a valid solution, project, or file-based app..
         /// </summary>
         internal static string FileNotAValidSolutionOrProject {
             get {

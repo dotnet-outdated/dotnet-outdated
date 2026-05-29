@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Xml.Linq;
+using DotNetOutdated.Core;
 using DotNetOutdated.Models;
 
 namespace DotNetOutdated
@@ -60,6 +61,11 @@ namespace DotNetOutdated
 
         public static bool IsProjectSdkStyle(this PackageProjectReference project)
         {
+            if (project.ProjectFilePath.IsCSharpFile())
+            {
+                return true;
+            }
+
             try
             {
                 var xml = XDocument.Load(project.ProjectFilePath);

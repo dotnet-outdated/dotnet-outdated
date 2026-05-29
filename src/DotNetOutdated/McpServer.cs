@@ -131,14 +131,15 @@ namespace DotNetOutdated
                 new
                 {
                     name = "discover_projects",
-                    description = "Scans a directory for .NET projects (.csproj, .sln, etc.)",
+                    description = "Scans a directory for .NET projects (.csproj, .sln, etc.) and optionally file-based apps",
                     inputSchema = new
                     {
                         type = "object",
                         properties = new
                         {
                             path = new { type = "string", description = "Root path to search" },
-                            recursive = new { type = "boolean", description = "Whether to search recursively" }
+                            recursive = new { type = "boolean", description = "Whether to search recursively" },
+                            includeFileBasedApps = new { type = "boolean", description = "Whether recursive discovery should include loose .cs file-based apps" }
                         },
                         required = new[] { "path" }
                     }
@@ -146,13 +147,13 @@ namespace DotNetOutdated
                 new
                 {
                     name = "analyze_project",
-                    description = "Analyzes a project for outdated packages",
+                    description = "Analyzes a project or file-based app for outdated packages",
                     inputSchema = new
                     {
                         type = "object",
                         properties = new
                         {
-                            projectPath = new { type = "string", description = "Path to the project file" },
+                            projectPath = new { type = "string", description = "Path to the project file or .cs file-based app" },
                             includeTransitive = new { type = "boolean", description = "Check transitive dependencies" }
                         },
                         required = new[] { "projectPath" }
@@ -161,13 +162,13 @@ namespace DotNetOutdated
                 new
                 {
                     name = "update_package",
-                    description = "Updates a specific package in a project",
+                    description = "Updates a specific package in a project or file-based app",
                     inputSchema = new
                     {
                         type = "object",
                         properties = new
                         {
-                            projectPath = new { type = "string", description = "Path to the project" },
+                            projectPath = new { type = "string", description = "Path to the project or .cs file-based app" },
                             packageName = new { type = "string", description = "Name of the package" },
                             version = new { type = "string", description = "Version to upgrade to" },
                             framework = new { type = "string", description = "Target framework" }
@@ -237,7 +238,13 @@ namespace DotNetOutdated
                 recursive = recursiveProp.GetBoolean();
             }
 
-            var projects = _projectDiscoveryService.DiscoverProjects(path, recursive);
+            bool includeFileBasedApps = false;
+            if (arguments.TryGetProperty("includeFileBasedApps", out var includeFileBasedAppsProp))
+            {
+                includeFileBasedApps = includeFileBasedAppsProp.GetBoolean();
+            }
+
+            var projects = _projectDiscoveryService.DiscoverProjects(path, recursive, includeFileBasedApps);
             
             return new
             {
