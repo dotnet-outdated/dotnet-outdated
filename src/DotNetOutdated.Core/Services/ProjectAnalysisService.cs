@@ -147,20 +147,19 @@ namespace DotNetOutdated.Core.Services
                 fileBasedReferences.Select(reference => reference.Name),
                 StringComparer.OrdinalIgnoreCase);
 
-            var graphOnlyDependencies = targetFramework.Dependencies
-                .Where(pair => !pair.Value.IsTransitive)
+            var graphOnlyDependencyKeys = targetFramework.Dependencies
+                .Where(pair => !pair.Value.IsTransitive && !authoritativeNames.Contains(pair.Value.Name))
                 .Select(pair => pair.Key)
-                .Where(name => !authoritativeNames.Contains(name))
                 .ToList();
 
-            foreach (var dependencyName in graphOnlyDependencies)
+            foreach (var dependencyKey in graphOnlyDependencyKeys)
             {
-                targetFramework.Dependencies.Remove(dependencyName);
+                targetFramework.Dependencies.Remove(dependencyKey);
             }
 
             foreach (var reference in fileBasedReferences)
             {
-                targetFramework.Dependencies[reference.Name] = new Dependency(
+                targetFramework.Dependencies[FileBasedAppReferenceHelper.GetDependencyDictionaryKey(reference)] = new Dependency(
                     reference.Name,
                     reference.VersionRange,
                     reference.ResolvedVersion,

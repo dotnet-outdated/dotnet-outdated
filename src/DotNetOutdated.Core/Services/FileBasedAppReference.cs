@@ -74,6 +74,24 @@ internal static class FileBasedAppReferenceHelper
     /// </summary>
     public static VersionRange CreateExactVersionRange(NuGetVersion version) =>
         new(version, includeMinVersion: true, maxVersion: version, includeMaxVersion: true);
+
+    /// <summary>
+    /// Gets the dictionary key for storing a file-based app reference in <see cref="Models.TargetFramework.Dependencies"/>.
+    /// Package and SDK directives with the same id use distinct keys.
+    /// </summary>
+    public static string GetDependencyDictionaryKey(FileBasedAppReference reference) =>
+        GetDependencyDictionaryKey(reference.Name, reference.Kind);
+
+    /// <summary>
+    /// Gets the dictionary key for storing a file-based app reference in <see cref="Models.TargetFramework.Dependencies"/>.
+    /// </summary>
+    public static string GetDependencyDictionaryKey(string name, FileBasedAppReferenceKind kind) =>
+        kind switch
+        {
+            FileBasedAppReferenceKind.Sdk => $"{name}#sdk",
+            FileBasedAppReferenceKind.Package => $"{name}#package",
+            _ => name
+        };
 }
 
 /// <summary>
