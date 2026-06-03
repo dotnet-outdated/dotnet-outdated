@@ -51,6 +51,7 @@ internal static class DotNetSdkDetector
             if (!process.WaitForExit(milliseconds: 10_000))
             {
                 process.Kill(entireProcessTree: true);
+                process.WaitForExit(milliseconds: 5_000);
                 return false;
             }
 
