@@ -738,6 +738,50 @@ Information(""Outdated Sdk"");")
         }
 
         [Fact]
+        public void Discover_FileBasedAppReferences_DiscoversDirectSdkWithTrailingComment()
+        {
+            var appPath = XFS.Path(@"c:\repo\cake.cs");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                {
+                    appPath, new MockFileData(@"#:sdk Cake.Sdk@6.0.0 // pinned for now
+Information(""Outdated Sdk"");")
+                }
+            });
+
+            var service = new VariableTrackingService(mockFileSystem);
+            var reference = service.DiscoverFileBasedAppReferences(appPath).Single();
+
+            Assert.Equal("Cake.Sdk", reference.Name);
+            Assert.Equal(new NuGetVersion("6.0.0"), reference.ResolvedVersion);
+            Assert.Equal(FileBasedAppReferenceKind.Sdk, reference.Kind);
+        }
+
+        [Fact]
+        public void Update_FileBasedApp_VariableSdkVersion_PropertyNameCasingDiffersFromReference()
+        {
+            var appPath = XFS.Path(@"c:\repo\cake.cs");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                {
+                    // The #:property name (sdkversion) differs in case from the $(SdkVersion) reference.
+                    appPath, new MockFileData(@"#:property sdkversion=6.0.0
+#:sdk Cake.Sdk@$(SdkVersion)
+Information(""Outdated Sdk"");")
+                }
+            });
+
+            var service = new VariableTrackingService(mockFileSystem);
+            var variableInfo = service.DiscoverPackageVariables(appPath)["Cake.Sdk"];
+
+            Assert.True(service.TryUpdatePackageVariable(variableInfo, new NuGetVersion("6.2.0")));
+
+            var content = mockFileSystem.File.ReadAllText(appPath);
+            Assert.Contains("#:property sdkversion=6.2.0", content);
+            Assert.DoesNotContain("6.0.0", content);
+        }
+
+        [Fact]
         public void Update_FileBasedAppDirectSdk_ReturnsFalseWhenDirectiveDoesNotMatch()
         {
             var appPath = XFS.Path(@"c:\repo\cake.cs");

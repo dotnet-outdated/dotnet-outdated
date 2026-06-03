@@ -265,7 +265,7 @@ public sealed partial class VariableTrackingService : IVariableTrackingService
                     propertyContent,
                     propertyPattern,
                     match => match.Groups[1].Value + newVersion + match.Groups[3].Value,
-                    RegexOptions.Multiline);
+                    RegexOptions.Multiline | RegexOptions.IgnoreCase);
                 if (!string.Equals(propertyContent, newPropertyContent, StringComparison.Ordinal))
                 {
                     _fileSystem.File.WriteAllText(variableInfo.FilePath, newPropertyContent);
@@ -344,7 +344,7 @@ public sealed partial class VariableTrackingService : IVariableTrackingService
                     propertyContent,
                     propertyPattern,
                     match => match.Groups[1].Value + newVersion + match.Groups[3].Value,
-                    RegexOptions.Multiline);
+                    RegexOptions.Multiline | RegexOptions.IgnoreCase);
                 if (!string.Equals(propertyContent, newPropertyContent, StringComparison.Ordinal))
                 {
                     _fileSystem.File.WriteAllText(variableInfo.FilePath, newPropertyContent);
@@ -824,16 +824,28 @@ public sealed partial class VariableTrackingService : IVariableTrackingService
 
     private static bool TryParsePackageDirective(string directive, out string packageExpression, out string versionExpression)
     {
-        var separatorIndex = directive.LastIndexOf('@');
-        if (separatorIndex <= 0 || separatorIndex == directive.Length - 1)
+        packageExpression = string.Empty;
+        versionExpression = string.Empty;
+
+        // The directive value is the first whitespace-delimited token (name@version). Neither a package id,
+        // an SDK id, a version, nor an MSBuild property reference contains whitespace, so anything after the
+        // first space/tab (for example an inline `// pinned` comment) is trailing content that must be ignored.
+        // This mirrors UpdateFileBasedAppDirectReference, which preserves such trailing content during upgrades.
+        var token = directive.Trim();
+        var whitespaceIndex = token.IndexOfAny([' ', '\t']);
+        if (whitespaceIndex >= 0)
         {
-            packageExpression = string.Empty;
-            versionExpression = string.Empty;
+            token = token[..whitespaceIndex];
+        }
+
+        var separatorIndex = token.LastIndexOf('@');
+        if (separatorIndex <= 0 || separatorIndex == token.Length - 1)
+        {
             return false;
         }
 
-        packageExpression = directive[..separatorIndex].Trim();
-        versionExpression = directive[(separatorIndex + 1)..].Trim();
+        packageExpression = token[..separatorIndex].Trim();
+        versionExpression = token[(separatorIndex + 1)..].Trim();
         return !string.IsNullOrEmpty(packageExpression) && !string.IsNullOrEmpty(versionExpression);
     }
 

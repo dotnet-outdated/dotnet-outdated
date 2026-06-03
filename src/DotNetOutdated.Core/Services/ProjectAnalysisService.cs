@@ -126,7 +126,9 @@ namespace DotNetOutdated.Core.Services
 
                         if (isFileBasedApp)
                         {
-                            ApplyFileBasedAppDirectives(projectPath, targetFramework);
+                            // Use the normalized full path so directive discovery (and its cache) keys off the
+                            // same path used for restore and asset loading, even when the caller passed a relative path.
+                            ApplyFileBasedAppDirectives(analyzedProjectPath, targetFramework);
                         }
                     }
                 }
