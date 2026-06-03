@@ -665,6 +665,26 @@ Information(""Outdated Sdk"");")
         }
 
         [Fact]
+        public void Update_FileBasedAppDirectSdk_PreservesTrailingContentOnDirectiveLine()
+        {
+            var appPath = XFS.Path(@"c:\repo\cake.cs");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                {
+                    appPath, new MockFileData(@"#:sdk Cake.Sdk@6.0.0 // pinned for now
+Information(""Outdated Sdk"");")
+                }
+            });
+
+            var service = new VariableTrackingService(mockFileSystem);
+
+            Assert.True(service.UpdateFileBasedAppDirectReference(appPath, "Cake.Sdk", FileBasedAppReferenceKind.Sdk, new NuGetVersion("6.2.0")));
+
+            var content = mockFileSystem.File.ReadAllText(appPath);
+            Assert.Contains("#:sdk Cake.Sdk@6.2.0 // pinned for now", content);
+        }
+
+        [Fact]
         public void Update_FileBasedAppDirectSdk_ReturnsFalseWhenDirectiveDoesNotMatch()
         {
             var appPath = XFS.Path(@"c:\repo\cake.cs");

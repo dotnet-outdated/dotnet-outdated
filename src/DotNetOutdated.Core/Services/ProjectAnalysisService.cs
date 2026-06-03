@@ -24,6 +24,23 @@ namespace DotNetOutdated.Core.Services
         public ProjectAnalysisService(
             IDependencyGraphService dependencyGraphService,
             IDotNetRestoreService dotNetRestoreService,
+            IFileSystem fileSystem)
+            : this(dependencyGraphService, dotNetRestoreService, fileSystem, new VariableTrackingService(fileSystem))
+        {
+        }
+
+        public ProjectAnalysisService(
+            IDependencyGraphService dependencyGraphService,
+            IDotNetRestoreService dotNetRestoreService,
+            IFileSystem fileSystem,
+            ILogger logger)
+            : this(dependencyGraphService, dotNetRestoreService, fileSystem, new VariableTrackingService(fileSystem), logger)
+        {
+        }
+
+        public ProjectAnalysisService(
+            IDependencyGraphService dependencyGraphService,
+            IDotNetRestoreService dotNetRestoreService,
             IFileSystem fileSystem,
             IVariableTrackingService variableTrackingService)
             : this(dependencyGraphService, dotNetRestoreService, fileSystem, variableTrackingService, NullLogger.Instance)
