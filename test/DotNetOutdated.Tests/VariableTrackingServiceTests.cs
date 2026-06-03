@@ -667,9 +667,8 @@ Information(""Outdated Sdk"");")
             Assert.Equal(FileBasedAppReferenceKind.Sdk, result.Kind);
             Assert.Null(result.VariableInfo);
             Assert.Equal(result.ResolvedVersion, result.VersionRange.MinVersion);
-            Assert.Equal(result.ResolvedVersion, result.VersionRange.MaxVersion);
             Assert.True(result.VersionRange.IsMinInclusive);
-            Assert.True(result.VersionRange.IsMaxInclusive);
+            Assert.Null(result.VersionRange.MaxVersion);
         }
 
         [Fact]
@@ -695,7 +694,7 @@ Information(""Outdated Sdk"");")
             Assert.Equal("Cake.Sdk", reference.Name);
             Assert.Equal(new NuGetVersion("6.0.0"), reference.ResolvedVersion);
             Assert.Equal(reference.ResolvedVersion, reference.VersionRange.MinVersion);
-            Assert.Equal(reference.ResolvedVersion, reference.VersionRange.MaxVersion);
+            Assert.Null(reference.VersionRange.MaxVersion);
         }
 
         [Fact]

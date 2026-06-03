@@ -329,7 +329,7 @@ Information(""Outdated Sdk"");")
                     NameExpression = "$(SdkId)",
                     VersionExpression = "6.0.0",
                     ResolvedVersion = new NuGetVersion("6.0.0"),
-                    VersionRange = FileBasedAppReferenceHelper.CreateExactVersionRange(new NuGetVersion("6.0.0"))
+                    VersionRange = FileBasedAppReferenceHelper.CreateMinimumVersionRange(new NuGetVersion("6.0.0"))
                 }
             ]);
 

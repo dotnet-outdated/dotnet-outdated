@@ -143,16 +143,16 @@ namespace DotNetOutdated.Core.Services
                 return;
             }
 
-            var authoritativeNames = new HashSet<string>(
-                fileBasedReferences.Select(reference => reference.Name),
-                StringComparer.OrdinalIgnoreCase);
-
-            var graphOnlyDependencyKeys = targetFramework.Dependencies
-                .Where(pair => !pair.Value.IsTransitive && !authoritativeNames.Contains(pair.Value.Name))
+            // The directives are the authoritative source of direct dependencies for a file-based app.
+            // Remove every non-transitive graph dependency (including graph entries for packages that are
+            // also declared as directives) and re-add the directive references below. Re-adding under the
+            // directive keys would otherwise leave a duplicate graph entry keyed by the plain package name.
+            var directDependencyKeys = targetFramework.Dependencies
+                .Where(pair => !pair.Value.IsTransitive)
                 .Select(pair => pair.Key)
                 .ToList();
 
-            foreach (var dependencyKey in graphOnlyDependencyKeys)
+            foreach (var dependencyKey in directDependencyKeys)
             {
                 targetFramework.Dependencies.Remove(dependencyKey);
             }

@@ -20,7 +20,8 @@ public sealed class FileBasedAppReference
     public required NuGetVersion ResolvedVersion { get; init; }
 
     /// <summary>
-    /// Gets the exact version range used when resolving the latest version on NuGet feeds.
+    /// Gets the version range used when resolving the latest version on NuGet feeds. The resolved version is the
+    /// inclusive floor with an open upper bound so newer versions can be discovered.
     /// </summary>
     public required VersionRange VersionRange { get; init; }
 
@@ -70,10 +71,11 @@ internal static class FileBasedAppReferenceHelper
         !string.IsNullOrEmpty(expression) && expression.Contains("$(");
 
     /// <summary>
-    /// Creates an exact inclusive version range for a pinned directive version.
+    /// Creates a minimum-inclusive version range (<c>[version, )</c>) for a directive version. The directive
+    /// version is the current floor, but the range is left open above it so newer versions can be discovered.
     /// </summary>
-    public static VersionRange CreateExactVersionRange(NuGetVersion version) =>
-        new(version, includeMinVersion: true, maxVersion: version, includeMaxVersion: true);
+    public static VersionRange CreateMinimumVersionRange(NuGetVersion version) =>
+        new(version, includeMinVersion: true, maxVersion: null, includeMaxVersion: false);
 
     /// <summary>
     /// Gets the dictionary key for storing a file-based app reference in <see cref="Models.TargetFramework.Dependencies"/>.

@@ -234,7 +234,7 @@ public sealed partial class VariableTrackingService : IVariableTrackingService
             {
                 Name = variableInfo.PackageName,
                 ResolvedVersion = resolvedVersion,
-                VersionRange = FileBasedAppReferenceHelper.CreateExactVersionRange(resolvedVersion),
+                VersionRange = FileBasedAppReferenceHelper.CreateMinimumVersionRange(resolvedVersion),
                 Kind = variableInfo.ElementType == PackageVariableInfo.FileBasedSdkDirectiveElementType
                     ? FileBasedAppReferenceKind.Sdk
                     : FileBasedAppReferenceKind.Package,
@@ -813,7 +813,7 @@ public sealed partial class VariableTrackingService : IVariableTrackingService
         {
             Name = name,
             ResolvedVersion = resolvedVersion,
-            VersionRange = FileBasedAppReferenceHelper.CreateExactVersionRange(resolvedVersion),
+            VersionRange = FileBasedAppReferenceHelper.CreateMinimumVersionRange(resolvedVersion),
             Kind = kind,
             NameExpression = nameExpression,
             VersionExpression = versionExpression,
