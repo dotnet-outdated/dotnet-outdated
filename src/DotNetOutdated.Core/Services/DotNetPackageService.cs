@@ -1,8 +1,10 @@
-﻿using NuGet.Versioning;
+﻿using DotNetOutdated.Core;
+using NuGet.Versioning;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Abstractions;
+using System.Linq;
 using System.Text.RegularExpressions;
 
 namespace DotNetOutdated.Core.Services
@@ -26,12 +28,54 @@ namespace DotNetOutdated.Core.Services
             var variables = _variableTrackingService.DiscoverPackageVariables(projectPath);
             variables.TryGetValue(packageName, out PackageVariableInfo variableInfo);
 
-            if (variableInfo?.ElementType == PackageVariableInfo.FileBasedPackageDirectiveElementType)
+            if (variableInfo?.ElementType == PackageVariableInfo.FileBasedPackageDirectiveElementType ||
+                variableInfo?.ElementType == PackageVariableInfo.FileBasedSdkDirectiveElementType)
             {
-                _variableTrackingService.UpdatePackageVariable(variableInfo, version);
+                if (!_variableTrackingService.TryUpdatePackageVariable(variableInfo, version) &&
+                    !IsFileBasedAppVariableAtRequestedVersion(variableInfo, version))
+                {
+                    return FileBasedAppUpdateFailed(
+                        projectPath,
+                        packageName,
+                        "Could not update the matching #:property value or #:package/#:sdk directive.");
+                }
+
                 return noRestore
                     ? new RunStatus(string.Empty, string.Empty, 0)
                     : RestoreProject(projectPath, ignoreFailedSources);
+            }
+
+            if (projectPath.IsCSharpFile())
+            {
+                var fileBasedReference = _variableTrackingService.DiscoverFileBasedAppReferences(projectPath)
+                    .FirstOrDefault(reference =>
+                        string.Equals(reference.Name, packageName, StringComparison.OrdinalIgnoreCase) &&
+                        reference.VariableInfo == null);
+
+                if (fileBasedReference?.Kind == FileBasedAppReferenceKind.Sdk)
+                {
+                    if (fileBasedReference.UsesPropertyReferences)
+                    {
+                        return FileBasedAppUpdateFailed(
+                            projectPath,
+                            packageName,
+                            "Direct #:sdk updates require a literal id@version (for example #:sdk Cake.Sdk@6.0.0); " +
+                            "property references in the name or version must be changed via #:property lines.");
+                    }
+
+                    if (!_variableTrackingService.UpdateFileBasedAppDirectReference(projectPath, packageName, fileBasedReference.Kind, version) &&
+                        !IsFileBasedAppDirectReferenceAtRequestedVersion(fileBasedReference, version))
+                    {
+                        return FileBasedAppUpdateFailed(
+                            projectPath,
+                            packageName,
+                            $"Expected a literal #:sdk {packageName}@<version> directive (id match is case-insensitive; trailing comments are preserved).");
+                    }
+
+                    return noRestore
+                        ? new RunStatus(string.Empty, string.Empty, 0)
+                        : RestoreProject(projectPath, ignoreFailedSources);
+                }
             }
 
             // When --no-restore is used, `dotnet add package` has an upstream bug where it writes
@@ -56,7 +100,14 @@ namespace DotNetOutdated.Core.Services
 
             string projectName = _fileSystem.Path.GetFileName(projectPath);
 
-            List<string> arguments = ["add", projectName, "package", packageName, "-v", version.ToString(), "-f", frameworkName];
+            List<string> arguments = ["add", projectName, "package", packageName, "-v", version.ToString()];
+            // File-based apps declare TargetFramework via #:property; dotnet add rejects -f on .cs paths with newer SDKs.
+            if (!projectPath.IsCSharpFile())
+            {
+                arguments.Add("-f");
+                arguments.Add(frameworkName);
+            }
+
             if (noRestore)
             {
                 arguments.Add("--no-restore");
@@ -144,5 +195,24 @@ namespace DotNetOutdated.Core.Services
 
             return false;
         }
+
+        private static RunStatus FileBasedAppUpdateFailed(string projectPath, string packageName, string hint) =>
+            new(
+                string.Empty,
+                $"Failed to update file-based app '{projectPath}' for '{packageName}'. {hint}",
+                1);
+
+        private static bool IsFileBasedAppVariableAtRequestedVersion(PackageVariableInfo variableInfo, NuGetVersion version)
+        {
+            if (NuGetVersion.TryParse(variableInfo.VariableValue, out var current))
+            {
+                return current == version;
+            }
+
+            return string.Equals(variableInfo.VariableValue, version.ToString(), StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsFileBasedAppDirectReferenceAtRequestedVersion(FileBasedAppReference reference, NuGetVersion version) =>
+            reference.ResolvedVersion == version;
     }
 }

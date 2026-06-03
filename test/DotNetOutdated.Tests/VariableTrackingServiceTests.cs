@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using System.IO.Abstractions.TestingHelpers;
 using DotNetOutdated.Core.Services;
 using NuGet.Versioning;
@@ -597,6 +598,318 @@ Console.WriteLine();")
             var info = Assert.Contains("Humanizer", result);
             Assert.Equal(propsPath, info.FilePath);
             Assert.Equal("3.0.10", info.VariableValue);
+        }
+
+        [Fact]
+        public void Discover_FileBasedApp_VariableSdkDirective()
+        {
+            var appPath = XFS.Path(@"c:\repo\cake.cs");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                {
+                    appPath, new MockFileData(@"#:property CakeSdkVersion=6.0.0
+#:sdk Cake.Sdk@$(CakeSdkVersion)
+Information(""Outdated Sdk"");")
+                }
+            });
+
+            var service = new VariableTrackingService(mockFileSystem);
+            var result = service.DiscoverPackageVariables(appPath);
+
+            var info = Assert.Contains("Cake.Sdk", result);
+            Assert.Equal("CakeSdkVersion", info.VariableName);
+            Assert.Equal("6.0.0", info.VariableValue);
+            Assert.Equal(PackageVariableInfo.FileBasedSdkDirectiveElementType, info.ElementType);
+            Assert.Equal("$(CakeSdkVersion)", info.PackageReferenceVersion);
+        }
+
+        [Fact]
+        public void Discover_FileBasedApp_LaterPropertyDefinitionWinsWithinFile()
+        {
+            var appPath = XFS.Path(@"c:\repo\cake.cs");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                {
+                    appPath, new MockFileData(@"#:property SdkVersion=6.0.0
+#:property SdkVersion=6.2.0
+#:sdk Cake.Sdk@$(SdkVersion)
+Information(""Outdated Sdk"");")
+                }
+            });
+
+            var service = new VariableTrackingService(mockFileSystem);
+            var variableInfo = Assert.Contains("Cake.Sdk", service.DiscoverPackageVariables(appPath));
+
+            Assert.Equal("6.2.0", variableInfo.VariableValue);
+            Assert.Equal("SdkVersion", variableInfo.VariableName);
+
+            var reference = Assert.Single(service.DiscoverFileBasedAppReferences(appPath), r => r.VariableInfo != null);
+            Assert.Equal(new NuGetVersion("6.2.0"), reference.ResolvedVersion);
+        }
+
+        [Fact]
+        public void Discover_FileBasedAppReferences_IncludesDirectSdkDirective()
+        {
+            var appPath = XFS.Path(@"c:\repo\cake.cs");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                {
+                    appPath, new MockFileData(@"#:sdk Cake.Sdk@6.0.0
+Information(""Outdated Sdk"");")
+                }
+            });
+
+            var service = new VariableTrackingService(mockFileSystem);
+            var result = service.DiscoverFileBasedAppReferences(appPath).Single();
+
+            Assert.Equal("Cake.Sdk", result.Name);
+            Assert.Equal(new NuGetVersion("6.0.0"), result.ResolvedVersion);
+            Assert.Equal(FileBasedAppReferenceKind.Sdk, result.Kind);
+            Assert.Null(result.VariableInfo);
+            Assert.Equal(result.ResolvedVersion, result.VersionRange.MinVersion);
+            Assert.True(result.VersionRange.IsMinInclusive);
+            Assert.Null(result.VersionRange.MaxVersion);
+        }
+
+        [Fact]
+        public void Discover_FileBasedApp_SdkBeforePropertyDefinitions_ResolvesForwardReferences()
+        {
+            var appPath = XFS.Path(@"c:\repo\cake.cs");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                {
+                    appPath, new MockFileData(@"#:sdk $(SdkId)@$(SdkVersion)
+#:property SdkId=Cake.Sdk
+#:property SdkVersion=6.0.0
+Information(""Outdated Sdk"");")
+                }
+            });
+
+            var service = new VariableTrackingService(mockFileSystem);
+            var variableInfo = Assert.Contains("Cake.Sdk", service.DiscoverPackageVariables(appPath));
+            Assert.Equal("SdkVersion", variableInfo.VariableName);
+            Assert.Equal("6.0.0", variableInfo.VariableValue);
+
+            var reference = Assert.Single(service.DiscoverFileBasedAppReferences(appPath), r => r.VariableInfo != null);
+            Assert.Equal("Cake.Sdk", reference.Name);
+            Assert.Equal(new NuGetVersion("6.0.0"), reference.ResolvedVersion);
+            Assert.Equal(reference.ResolvedVersion, reference.VersionRange.MinVersion);
+            Assert.Null(reference.VersionRange.MaxVersion);
+        }
+
+        [Fact]
+        public void Update_FileBasedAppDirectSdk_UpdatesDirectiveLine()
+        {
+            var appPath = XFS.Path(@"c:\repo\cake.cs");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                {
+                    appPath, new MockFileData(@"#:sdk Cake.Sdk@6.0.0
+Information(""Outdated Sdk"");")
+                }
+            });
+
+            var service = new VariableTrackingService(mockFileSystem);
+
+            Assert.True(service.UpdateFileBasedAppDirectReference(appPath, "Cake.Sdk", FileBasedAppReferenceKind.Sdk, new NuGetVersion("6.2.0")));
+
+            var content = mockFileSystem.File.ReadAllText(appPath);
+            Assert.Contains("#:sdk Cake.Sdk@6.2.0", content);
+        }
+
+        [Fact]
+        public void Update_FileBasedAppDirectSdk_PreservesTrailingContentOnDirectiveLine()
+        {
+            var appPath = XFS.Path(@"c:\repo\cake.cs");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                {
+                    appPath, new MockFileData(@"#:sdk Cake.Sdk@6.0.0 // pinned for now
+Information(""Outdated Sdk"");")
+                }
+            });
+
+            var service = new VariableTrackingService(mockFileSystem);
+
+            Assert.True(service.UpdateFileBasedAppDirectReference(appPath, "Cake.Sdk", FileBasedAppReferenceKind.Sdk, new NuGetVersion("6.2.0")));
+
+            var content = mockFileSystem.File.ReadAllText(appPath);
+            Assert.Contains("#:sdk Cake.Sdk@6.2.0 // pinned for now", content);
+        }
+
+        [Fact]
+        public void Discover_FileBasedAppReferences_DiscoversDirectSdkWithTrailingComment()
+        {
+            var appPath = XFS.Path(@"c:\repo\cake.cs");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                {
+                    appPath, new MockFileData(@"#:sdk Cake.Sdk@6.0.0 // pinned for now
+Information(""Outdated Sdk"");")
+                }
+            });
+
+            var service = new VariableTrackingService(mockFileSystem);
+            var reference = service.DiscoverFileBasedAppReferences(appPath).Single();
+
+            Assert.Equal("Cake.Sdk", reference.Name);
+            Assert.Equal(new NuGetVersion("6.0.0"), reference.ResolvedVersion);
+            Assert.Equal(FileBasedAppReferenceKind.Sdk, reference.Kind);
+        }
+
+        [Fact]
+        public void Update_FileBasedApp_VariableSdkVersion_PropertyNameCasingDiffersFromReference()
+        {
+            var appPath = XFS.Path(@"c:\repo\cake.cs");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                {
+                    // The #:property name (sdkversion) differs in case from the $(SdkVersion) reference.
+                    appPath, new MockFileData(@"#:property sdkversion=6.0.0
+#:sdk Cake.Sdk@$(SdkVersion)
+Information(""Outdated Sdk"");")
+                }
+            });
+
+            var service = new VariableTrackingService(mockFileSystem);
+            var variableInfo = service.DiscoverPackageVariables(appPath)["Cake.Sdk"];
+
+            Assert.True(service.TryUpdatePackageVariable(variableInfo, new NuGetVersion("6.2.0")));
+
+            var content = mockFileSystem.File.ReadAllText(appPath);
+            Assert.Contains("#:property sdkversion=6.2.0", content);
+            Assert.DoesNotContain("6.0.0", content);
+        }
+
+        [Fact]
+        public void Update_FileBasedAppDirectSdk_ReturnsFalseWhenDirectiveDoesNotMatch()
+        {
+            var appPath = XFS.Path(@"c:\repo\cake.cs");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                {
+                    appPath, new MockFileData(@"#:sdk $(SdkId)@6.0.0
+Information(""Outdated Sdk"");")
+                }
+            });
+
+            var service = new VariableTrackingService(mockFileSystem);
+
+            Assert.False(service.UpdateFileBasedAppDirectReference(appPath, "Cake.Sdk", FileBasedAppReferenceKind.Sdk, new NuGetVersion("6.2.0")));
+            Assert.Contains("#:sdk $(SdkId)@6.0.0", mockFileSystem.File.ReadAllText(appPath));
+        }
+
+        [Fact]
+        public void Discover_FileBasedAppReferences_PrefersVariableBackedSdkEntry()
+        {
+            var appPath = XFS.Path(@"c:\repo\cake.cs");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                {
+                    appPath, new MockFileData(@"#:property SdkId=Cake.Sdk
+#:property SdkVersion=6.0.0
+#:sdk $(SdkId)@$(SdkVersion)
+Information(""Outdated Sdk"");")
+                }
+            });
+
+            var service = new VariableTrackingService(mockFileSystem);
+            var reference = service.DiscoverFileBasedAppReferences(appPath).Single();
+
+            Assert.Equal("Cake.Sdk", reference.Name);
+            Assert.NotNull(reference.VariableInfo);
+            Assert.Equal("$(SdkId)", reference.NameExpression);
+            Assert.Equal("$(SdkVersion)", reference.VersionExpression);
+            Assert.True(reference.UsesPropertyReferences);
+        }
+
+        [Fact]
+        public void Discover_FileBasedAppReferences_PreservesDistinctPackageAndSdkWithSameName()
+        {
+            var appPath = XFS.Path(@"c:\repo\app.cs");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                {
+                    appPath, new MockFileData(@"#:package SharedId@1.0.0
+#:sdk SharedId@2.0.0
+Console.WriteLine();")
+                }
+            });
+
+            var service = new VariableTrackingService(mockFileSystem);
+            var references = service.DiscoverFileBasedAppReferences(appPath);
+
+            Assert.Equal(2, references.Count);
+            Assert.Contains(references, reference =>
+                reference.Kind == FileBasedAppReferenceKind.Package &&
+                reference.Name == "SharedId" &&
+                reference.ResolvedVersion == new NuGetVersion("1.0.0"));
+            Assert.Contains(references, reference =>
+                reference.Kind == FileBasedAppReferenceKind.Sdk &&
+                reference.Name == "SharedId" &&
+                reference.ResolvedVersion == new NuGetVersion("2.0.0"));
+        }
+
+        [Fact]
+        public void GetDependencyDictionaryKey_DistinguishesPackageAndSdkWithSameName()
+        {
+            Assert.Equal(
+                "SharedId#package",
+                FileBasedAppReferenceHelper.GetDependencyDictionaryKey("SharedId", FileBasedAppReferenceKind.Package));
+            Assert.Equal(
+                "SharedId#sdk",
+                FileBasedAppReferenceHelper.GetDependencyDictionaryKey("SharedId", FileBasedAppReferenceKind.Sdk));
+            Assert.NotEqual(
+                FileBasedAppReferenceHelper.GetDependencyDictionaryKey("SharedId", FileBasedAppReferenceKind.Package),
+                FileBasedAppReferenceHelper.GetDependencyDictionaryKey("SharedId", FileBasedAppReferenceKind.Sdk));
+        }
+
+        [Fact]
+        public void Update_FileBasedApp_VariableSdkIdAndVersion_PreservesExpressions()
+        {
+            var appPath = XFS.Path(@"c:\repo\cake.cs");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                {
+                    appPath, new MockFileData(@"#:property SdkId=Cake.Sdk
+#:property SdkVersion=6.0.0
+#:sdk $(SdkId)@$(SdkVersion)
+Information(""Outdated Sdk"");")
+                }
+            });
+
+            var service = new VariableTrackingService(mockFileSystem);
+            var variableInfo = service.DiscoverPackageVariables(appPath)["Cake.Sdk"];
+
+            Assert.True(service.TryUpdatePackageVariable(variableInfo, new NuGetVersion("6.2.0")));
+
+            var content = mockFileSystem.File.ReadAllText(appPath);
+            Assert.Contains("#:property SdkVersion=6.2.0", content);
+            Assert.Contains("#:sdk $(SdkId)@$(SdkVersion)", content);
+            Assert.DoesNotContain("#:property SdkVersion=6.0.0", content);
+        }
+
+        [Fact]
+        public void Update_FileBasedApp_VariableSdkIdLiteralVersion_UpdatesDirectiveLine()
+        {
+            var appPath = XFS.Path(@"c:\repo\cake.cs");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                {
+                    appPath, new MockFileData(@"#:property SdkId=Cake.Sdk
+#:sdk $(SdkId)@6.0.0
+Information(""Outdated Sdk"");")
+                }
+            });
+
+            var service = new VariableTrackingService(mockFileSystem);
+            var variableInfo = service.DiscoverPackageVariables(appPath)["Cake.Sdk"];
+
+            Assert.True(service.TryUpdatePackageVariable(variableInfo, new NuGetVersion("6.2.0")));
+
+            var content = mockFileSystem.File.ReadAllText(appPath);
+            Assert.Contains("#:sdk $(SdkId)@6.2.0", content);
+            Assert.DoesNotContain("#:sdk $(SdkId)@6.0.0", content);
         }
     }
 }
