@@ -131,6 +131,7 @@ public sealed partial class VariableTrackingService : IVariableTrackingService
                                 e.Attribute("Update")?.Value.Equals(variableInfo.PackageName, StringComparison.OrdinalIgnoreCase) == true))
                     .ToList();
 
+                var newPackageRefContent = packageRefContent;
                 foreach (var packageElement in packageElements)
                 {
                     var versionAttr = packageElement.Attribute("Version");
@@ -142,12 +143,15 @@ public sealed partial class VariableTrackingService : IVariableTrackingService
                         // Use regex to replace only the Version attribute value for this specific package
                         string packagePattern = $@"(<{Regex.Escape(variableInfo.ElementType)}\s+(?:Include|Update)=""{Regex.Escape(variableInfo.PackageName)}""\s+Version="")[^""]*("")";
                         string packageReplacement = $"$1{variableReference}$2";
-                        packageRefContent = Regex.Replace(packageRefContent, packagePattern, packageReplacement, RegexOptions.IgnoreCase);
+                        newPackageRefContent = Regex.Replace(newPackageRefContent, packagePattern, packageReplacement, RegexOptions.IgnoreCase);
                     }
                 }
 
-                _fileSystem.File.WriteAllText(packageRefFilePath, packageRefContent);
-                msbuildUpdated = true;
+                if (!string.Equals(packageRefContent, newPackageRefContent, StringComparison.Ordinal))
+                {
+                    _fileSystem.File.WriteAllText(packageRefFilePath, newPackageRefContent);
+                    msbuildUpdated = true;
+                }
             }
 
             if (msbuildUpdated)
