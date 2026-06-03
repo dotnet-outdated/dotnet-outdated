@@ -624,6 +624,30 @@ Information(""Outdated Sdk"");")
         }
 
         [Fact]
+        public void Discover_FileBasedApp_LaterPropertyDefinitionWinsWithinFile()
+        {
+            var appPath = XFS.Path(@"c:\repo\cake.cs");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                {
+                    appPath, new MockFileData(@"#:property SdkVersion=6.0.0
+#:property SdkVersion=6.2.0
+#:sdk Cake.Sdk@$(SdkVersion)
+Information(""Outdated Sdk"");")
+                }
+            });
+
+            var service = new VariableTrackingService(mockFileSystem);
+            var variableInfo = Assert.Contains("Cake.Sdk", service.DiscoverPackageVariables(appPath));
+
+            Assert.Equal("6.2.0", variableInfo.VariableValue);
+            Assert.Equal("SdkVersion", variableInfo.VariableName);
+
+            var reference = Assert.Single(service.DiscoverFileBasedAppReferences(appPath), r => r.VariableInfo != null);
+            Assert.Equal(new NuGetVersion("6.2.0"), reference.ResolvedVersion);
+        }
+
+        [Fact]
         public void Discover_FileBasedAppReferences_IncludesDirectSdkDirective()
         {
             var appPath = XFS.Path(@"c:\repo\cake.cs");
@@ -814,7 +838,7 @@ Information(""Outdated Sdk"");")
             var service = new VariableTrackingService(mockFileSystem);
             var variableInfo = service.DiscoverPackageVariables(appPath)["Cake.Sdk"];
 
-            Assert.True(service.UpdatePackageVariable(variableInfo, new NuGetVersion("6.2.0")));
+            Assert.True(service.TryUpdatePackageVariable(variableInfo, new NuGetVersion("6.2.0")));
 
             var content = mockFileSystem.File.ReadAllText(appPath);
             Assert.Contains("#:property SdkVersion=6.2.0", content);
@@ -838,7 +862,7 @@ Information(""Outdated Sdk"");")
             var service = new VariableTrackingService(mockFileSystem);
             var variableInfo = service.DiscoverPackageVariables(appPath)["Cake.Sdk"];
 
-            Assert.True(service.UpdatePackageVariable(variableInfo, new NuGetVersion("6.2.0")));
+            Assert.True(service.TryUpdatePackageVariable(variableInfo, new NuGetVersion("6.2.0")));
 
             var content = mockFileSystem.File.ReadAllText(appPath);
             Assert.Contains("#:sdk $(SdkId)@6.2.0", content);

@@ -35,7 +35,7 @@ namespace DotNetOutdated.Tests
             var mock = Substitute.For<IVariableTrackingService>();
             mock.DiscoverPackageVariables(default).ReturnsForAnyArgs([]);
             mock.DiscoverFileBasedAppReferences(default).ReturnsForAnyArgs([]);
-            mock.UpdatePackageVariable(default, default).ReturnsForAnyArgs(true);
+            mock.TryUpdatePackageVariable(default, default).ReturnsForAnyArgs(true);
             mock.UpdateFileBasedAppDirectReference(default, default, default, default).ReturnsForAnyArgs(true);
             return mock;
         }

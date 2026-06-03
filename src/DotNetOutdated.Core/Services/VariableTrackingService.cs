@@ -22,8 +22,15 @@ public interface IVariableTrackingService
     /// </summary>
     /// <param name="variableInfo">Information about the package variable to update</param>
     /// <param name="newVersion">The new version to set</param>
+    void UpdatePackageVariable(PackageVariableInfo variableInfo, NuGetVersion newVersion);
+
+    /// <summary>
+    /// Attempts to update a package's variable value and restore the variable reference after dotnet add package overwrites it.
+    /// </summary>
+    /// <param name="variableInfo">Information about the package variable to update</param>
+    /// <param name="newVersion">The new version to set</param>
     /// <returns><see langword="true"/> when at least one file was updated; otherwise <see langword="false"/>.</returns>
-    bool UpdatePackageVariable(PackageVariableInfo variableInfo, NuGetVersion newVersion);
+    bool TryUpdatePackageVariable(PackageVariableInfo variableInfo, NuGetVersion newVersion);
 
     /// <summary>
     /// Updates a literal <c>#:package</c> or <c>#:sdk</c> directive in a file-based app source file.
@@ -67,7 +74,10 @@ public sealed partial class VariableTrackingService : IVariableTrackingService
         _fileBasedAppScanCache.Clear();
     }
 
-    public bool UpdatePackageVariable(PackageVariableInfo variableInfo, NuGetVersion newVersion)
+    public void UpdatePackageVariable(PackageVariableInfo variableInfo, NuGetVersion newVersion) =>
+        TryUpdatePackageVariable(variableInfo, newVersion);
+
+    public bool TryUpdatePackageVariable(PackageVariableInfo variableInfo, NuGetVersion newVersion)
     {
         try
         {
@@ -631,10 +641,8 @@ public sealed partial class VariableTrackingService : IVariableTrackingService
         }
 
         var propertyName = match.Groups[1].Value;
-        if (!propertyDefinitions.ContainsKey(propertyName))
-        {
-            propertyDefinitions[propertyName] = (match.Groups[2].Value, filePath);
-        }
+        // Later #:property lines in the same file override earlier ones (MSBuild-like semantics).
+        propertyDefinitions[propertyName] = (match.Groups[2].Value, filePath);
     }
 
     private static void ScanFileBasedAppPackageLine(

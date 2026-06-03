@@ -31,7 +31,7 @@ namespace DotNetOutdated.Core.Services
             if (variableInfo?.ElementType == PackageVariableInfo.FileBasedPackageDirectiveElementType ||
                 variableInfo?.ElementType == PackageVariableInfo.FileBasedSdkDirectiveElementType)
             {
-                if (!_variableTrackingService.UpdatePackageVariable(variableInfo, version) &&
+                if (!_variableTrackingService.TryUpdatePackageVariable(variableInfo, version) &&
                     !IsFileBasedAppVariableAtRequestedVersion(variableInfo, version))
                 {
                     return FileBasedAppUpdateFailed(
