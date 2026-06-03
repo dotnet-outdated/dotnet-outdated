@@ -33,7 +33,10 @@ namespace DotNetOutdated.Core.Services
             {
                 if (!_variableTrackingService.UpdatePackageVariable(variableInfo, version))
                 {
-                    return FileBasedAppUpdateFailed(projectPath, packageName);
+                    return FileBasedAppUpdateFailed(
+                        projectPath,
+                        packageName,
+                        "Could not update the matching #:property value or #:package/#:sdk directive.");
                 }
 
                 return noRestore
@@ -52,12 +55,19 @@ namespace DotNetOutdated.Core.Services
                 {
                     if (fileBasedReference.UsesPropertyReferences)
                     {
-                        return FileBasedAppUpdateFailed(projectPath, packageName);
+                        return FileBasedAppUpdateFailed(
+                            projectPath,
+                            packageName,
+                            "Direct #:sdk updates require a literal id@version (for example #:sdk Cake.Sdk@6.0.0); " +
+                            "property references in the name or version must be changed via #:property lines.");
                     }
 
                     if (!_variableTrackingService.UpdateFileBasedAppDirectReference(projectPath, packageName, fileBasedReference.Kind, version))
                     {
-                        return FileBasedAppUpdateFailed(projectPath, packageName);
+                        return FileBasedAppUpdateFailed(
+                            projectPath,
+                            packageName,
+                            $"Expected a literal #:sdk {packageName}@<version> directive (id match is case-insensitive; trailing comments are preserved).");
                     }
 
                     return noRestore
@@ -184,10 +194,10 @@ namespace DotNetOutdated.Core.Services
             return false;
         }
 
-        private static RunStatus FileBasedAppUpdateFailed(string projectPath, string packageName) =>
+        private static RunStatus FileBasedAppUpdateFailed(string projectPath, string packageName, string hint) =>
             new(
                 string.Empty,
-                $"Failed to update file-based app '{projectPath}' for '{packageName}'. No matching directive was changed.",
+                $"Failed to update file-based app '{projectPath}' for '{packageName}'. {hint}",
                 1);
     }
 }

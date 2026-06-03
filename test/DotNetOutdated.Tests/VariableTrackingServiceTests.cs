@@ -642,6 +642,36 @@ Information(""Outdated Sdk"");")
             Assert.Equal(new NuGetVersion("6.0.0"), result.ResolvedVersion);
             Assert.Equal(FileBasedAppReferenceKind.Sdk, result.Kind);
             Assert.Null(result.VariableInfo);
+            Assert.Equal(result.ResolvedVersion, result.VersionRange.MinVersion);
+            Assert.Equal(result.ResolvedVersion, result.VersionRange.MaxVersion);
+            Assert.True(result.VersionRange.IsMinInclusive);
+            Assert.True(result.VersionRange.IsMaxInclusive);
+        }
+
+        [Fact]
+        public void Discover_FileBasedApp_SdkBeforePropertyDefinitions_ResolvesForwardReferences()
+        {
+            var appPath = XFS.Path(@"c:\repo\cake.cs");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                {
+                    appPath, new MockFileData(@"#:sdk $(SdkId)@$(SdkVersion)
+#:property SdkId=Cake.Sdk
+#:property SdkVersion=6.0.0
+Information(""Outdated Sdk"");")
+                }
+            });
+
+            var service = new VariableTrackingService(mockFileSystem);
+            var variableInfo = Assert.Contains("Cake.Sdk", service.DiscoverPackageVariables(appPath));
+            Assert.Equal("SdkVersion", variableInfo.VariableName);
+            Assert.Equal("6.0.0", variableInfo.VariableValue);
+
+            var reference = Assert.Single(service.DiscoverFileBasedAppReferences(appPath), r => r.VariableInfo != null);
+            Assert.Equal("Cake.Sdk", reference.Name);
+            Assert.Equal(new NuGetVersion("6.0.0"), reference.ResolvedVersion);
+            Assert.Equal(reference.ResolvedVersion, reference.VersionRange.MinVersion);
+            Assert.Equal(reference.ResolvedVersion, reference.VersionRange.MaxVersion);
         }
 
         [Fact]

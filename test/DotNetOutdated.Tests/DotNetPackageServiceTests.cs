@@ -329,7 +329,7 @@ Information(""Outdated Sdk"");")
                     NameExpression = "$(SdkId)",
                     VersionExpression = "6.0.0",
                     ResolvedVersion = new NuGetVersion("6.0.0"),
-                    VersionRange = new VersionRange(new NuGetVersion("6.0.0"))
+                    VersionRange = FileBasedAppReferenceHelper.CreateExactVersionRange(new NuGetVersion("6.0.0"))
                 }
             ]);
 
@@ -338,6 +338,8 @@ Information(""Outdated Sdk"");")
             var result = service.AddPackage(appPath, "Cake.Sdk", "net10.0", new NuGetVersion("6.2.0"), noRestore: true);
 
             Assert.False(result.IsSuccess);
+            Assert.Contains("literal #:sdk Cake.Sdk@<version>", result.Output);
+            Assert.Contains("#:property", result.Output);
             dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
             variableTracking.DidNotReceive().UpdateFileBasedAppDirectReference(
                 Arg.Any<string>(),

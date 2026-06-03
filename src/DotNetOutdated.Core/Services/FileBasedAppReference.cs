@@ -1,5 +1,7 @@
 using NuGet.Versioning;
 
+#nullable enable
+
 namespace DotNetOutdated.Core.Services;
 
 /// <summary>
@@ -15,12 +17,12 @@ public sealed class FileBasedAppReference
     /// <summary>
     /// Gets the resolved semantic version from the source file.
     /// </summary>
-    public NuGetVersion ResolvedVersion { get; init; }
+    public required NuGetVersion ResolvedVersion { get; init; }
 
     /// <summary>
-    /// Gets the version range used when resolving the latest version on NuGet feeds.
+    /// Gets the exact version range used when resolving the latest version on NuGet feeds.
     /// </summary>
-    public VersionRange VersionRange { get; init; }
+    public required VersionRange VersionRange { get; init; }
 
     /// <summary>
     /// Gets whether the reference came from a <c>#:package</c> or <c>#:sdk</c> directive.
@@ -40,7 +42,7 @@ public sealed class FileBasedAppReference
     /// <summary>
     /// Gets variable-tracking metadata when the directive uses a <c>#:property</c>-backed version; otherwise <see langword="null"/>.
     /// </summary>
-    public PackageVariableInfo VariableInfo { get; init; }
+    public PackageVariableInfo? VariableInfo { get; init; }
 
     /// <summary>
     /// Gets whether either directive expression contains an MSBuild property reference such as <c>$(PropertyName)</c>.
@@ -66,6 +68,12 @@ internal static class FileBasedAppReferenceHelper
     /// </summary>
     public static bool ExpressionContainsPropertyReference(string expression) =>
         !string.IsNullOrEmpty(expression) && expression.Contains("$(");
+
+    /// <summary>
+    /// Creates an exact inclusive version range for a pinned directive version.
+    /// </summary>
+    public static VersionRange CreateExactVersionRange(NuGetVersion version) =>
+        new(version, includeMinVersion: true, maxVersion: version, includeMaxVersion: true);
 }
 
 /// <summary>

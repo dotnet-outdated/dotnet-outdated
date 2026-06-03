@@ -224,7 +224,7 @@ public sealed partial class VariableTrackingService : IVariableTrackingService
             {
                 Name = variableInfo.PackageName,
                 ResolvedVersion = resolvedVersion,
-                VersionRange = new VersionRange(resolvedVersion),
+                VersionRange = FileBasedAppReferenceHelper.CreateExactVersionRange(resolvedVersion),
                 Kind = variableInfo.ElementType == PackageVariableInfo.FileBasedSdkDirectiveElementType
                     ? FileBasedAppReferenceKind.Sdk
                     : FileBasedAppReferenceKind.Package,
@@ -539,10 +539,14 @@ public sealed partial class VariableTrackingService : IVariableTrackingService
             directory = directory.Parent;
         }
 
-        foreach (var line in _fileSystem.File.ReadLines(projectFilePath))
+        var lines = _fileSystem.File.ReadLines(projectFilePath).ToList();
+        foreach (var line in lines)
         {
             CollectFileBasedAppPropertyFromLine(line, projectFilePath, propertyDefinitions);
+        }
 
+        foreach (var line in lines)
+        {
             var packageMatch = PackageDirectiveLineRegex().Match(line);
             if (packageMatch.Success)
             {
@@ -608,7 +612,7 @@ public sealed partial class VariableTrackingService : IVariableTrackingService
         Dictionary<string, (string Value, string FilePath)> propertyDefinitions)
     {
         using var reader = new StringReader(content);
-        string? line;
+        string line;
         while ((line = reader.ReadLine()) != null)
         {
             CollectFileBasedAppPropertyFromLine(line, filePath, propertyDefinitions);
@@ -788,7 +792,7 @@ public sealed partial class VariableTrackingService : IVariableTrackingService
         PackageVariableInfo variableInfo,
         out FileBasedAppReference reference)
     {
-        reference = null;
+        reference = null!;
         if (!TryParsePackageDirective(directive, out var nameExpression, out var versionExpression) ||
             !TryResolveProperties(nameExpression, propertyDefinitions, out var name) ||
             !TryResolveProperties(versionExpression, propertyDefinitions, out var versionString) ||
@@ -801,7 +805,7 @@ public sealed partial class VariableTrackingService : IVariableTrackingService
         {
             Name = name,
             ResolvedVersion = resolvedVersion,
-            VersionRange = new VersionRange(resolvedVersion),
+            VersionRange = FileBasedAppReferenceHelper.CreateExactVersionRange(resolvedVersion),
             Kind = kind,
             NameExpression = nameExpression,
             VersionExpression = versionExpression,
