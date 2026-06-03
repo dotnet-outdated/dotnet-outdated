@@ -112,6 +112,8 @@ Lastly, you can specify the path to a solution (`.sln` or `.slnx`), project (`.c
 
 When `--recursive --include-file-based-apps` is used, **dotnet-outdated** also discovers loose `.cs` file-based apps that start with a shebang (`#!`). `.cs` files under a `.csproj` directory tree are ignored during recursive file-based app discovery.
 
+File-based apps can declare NuGet packages with `#:package` and MSBuild SDK packages with `#:sdk` (for example `#:sdk Cake.Sdk@6.0.0`). Variable-backed versions use `#:property` the same way as for packages.
+
 ## Upgrading packages
 
 **dotnet-outdated** can automatically attempt to upgrade any outdated packages to the latest version by passing the `-u|--upgrade` option. You can let **dotnet-outdated** prompt you for each outdated package by using the `-u:prompt` option.
@@ -242,7 +244,7 @@ Add the following to your `.vscode/mcp.json`:
 
 ### Why are unrelated changes made to .csproj files when running with `-u`?
 
-`dotnet-outdated` does not make changes to .csproj files directly. Instead, it runs `dotnet add package` to update packages, so that command is responsible for those changes. For file-based apps that use variable-backed `#:package` directives, `dotnet-outdated` updates the referenced `#:property` value directly so the variable reference is preserved. To track issues related to the .NET CLI command, head over to the [.NET CLI repo](https://github.com/dotnet/cli)
+`dotnet-outdated` does not make changes to .csproj files directly. Instead, it runs `dotnet add package` to update packages, so that command is responsible for those changes. For file-based apps that use variable-backed `#:package` or `#:sdk` directives, `dotnet-outdated` updates the referenced `#:property` value directly so the variable reference is preserved. Literal `#:package` and `#:sdk` directives are updated in the `.cs` source file. To track issues related to the .NET CLI command, head over to the [.NET SDK repo](https://github.com/dotnet/sdk)
 
 ### Why I am getting an error about required library hostfxr.dll/libhostfxr.so/libhostfxr.dylib not found?
 

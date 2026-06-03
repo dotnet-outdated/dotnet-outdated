@@ -4,6 +4,7 @@ using NuGet.Common;
 using NuGet.Packaging.Core;
 using NuGet.ProjectModel;
 using NuGet.Protocol;
+using NuGet.Versioning;
 using System;
 using System.Collections.Generic;
 using System.IO.Abstractions;
@@ -17,18 +18,29 @@ namespace DotNetOutdated.Core.Services
         private readonly IDependencyGraphService _dependencyGraphService;
         private readonly IDotNetRestoreService _dotNetRestoreService;
         private readonly IFileSystem _fileSystem;
+        private readonly IVariableTrackingService _variableTrackingService;
         private readonly ILogger _logger;
 
-        public ProjectAnalysisService(IDependencyGraphService dependencyGraphService, IDotNetRestoreService dotNetRestoreService, IFileSystem fileSystem)
-            : this(dependencyGraphService, dotNetRestoreService, fileSystem, NullLogger.Instance)
+        public ProjectAnalysisService(
+            IDependencyGraphService dependencyGraphService,
+            IDotNetRestoreService dotNetRestoreService,
+            IFileSystem fileSystem,
+            IVariableTrackingService variableTrackingService)
+            : this(dependencyGraphService, dotNetRestoreService, fileSystem, variableTrackingService, NullLogger.Instance)
         {
         }
 
-        public ProjectAnalysisService(IDependencyGraphService dependencyGraphService, IDotNetRestoreService dotNetRestoreService, IFileSystem fileSystem, ILogger logger)
+        public ProjectAnalysisService(
+            IDependencyGraphService dependencyGraphService,
+            IDotNetRestoreService dotNetRestoreService,
+            IFileSystem fileSystem,
+            IVariableTrackingService variableTrackingService,
+            ILogger logger)
         {
             _dependencyGraphService = dependencyGraphService;
             _dotNetRestoreService = dotNetRestoreService;
             _fileSystem = fileSystem;
+            _variableTrackingService = variableTrackingService;
             _logger = logger;
         }
 
@@ -94,11 +106,51 @@ namespace DotNetOutdated.Core.Services
                             if (includeTransitiveDependencies)
                                 AddDependencies(targetFramework, projectLibrary, target, 1, transitiveDepth);
                         }
+
+                        if (isFileBasedApp)
+                        {
+                            ApplyFileBasedAppDirectives(projectPath, targetFramework);
+                        }
                     }
                 }
             }
 
             return projects;
+        }
+
+        private void ApplyFileBasedAppDirectives(string projectPath, TargetFramework targetFramework)
+        {
+            var fileBasedReferences = _variableTrackingService.DiscoverFileBasedAppReferences(projectPath);
+            if (fileBasedReferences.Count == 0)
+            {
+                return;
+            }
+
+            var authoritativeNames = new HashSet<string>(
+                fileBasedReferences.Select(reference => reference.Name),
+                StringComparer.OrdinalIgnoreCase);
+
+            var graphOnlyDependencies = targetFramework.Dependencies
+                .Where(pair => !pair.Value.IsTransitive)
+                .Select(pair => pair.Key)
+                .Where(name => !authoritativeNames.Contains(name))
+                .ToList();
+
+            foreach (var dependencyName in graphOnlyDependencies)
+            {
+                targetFramework.Dependencies.Remove(dependencyName);
+            }
+
+            foreach (var reference in fileBasedReferences)
+            {
+                targetFramework.Dependencies[reference.Name] = new Dependency(
+                    reference.Name,
+                    reference.VersionRange,
+                    reference.ResolvedVersion,
+                    isAutoReferenced: false,
+                    isTransitive: false,
+                    isDevelopmentDependency: false);
+            }
         }
 
         private void AddDependencies(TargetFramework targetFramework, LockFileTargetLibrary parentLibrary, LockFileTarget target, int level, int transitiveDepth)

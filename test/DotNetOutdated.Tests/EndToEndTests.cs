@@ -127,6 +127,56 @@ public static class EndToEndTests
         Assert.DoesNotContain("#:package Newtonsoft.Json@11.0.1", content);
     }
 
+    [RequiresFileBasedAppSdk]
+    public static void Can_Analyze_File_Based_App_With_Sdk_Directive()
+    {
+        using var project = TestSetup("file-based-app-sdk");
+
+        var appPath = Path.Combine(project.Path, "app.cs");
+        var outputPath = Path.Combine(project.Path, "output.json");
+
+        var actual = Program.Main([appPath, "--output", outputPath, "--output-format:json"]);
+        Assert.Equal(0, actual);
+
+        using var output = JsonDocument.Parse(File.ReadAllText(outputPath));
+        var analyzedProject = Assert.Single(output.RootElement.GetProperty("Projects").EnumerateArray());
+
+        Assert.Equal("app.cs", analyzedProject.GetProperty("Name").GetString());
+        Assert.Equal(Path.GetFullPath(appPath), analyzedProject.GetProperty("FilePath").GetString());
+
+        var dependencies = analyzedProject
+            .GetProperty("TargetFrameworks")
+            .EnumerateArray()
+            .SelectMany(targetFramework => targetFramework.GetProperty("Dependencies").EnumerateArray())
+            .ToList();
+
+        Assert.Contains(dependencies, dependency => dependency.GetProperty("Name").GetString() == "Cake.Sdk");
+        Assert.DoesNotContain(dependencies, dependency => dependency.GetProperty("Name").GetString() == "Cake.Generator");
+
+        var analyzedSdk = Assert.Single(dependencies, dependency => dependency.GetProperty("Name").GetString() == "Cake.Sdk");
+
+        Assert.Equal("6.0.0", analyzedSdk.GetProperty("ResolvedVersion").GetString());
+        Assert.False(string.IsNullOrWhiteSpace(analyzedSdk.GetProperty("LatestVersion").GetString()));
+        Assert.NotEqual("6.0.0", analyzedSdk.GetProperty("LatestVersion").GetString());
+    }
+
+    [RequiresFileBasedAppSdk]
+    public static void Can_Upgrade_File_Based_App_With_Sdk_Directive()
+    {
+        using var project = TestSetup("file-based-app-sdk");
+
+        var appPath = Path.Combine(project.Path, "app.cs");
+
+        var actual = Program.Main([appPath, "--upgrade", "--no-restore"]);
+        Assert.Equal(0, actual);
+
+        var content = File.ReadAllText(appPath);
+
+        Assert.Contains("#:sdk Cake.Sdk@", content);
+        Assert.DoesNotContain("#:sdk Cake.Sdk@6.0.0", content);
+        Assert.DoesNotContain("Cake.Generator", content);
+    }
+
     [Fact]
     public static void Can_Upgrade_Project_With_Maximum_Version()
     {

@@ -22,7 +22,19 @@ public interface IVariableTrackingService
     /// </summary>
     /// <param name="variableInfo">Information about the package variable to update</param>
     /// <param name="newVersion">The new version to set</param>
-    void UpdatePackageVariable(PackageVariableInfo variableInfo, NuGetVersion newVersion);
+    /// <returns><see langword="true"/> when at least one file was updated; otherwise <see langword="false"/>.</returns>
+    bool UpdatePackageVariable(PackageVariableInfo variableInfo, NuGetVersion newVersion);
+
+    /// <summary>
+    /// Updates a literal <c>#:package</c> or <c>#:sdk</c> directive in a file-based app source file.
+    /// </summary>
+    /// <returns><see langword="true"/> when the directive line was updated; otherwise <see langword="false"/>.</returns>
+    bool UpdateFileBasedAppDirectReference(string projectFilePath, string name, FileBasedAppReferenceKind kind, NuGetVersion newVersion);
+
+    /// <summary>
+    /// Discovers <c>#:package</c> and <c>#:sdk</c> references declared in a file-based app, including literal and variable-backed versions.
+    /// </summary>
+    IReadOnlyList<FileBasedAppReference> DiscoverFileBasedAppReferences(string projectFilePath);
 
     /// <summary>
     /// Clears the internal cache. Useful for testing or when you know files have changed.
@@ -34,7 +46,7 @@ public interface IVariableTrackingService
 // and restores those variable references after dotnet add package overwrites them with literals.
 // Uses a hybrid approach: XDocument to locate values, regex to update files while preserving formatting.
 // Limitations: no second-order variable resolution, no conditional property handling.
-public sealed class VariableTrackingService : IVariableTrackingService
+public sealed partial class VariableTrackingService : IVariableTrackingService
 {
     private readonly IFileSystem _fileSystem;
     private readonly Action<string> _onWarning;
@@ -52,16 +64,33 @@ public sealed class VariableTrackingService : IVariableTrackingService
         _cache.Clear();
     }
 
-    public void UpdatePackageVariable(PackageVariableInfo variableInfo, NuGetVersion newVersion)
+    public bool UpdatePackageVariable(PackageVariableInfo variableInfo, NuGetVersion newVersion)
     {
         try
         {
             if (variableInfo.ElementType == PackageVariableInfo.FileBasedPackageDirectiveElementType)
             {
-                UpdateFileBasedAppPackageVariable(variableInfo, newVersion);
-                InvalidateCache(variableInfo.FilePath, variableInfo.PackageReferenceFilePath);
-                return;
+                var updated = UpdateFileBasedAppPackageVariable(variableInfo, newVersion);
+                if (updated)
+                {
+                    InvalidateCache(variableInfo.FilePath, variableInfo.PackageReferenceFilePath);
+                }
+
+                return updated;
             }
+
+            if (variableInfo.ElementType == PackageVariableInfo.FileBasedSdkDirectiveElementType)
+            {
+                var updated = UpdateFileBasedAppSdkVariable(variableInfo, newVersion);
+                if (updated)
+                {
+                    InvalidateCache(variableInfo.FilePath, variableInfo.PackageReferenceFilePath);
+                }
+
+                return updated;
+            }
+
+            var msbuildUpdated = false;
 
             // Step 1: Update the property value in the file where it's defined
             string propertyFilePath = variableInfo.FilePath;
@@ -80,8 +109,12 @@ public sealed class VariableTrackingService : IVariableTrackingService
                     string oldValue = propertyElement.Value;
                     string pattern = $@"<{Regex.Escape(variableInfo.VariableName)}>{Regex.Escape(oldValue)}</{Regex.Escape(variableInfo.VariableName)}>";
                     string replacement = $"<{variableInfo.VariableName}>{newVersion}</{variableInfo.VariableName}>";
-                    propertyContent = Regex.Replace(propertyContent, pattern, replacement);
-                    _fileSystem.File.WriteAllText(propertyFilePath, propertyContent);
+                    var newPropertyContent = Regex.Replace(propertyContent, pattern, replacement);
+                    if (!string.Equals(propertyContent, newPropertyContent, StringComparison.Ordinal))
+                    {
+                        _fileSystem.File.WriteAllText(propertyFilePath, newPropertyContent);
+                        msbuildUpdated = true;
+                    }
                 }
             }
 
@@ -114,30 +147,131 @@ public sealed class VariableTrackingService : IVariableTrackingService
                 }
 
                 _fileSystem.File.WriteAllText(packageRefFilePath, packageRefContent);
+                msbuildUpdated = true;
             }
 
-            InvalidateCache(propertyFilePath, packageRefFilePath);
+            if (msbuildUpdated)
+            {
+                InvalidateCache(propertyFilePath, packageRefFilePath);
+            }
+
+            return msbuildUpdated;
         }
         catch (Exception ex)
         {
             _onWarning?.Invoke($"Failed to preserve variable reference for '{variableInfo.PackageName}': {ex.Message}");
+            return false;
         }
     }
 
-    private void UpdateFileBasedAppPackageVariable(PackageVariableInfo variableInfo, NuGetVersion newVersion)
+    public bool UpdateFileBasedAppDirectReference(string projectFilePath, string name, FileBasedAppReferenceKind kind, NuGetVersion newVersion)
     {
-        if (_fileSystem.File.Exists(variableInfo.FilePath))
+        if (!projectFilePath.IsCSharpFile() || !_fileSystem.File.Exists(projectFilePath))
+        {
+            return false;
+        }
+
+        var directiveName = kind == FileBasedAppReferenceKind.Sdk ? "sdk" : "package";
+        var content = _fileSystem.File.ReadAllText(projectFilePath);
+        var updatedContent = Regex.Replace(
+            content,
+            $@"(^[ \t]*#:[ \t]*{directiveName}[ \t]+){Regex.Escape(name)}@[^\r\n]*(\r?\n|$)",
+            match => $"{match.Groups[1].Value}{name}@{newVersion}{match.Groups[2].Value}",
+            RegexOptions.Multiline | RegexOptions.IgnoreCase);
+
+        if (string.Equals(content, updatedContent, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        _fileSystem.File.WriteAllText(projectFilePath, updatedContent);
+        InvalidateCache(projectFilePath, projectFilePath);
+        return true;
+    }
+
+    public IReadOnlyList<FileBasedAppReference> DiscoverFileBasedAppReferences(string projectFilePath)
+    {
+        var references = new List<FileBasedAppReference>();
+        if (!projectFilePath.IsCSharpFile() || !_fileSystem.File.Exists(projectFilePath))
+        {
+            return references;
+        }
+
+        var propertyDefinitions = new Dictionary<string, (string Value, string FilePath)>(StringComparer.OrdinalIgnoreCase);
+        CollectFileBasedAppPropertyDefinitions(projectFilePath, propertyDefinitions);
+
+        foreach (var line in _fileSystem.File.ReadLines(projectFilePath))
+        {
+            var packageMatch = PackageDirectiveLineRegex().Match(line);
+            if (packageMatch.Success &&
+                TryCreateFileBasedAppReference(packageMatch.Groups[1].Value, propertyDefinitions, FileBasedAppReferenceKind.Package, null, out var packageReference))
+            {
+                references.Add(packageReference);
+                continue;
+            }
+
+            var sdkMatch = SdkDirectiveLineRegex().Match(line);
+            if (sdkMatch.Success &&
+                TryCreateFileBasedAppReference(sdkMatch.Groups[1].Value, propertyDefinitions, FileBasedAppReferenceKind.Sdk, null, out var sdkReference))
+            {
+                references.Add(sdkReference);
+            }
+        }
+
+        foreach (var variableInfo in DiscoverPackageVariables(projectFilePath).Values)
+        {
+            if (variableInfo.ElementType != PackageVariableInfo.FileBasedPackageDirectiveElementType &&
+                variableInfo.ElementType != PackageVariableInfo.FileBasedSdkDirectiveElementType)
+            {
+                continue;
+            }
+
+            if (!NuGetVersion.TryParse(variableInfo.VariableValue, out var resolvedVersion))
+            {
+                continue;
+            }
+
+            references.Add(new FileBasedAppReference
+            {
+                Name = variableInfo.PackageName,
+                ResolvedVersion = resolvedVersion,
+                VersionRange = new VersionRange(resolvedVersion),
+                Kind = variableInfo.ElementType == PackageVariableInfo.FileBasedSdkDirectiveElementType
+                    ? FileBasedAppReferenceKind.Sdk
+                    : FileBasedAppReferenceKind.Package,
+                NameExpression = variableInfo.PackageReferenceName,
+                VersionExpression = variableInfo.PackageReferenceVersion,
+                VariableInfo = variableInfo
+            });
+        }
+
+        return [
+            .. references
+                .GroupBy(reference => reference.Name, StringComparer.OrdinalIgnoreCase)
+                .Select(group => group.FirstOrDefault(reference => reference.VariableInfo != null) ?? group.First())
+        ];
+    }
+
+    private bool UpdateFileBasedAppSdkVariable(PackageVariableInfo variableInfo, NuGetVersion newVersion)
+    {
+        var updated = false;
+
+        if (_fileSystem.File.Exists(variableInfo.FilePath) && !string.IsNullOrEmpty(variableInfo.VariableName))
         {
             if (variableInfo.FilePath.IsCSharpFile())
             {
                 var propertyContent = _fileSystem.File.ReadAllText(variableInfo.FilePath);
                 var propertyPattern = $@"(^[ \t]*#:[ \t]*property[ \t]+{Regex.Escape(variableInfo.VariableName)}[ \t]*=[ \t]*)([^\r\n]*)(\r?\n|$)";
-                propertyContent = Regex.Replace(
+                var newPropertyContent = Regex.Replace(
                     propertyContent,
                     propertyPattern,
                     match => match.Groups[1].Value + newVersion + match.Groups[3].Value,
                     RegexOptions.Multiline);
-                _fileSystem.File.WriteAllText(variableInfo.FilePath, propertyContent);
+                if (!string.Equals(propertyContent, newPropertyContent, StringComparison.Ordinal))
+                {
+                    _fileSystem.File.WriteAllText(variableInfo.FilePath, newPropertyContent);
+                    updated = true;
+                }
             }
             else
             {
@@ -152,8 +286,91 @@ public sealed class VariableTrackingService : IVariableTrackingService
                     string oldValue = propertyElement.Value;
                     string pattern = $@"<{Regex.Escape(variableInfo.VariableName)}>{Regex.Escape(oldValue)}</{Regex.Escape(variableInfo.VariableName)}>";
                     string replacement = $"<{variableInfo.VariableName}>{newVersion}</{variableInfo.VariableName}>";
-                    propertyContent = Regex.Replace(propertyContent, pattern, replacement);
-                    _fileSystem.File.WriteAllText(variableInfo.FilePath, propertyContent);
+                    var newPropertyContent = Regex.Replace(propertyContent, pattern, replacement);
+                    if (!string.Equals(propertyContent, newPropertyContent, StringComparison.Ordinal))
+                    {
+                        _fileSystem.File.WriteAllText(variableInfo.FilePath, newPropertyContent);
+                        updated = true;
+                    }
+                }
+            }
+        }
+
+        if (_fileSystem.File.Exists(variableInfo.PackageReferenceFilePath) && variableInfo.PackageReferenceFilePath.IsCSharpFile())
+        {
+            var sdkContent = _fileSystem.File.ReadAllText(variableInfo.PackageReferenceFilePath);
+            var propertyDefinitions = new Dictionary<string, (string Value, string FilePath)>(StringComparer.OrdinalIgnoreCase);
+            CollectFileBasedAppPropertyDefinitions(variableInfo.PackageReferenceFilePath, propertyDefinitions);
+            var directiveVersion = FileBasedAppReferenceHelper.ExpressionContainsPropertyReference(variableInfo.PackageReferenceVersion)
+                ? variableInfo.PackageReferenceVersion
+                : newVersion.ToString();
+
+            var newSdkContent = SdkDirectiveReplaceRegex().Replace(
+                sdkContent,
+                match =>
+                {
+                    var sdkDirective = match.Groups[2].Value;
+                    if (!TryParsePackageDirective(sdkDirective, out var sdkExpression, out _) ||
+                        (!string.Equals(sdkExpression, variableInfo.PackageReferenceName, StringComparison.OrdinalIgnoreCase) &&
+                         (!TryResolveProperties(sdkExpression, propertyDefinitions, out var sdkName) ||
+                          !string.Equals(sdkName, variableInfo.PackageName, StringComparison.OrdinalIgnoreCase))))
+                    {
+                        return match.Value;
+                    }
+
+                    return match.Groups[1].Value + variableInfo.PackageReferenceName + "@" + directiveVersion + match.Groups[3].Value;
+                });
+
+            if (!string.Equals(sdkContent, newSdkContent, StringComparison.Ordinal))
+            {
+                _fileSystem.File.WriteAllText(variableInfo.PackageReferenceFilePath, newSdkContent);
+                updated = true;
+            }
+        }
+
+        return updated;
+    }
+
+    private bool UpdateFileBasedAppPackageVariable(PackageVariableInfo variableInfo, NuGetVersion newVersion)
+    {
+        var updated = false;
+
+        if (_fileSystem.File.Exists(variableInfo.FilePath))
+        {
+            if (variableInfo.FilePath.IsCSharpFile())
+            {
+                var propertyContent = _fileSystem.File.ReadAllText(variableInfo.FilePath);
+                var propertyPattern = $@"(^[ \t]*#:[ \t]*property[ \t]+{Regex.Escape(variableInfo.VariableName)}[ \t]*=[ \t]*)([^\r\n]*)(\r?\n|$)";
+                var newPropertyContent = Regex.Replace(
+                    propertyContent,
+                    propertyPattern,
+                    match => match.Groups[1].Value + newVersion + match.Groups[3].Value,
+                    RegexOptions.Multiline);
+                if (!string.Equals(propertyContent, newPropertyContent, StringComparison.Ordinal))
+                {
+                    _fileSystem.File.WriteAllText(variableInfo.FilePath, newPropertyContent);
+                    updated = true;
+                }
+            }
+            else
+            {
+                var propertyContent = _fileSystem.File.ReadAllText(variableInfo.FilePath);
+                var propertyDoc = XDocument.Parse(propertyContent);
+                var propertyElement = propertyDoc.Descendants()
+                    .FirstOrDefault(e => e.Name.LocalName == variableInfo.VariableName &&
+                                         e.Parent?.Name.LocalName == "PropertyGroup");
+
+                if (propertyElement != null)
+                {
+                    string oldValue = propertyElement.Value;
+                    string pattern = $@"<{Regex.Escape(variableInfo.VariableName)}>{Regex.Escape(oldValue)}</{Regex.Escape(variableInfo.VariableName)}>";
+                    string replacement = $"<{variableInfo.VariableName}>{newVersion}</{variableInfo.VariableName}>";
+                    var newPropertyContent = Regex.Replace(propertyContent, pattern, replacement);
+                    if (!string.Equals(propertyContent, newPropertyContent, StringComparison.Ordinal))
+                    {
+                        _fileSystem.File.WriteAllText(variableInfo.FilePath, newPropertyContent);
+                        updated = true;
+                    }
                 }
             }
         }
@@ -163,10 +380,12 @@ public sealed class VariableTrackingService : IVariableTrackingService
             var packageContent = _fileSystem.File.ReadAllText(variableInfo.PackageReferenceFilePath);
             var propertyDefinitions = new Dictionary<string, (string Value, string FilePath)>(StringComparer.OrdinalIgnoreCase);
             CollectFileBasedAppPropertyDefinitions(variableInfo.PackageReferenceFilePath, propertyDefinitions);
+            var directiveVersion = FileBasedAppReferenceHelper.ExpressionContainsPropertyReference(variableInfo.PackageReferenceVersion)
+                ? variableInfo.PackageReferenceVersion
+                : newVersion.ToString();
 
-            packageContent = Regex.Replace(
+            var newPackageContent = PackageDirectiveReplaceRegex().Replace(
                 packageContent,
-                @"(^[ \t]*#:[ \t]*package[ \t]+)([^\r\n]*)(\r?\n|$)",
                 match =>
                 {
                     var packageDirective = match.Groups[2].Value;
@@ -178,12 +397,17 @@ public sealed class VariableTrackingService : IVariableTrackingService
                         return match.Value;
                     }
 
-                    return match.Groups[1].Value + variableInfo.PackageReferenceName + "@" + variableInfo.PackageReferenceVersion + match.Groups[3].Value;
-                },
-                RegexOptions.Multiline);
+                    return match.Groups[1].Value + variableInfo.PackageReferenceName + "@" + directiveVersion + match.Groups[3].Value;
+                });
 
-            _fileSystem.File.WriteAllText(variableInfo.PackageReferenceFilePath, packageContent);
+            if (!string.Equals(packageContent, newPackageContent, StringComparison.Ordinal))
+            {
+                _fileSystem.File.WriteAllText(variableInfo.PackageReferenceFilePath, newPackageContent);
+                updated = true;
+            }
         }
+
+        return updated;
     }
 
     private void InvalidateCache(string propertyFilePath, string packageRefFilePath)
@@ -266,6 +490,7 @@ public sealed class VariableTrackingService : IVariableTrackingService
         if (isFileBasedApp)
         {
             ScanFileBasedAppForVariables(projectFilePath, result, propertyDefinitions);
+            ScanFileBasedAppForSdkVariables(projectFilePath, result, propertyDefinitions);
         }
 
         // Now scan all files for package references that use variables
@@ -313,7 +538,7 @@ public sealed class VariableTrackingService : IVariableTrackingService
     {
         foreach (var line in _fileSystem.File.ReadLines(filePath))
         {
-            var match = Regex.Match(line, @"^[ \t]*#:[ \t]*property[ \t]+([^=\s]+)[ \t]*=[ \t]*(.*?)\s*$");
+            var match = PropertyDirectiveLineRegex().Match(line);
             if (!match.Success)
             {
                 continue;
@@ -350,7 +575,7 @@ public sealed class VariableTrackingService : IVariableTrackingService
                     continue;
 
                 // Check if version uses a variable reference like $(VariableName)
-                var match = Regex.Match(versionValue, @"\$\(([^)]+)\)");
+                var match = MsBuildPropertyReferenceRegex().Match(versionValue);
                 if (match.Success)
                 {
                     string variableName = match.Groups[1].Value;
@@ -381,7 +606,7 @@ public sealed class VariableTrackingService : IVariableTrackingService
     {
         foreach (var line in _fileSystem.File.ReadLines(filePath))
         {
-            var match = Regex.Match(line, @"^[ \t]*#:[ \t]*package[ \t]+(.+?)\s*$");
+            var match = PackageDirectiveLineRegex().Match(line);
             if (!match.Success)
             {
                 continue;
@@ -394,7 +619,7 @@ public sealed class VariableTrackingService : IVariableTrackingService
                 continue;
             }
 
-            var versionMatch = Regex.Match(versionExpression, @"\$\(([^)]+)\)");
+            var versionMatch = MsBuildPropertyReferenceRegex().Match(versionExpression);
             if (!versionMatch.Success)
             {
                 continue;
@@ -418,6 +643,92 @@ public sealed class VariableTrackingService : IVariableTrackingService
         }
     }
 
+    private void ScanFileBasedAppForSdkVariables(string filePath, Dictionary<string, PackageVariableInfo> result, Dictionary<string, (string Value, string FilePath)> propertyDefinitions)
+    {
+        foreach (var line in _fileSystem.File.ReadLines(filePath))
+        {
+            var match = SdkDirectiveLineRegex().Match(line);
+            if (!match.Success)
+            {
+                continue;
+            }
+
+            if (!TryParsePackageDirective(match.Groups[1].Value, out var sdkExpression, out var versionExpression) ||
+                !TryResolveProperties(sdkExpression, propertyDefinitions, out var sdkName) ||
+                result.ContainsKey(sdkName))
+            {
+                continue;
+            }
+
+            var versionMatch = MsBuildPropertyReferenceRegex().Match(versionExpression);
+            if (versionMatch.Success)
+            {
+                string variableName = versionMatch.Groups[1].Value;
+                if (propertyDefinitions.TryGetValue(variableName, out var propertyInfo))
+                {
+                    result[sdkName] = new PackageVariableInfo
+                    {
+                        PackageName = sdkName,
+                        VariableName = variableName,
+                        VariableValue = propertyInfo.Value,
+                        FilePath = propertyInfo.FilePath,
+                        PackageReferenceFilePath = filePath,
+                        ElementType = PackageVariableInfo.FileBasedSdkDirectiveElementType,
+                        PackageReferenceName = sdkExpression,
+                        PackageReferenceVersion = versionExpression
+                    };
+                }
+
+                continue;
+            }
+
+            if (FileBasedAppReferenceHelper.ExpressionContainsPropertyReference(sdkExpression) &&
+                NuGetVersion.TryParse(versionExpression, out _))
+            {
+                result[sdkName] = new PackageVariableInfo
+                {
+                    PackageName = sdkName,
+                    VariableName = string.Empty,
+                    VariableValue = versionExpression,
+                    FilePath = filePath,
+                    PackageReferenceFilePath = filePath,
+                    ElementType = PackageVariableInfo.FileBasedSdkDirectiveElementType,
+                    PackageReferenceName = sdkExpression,
+                    PackageReferenceVersion = versionExpression
+                };
+            }
+        }
+    }
+
+    private static bool TryCreateFileBasedAppReference(
+        string directive,
+        Dictionary<string, (string Value, string FilePath)> propertyDefinitions,
+        FileBasedAppReferenceKind kind,
+        PackageVariableInfo variableInfo,
+        out FileBasedAppReference reference)
+    {
+        reference = null;
+        if (!TryParsePackageDirective(directive, out var nameExpression, out var versionExpression) ||
+            !TryResolveProperties(nameExpression, propertyDefinitions, out var name) ||
+            !TryResolveProperties(versionExpression, propertyDefinitions, out var versionString) ||
+            !NuGetVersion.TryParse(versionString, out var resolvedVersion))
+        {
+            return false;
+        }
+
+        reference = new FileBasedAppReference
+        {
+            Name = name,
+            ResolvedVersion = resolvedVersion,
+            VersionRange = new VersionRange(resolvedVersion),
+            Kind = kind,
+            NameExpression = nameExpression,
+            VersionExpression = versionExpression,
+            VariableInfo = variableInfo
+        };
+        return true;
+    }
+
     private static bool TryParsePackageDirective(string directive, out string packageExpression, out string versionExpression)
     {
         var separatorIndex = directive.LastIndexOf('@');
@@ -436,7 +747,7 @@ public sealed class VariableTrackingService : IVariableTrackingService
     private static bool TryResolveProperties(string expression, Dictionary<string, (string Value, string FilePath)> propertyDefinitions, out string resolvedValue)
     {
         var unresolved = false;
-        resolvedValue = Regex.Replace(expression, @"\$\(([^)]+)\)", match =>
+        resolvedValue = MsBuildPropertyReferenceRegex().Replace(expression, match =>
         {
             if (propertyDefinitions.TryGetValue(match.Groups[1].Value, out var propertyInfo))
             {
@@ -454,6 +765,8 @@ public sealed class VariableTrackingService : IVariableTrackingService
 public class PackageVariableInfo
 {
     public const string FileBasedPackageDirectiveElementType = "FileBasedPackageDirective";
+
+    public const string FileBasedSdkDirectiveElementType = "FileBasedSdkDirective";
 
     public string PackageName { get; set; }
     public string VariableName { get; set; }

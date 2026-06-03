@@ -80,5 +80,21 @@ jobs:
 
         exit 0
 
+    - name: File-based app SDK smoke test
+      shell: pwsh
+      run: |
+        if (Get-Variable PSNativeCommandUseErrorActionPreference -ErrorAction SilentlyContinue) {
+          $PSNativeCommandUseErrorActionPreference = $false
+        }
+
+        & dotnet run --configuration Release --framework net9.0 --project src/DotNetOutdated -- test-projects/file-based-app-sdk/app.cs --fail-on-updates
+        $exitCode = $LASTEXITCODE
+
+        if ($exitCode -ne 2) {
+          throw "Expected file-based app SDK smoke test to exit with 2 because outdated SDK dependencies were found, but got $exitCode."
+        }
+
+        exit 0
+
     - name: File-based app tests
       run: dotnet test --configuration Release --framework net9.0 --filter "FullyQualifiedName~FileBasedApp|FullyQualifiedName~File_Based_App"
