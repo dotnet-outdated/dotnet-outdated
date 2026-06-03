@@ -757,6 +757,33 @@ Information(""Outdated Sdk"");")
         }
 
         [Fact]
+        public void Discover_FileBasedAppReferences_PreservesDistinctPackageAndSdkWithSameName()
+        {
+            var appPath = XFS.Path(@"c:\repo\app.cs");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                {
+                    appPath, new MockFileData(@"#:package SharedId@1.0.0
+#:sdk SharedId@2.0.0
+Console.WriteLine();")
+                }
+            });
+
+            var service = new VariableTrackingService(mockFileSystem);
+            var references = service.DiscoverFileBasedAppReferences(appPath);
+
+            Assert.Equal(2, references.Count);
+            Assert.Contains(references, reference =>
+                reference.Kind == FileBasedAppReferenceKind.Package &&
+                reference.Name == "SharedId" &&
+                reference.ResolvedVersion == new NuGetVersion("1.0.0"));
+            Assert.Contains(references, reference =>
+                reference.Kind == FileBasedAppReferenceKind.Sdk &&
+                reference.Name == "SharedId" &&
+                reference.ResolvedVersion == new NuGetVersion("2.0.0"));
+        }
+
+        [Fact]
         public void Update_FileBasedApp_VariableSdkIdAndVersion_PreservesExpressions()
         {
             var appPath = XFS.Path(@"c:\repo\cake.cs");

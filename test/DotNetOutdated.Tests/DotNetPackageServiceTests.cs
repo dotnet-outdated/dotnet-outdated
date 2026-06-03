@@ -338,8 +338,8 @@ Information(""Outdated Sdk"");")
             var result = service.AddPackage(appPath, "Cake.Sdk", "net10.0", new NuGetVersion("6.2.0"), noRestore: true);
 
             Assert.False(result.IsSuccess);
-            Assert.Contains("literal #:sdk Cake.Sdk@<version>", result.Output);
-            Assert.Contains("#:property", result.Output);
+            Assert.Contains("Direct #:sdk updates require a literal id@version", result.Errors);
+            Assert.Contains("#:property", result.Errors);
             dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
             variableTracking.DidNotReceive().UpdateFileBasedAppDirectReference(
                 Arg.Any<string>(),
@@ -371,6 +371,51 @@ Information(""Outdated Sdk"");")
             var content = mockFileSystem.File.ReadAllText(appPath);
             Assert.Contains("#:property SdkVersion=6.2.0", content);
             Assert.Contains("#:sdk $(SdkId)@$(SdkVersion)", content);
+        }
+
+        [Fact]
+        public void FileBasedAppVariableUpdate_NoOpWhenAlreadyAtVersion_ReturnsSuccess()
+        {
+            var appPath = XFS.Path(@"c:\repo\cake.cs");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                {
+                    appPath, new MockFileData(@"#:property SdkId=Cake.Sdk
+#:property SdkVersion=6.2.0
+#:sdk $(SdkId)@$(SdkVersion)
+Information(""Outdated Sdk"");")
+                }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem, new VariableTrackingService(mockFileSystem));
+
+            var result = service.AddPackage(appPath, "Cake.Sdk", "net10.0", new NuGetVersion("6.2.0"), noRestore: true);
+
+            Assert.True(result.IsSuccess);
+            dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
+            var content = mockFileSystem.File.ReadAllText(appPath);
+            Assert.Contains("#:property SdkVersion=6.2.0", content);
+        }
+
+        [Fact]
+        public void FileBasedAppDirectSdk_NoOpWhenAlreadyAtVersion_ReturnsSuccess()
+        {
+            var appPath = XFS.Path(@"c:\repo\cake.cs");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                {
+                    appPath, new MockFileData(@"#:sdk Cake.Sdk@6.2.0
+Information(""Outdated Sdk"");")
+                }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem, new VariableTrackingService(mockFileSystem));
+
+            var result = service.AddPackage(appPath, "Cake.Sdk", "net10.0", new NuGetVersion("6.2.0"), noRestore: true);
+
+            Assert.True(result.IsSuccess);
+            dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
+            Assert.Contains("#:sdk Cake.Sdk@6.2.0", mockFileSystem.File.ReadAllText(appPath));
         }
     }
 }

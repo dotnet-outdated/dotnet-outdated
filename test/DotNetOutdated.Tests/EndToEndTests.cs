@@ -10,6 +10,69 @@ using Xunit;
 
 namespace DotNetOutdated.Tests;
 
+/// <summary>
+/// Skips the test when the installed .NET SDK is older than the minimum required for file-based apps.
+/// Inherits <see cref="FactAttribute"/> so xUnit discovers and runs the test method.
+/// </summary>
+[AttributeUsage(AttributeTargets.Method)]
+public sealed class RequiresFileBasedAppSdkAttribute : FactAttribute
+{
+    private static readonly Version MinimumSdkVersion = new(10, 0, 300);
+
+    public RequiresFileBasedAppSdkAttribute()
+    {
+        if (!DotNetSdkDetector.HasSdkVersionAtLeast(MinimumSdkVersion))
+        {
+            Skip = $"Requires .NET SDK {MinimumSdkVersion} or newer.";
+        }
+    }
+}
+
+internal static class DotNetSdkDetector
+{
+    public static bool HasSdkVersionAtLeast(Version minimumVersion)
+    {
+        try
+        {
+            using var process = Process.Start(new ProcessStartInfo("dotnet", "--list-sdks")
+            {
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                UseShellExecute = false
+            });
+
+            if (process is null)
+            {
+                return false;
+            }
+
+            var output = process.StandardOutput.ReadToEnd();
+
+            if (!process.WaitForExit(milliseconds: 10_000))
+            {
+                process.Kill(entireProcessTree: true);
+                return false;
+            }
+
+            if (process.ExitCode != 0)
+            {
+                return false;
+            }
+
+            return output
+                .Split([Environment.NewLine], StringSplitOptions.RemoveEmptyEntries)
+                .Select(line => line.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault())
+                .Where(sdkVersion => !string.IsNullOrWhiteSpace(sdkVersion))
+                .Select(sdkVersion => sdkVersion!.Split('-')[0])
+                .Any(sdkVersion => Version.TryParse(sdkVersion, out var version) && version.CompareTo(minimumVersion) >= 0);
+        }
+        catch (Win32Exception)
+        {
+            return false;
+        }
+    }
+}
+
 public static class EndToEndTests
 {
     [Theory]
@@ -312,64 +375,6 @@ public static class EndToEndTests
         {
             const string Prefix = "dotnet-bumper-";
             return Directory.CreateTempSubdirectory(Prefix);
-        }
-    }
-
-    public sealed class RequiresFileBasedAppSdkAttribute : FactAttribute
-    {
-        private static readonly Version MinimumSdkVersion = new(10, 0, 300);
-
-        public RequiresFileBasedAppSdkAttribute()
-        {
-            if (!DotNetSdkDetector.HasSdkVersionAtLeast(MinimumSdkVersion))
-            {
-                Skip = $"Requires .NET SDK {MinimumSdkVersion} or newer.";
-            }
-        }
-    }
-
-    internal static class DotNetSdkDetector
-    {
-        public static bool HasSdkVersionAtLeast(Version minimumVersion)
-        {
-            try
-            {
-                using var process = Process.Start(new ProcessStartInfo("dotnet", "--list-sdks")
-                {
-                    CreateNoWindow = true,
-                    RedirectStandardOutput = true,
-                    UseShellExecute = false
-                });
-
-                if (process is null)
-                {
-                    return false;
-                }
-
-                var output = process.StandardOutput.ReadToEnd();
-
-                if (!process.WaitForExit(milliseconds: 10_000))
-                {
-                    process.Kill(entireProcessTree: true);
-                    return false;
-                }
-
-                if (process.ExitCode != 0)
-                {
-                    return false;
-                }
-
-                return output
-                    .Split([Environment.NewLine], StringSplitOptions.RemoveEmptyEntries)
-                    .Select(line => line.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault())
-                    .Where(sdkVersion => !string.IsNullOrWhiteSpace(sdkVersion))
-                    .Select(sdkVersion => sdkVersion!.Split('-')[0])
-                    .Any(sdkVersion => Version.TryParse(sdkVersion, out var version) && version.CompareTo(minimumVersion) >= 0);
-            }
-            catch (Win32Exception)
-            {
-                return false;
-            }
         }
     }
 }

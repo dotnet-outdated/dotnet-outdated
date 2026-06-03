@@ -236,7 +236,7 @@ public sealed partial class VariableTrackingService : IVariableTrackingService
 
         return [
             .. references
-                .GroupBy(reference => reference.Name, StringComparer.OrdinalIgnoreCase)
+                .GroupBy(reference => (reference.Kind, Name: reference.Name.ToUpperInvariant()))
                 .Select(group => group.FirstOrDefault(reference => reference.VariableInfo != null) ?? group.First())
         ];
     }

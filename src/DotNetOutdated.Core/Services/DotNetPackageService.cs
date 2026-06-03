@@ -31,7 +31,8 @@ namespace DotNetOutdated.Core.Services
             if (variableInfo?.ElementType == PackageVariableInfo.FileBasedPackageDirectiveElementType ||
                 variableInfo?.ElementType == PackageVariableInfo.FileBasedSdkDirectiveElementType)
             {
-                if (!_variableTrackingService.UpdatePackageVariable(variableInfo, version))
+                if (!_variableTrackingService.UpdatePackageVariable(variableInfo, version) &&
+                    !IsFileBasedAppVariableAtRequestedVersion(variableInfo, version))
                 {
                     return FileBasedAppUpdateFailed(
                         projectPath,
@@ -62,7 +63,8 @@ namespace DotNetOutdated.Core.Services
                             "property references in the name or version must be changed via #:property lines.");
                     }
 
-                    if (!_variableTrackingService.UpdateFileBasedAppDirectReference(projectPath, packageName, fileBasedReference.Kind, version))
+                    if (!_variableTrackingService.UpdateFileBasedAppDirectReference(projectPath, packageName, fileBasedReference.Kind, version) &&
+                        !IsFileBasedAppDirectReferenceAtRequestedVersion(fileBasedReference, version))
                     {
                         return FileBasedAppUpdateFailed(
                             projectPath,
@@ -199,5 +201,18 @@ namespace DotNetOutdated.Core.Services
                 string.Empty,
                 $"Failed to update file-based app '{projectPath}' for '{packageName}'. {hint}",
                 1);
+
+        private static bool IsFileBasedAppVariableAtRequestedVersion(PackageVariableInfo variableInfo, NuGetVersion version)
+        {
+            if (NuGetVersion.TryParse(variableInfo.VariableValue, out var current))
+            {
+                return current == version;
+            }
+
+            return string.Equals(variableInfo.VariableValue, version.ToString(), StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsFileBasedAppDirectReferenceAtRequestedVersion(FileBasedAppReference reference, NuGetVersion version) =>
+            reference.ResolvedVersion == version;
     }
 }
