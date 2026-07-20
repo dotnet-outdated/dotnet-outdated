@@ -103,6 +103,24 @@ namespace DotNetOutdated.Tests
         }
 
         [Fact]
+        public async Task SuccessfulRunWithoutGraphFileThrowsFriendlyValidationException()
+        {
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>());
+
+            // Arrange: MSBuild reports success but never writes the restore graph
+            // file, as happens when the solution references no projects (issue #747).
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(Arg.Any<string>(), Arg.Any<string[]>())
+                .Returns(new RunStatus(string.Empty, string.Empty, exitCode: 0));
+
+            var graphService = new DependencyGraphService(dotNetRunner, mockFileSystem);
+
+            // Act & Assert
+            var exception = await Assert.ThrowsAsync<CommandValidationException>(() => graphService.GenerateDependencyGraphAsync(_solutionPath, string.Empty));
+            Assert.Contains(_solutionPath, exception.Message, StringComparison.Ordinal);
+        }
+
+        [Fact]
         public async Task FileBasedAppGeneratesDependencyGraphWithRestoreThenBuild()
         {
             var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>());
