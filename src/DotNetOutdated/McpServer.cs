@@ -18,6 +18,16 @@ namespace DotNetOutdated
 {
     public class McpServer
     {
+        // Modern (2026-07-28+) clients declare their version per-request via _meta;
+        // legacy clients negotiate one of the legacy versions through the initialize handshake.
+        private const string ModernProtocolVersion = "2026-07-28";
+        private static readonly string[] SupportedLegacyProtocolVersions = ["2025-06-18", "2025-03-26", "2024-11-05"];
+
+        private const string ProtocolVersionMetaKey = "io.modelcontextprotocol/protocolVersion";
+        private const string ServerInfoMetaKey = "io.modelcontextprotocol/serverInfo";
+
+        private const int UnsupportedProtocolVersionErrorCode = -32022;
+
         private readonly IServiceProvider _serviceProvider;
         private readonly IProjectDiscoveryService _projectDiscoveryService;
         private readonly IProjectAnalysisService _projectAnalysisService;
@@ -74,16 +84,33 @@ namespace DotNetOutdated
         {
             try
             {
+                var requestedVersion = GetRequestedProtocolVersion(request);
+                if (requestedVersion != null && requestedVersion != ModernProtocolVersion)
+                {
+                    if (request.Id != null)
+                    {
+                        await SendErrorAsync(request.Id, UnsupportedProtocolVersionErrorCode, "Unsupported protocol version",
+                            new { supported = new[] { ModernProtocolVersion }, requested = requestedVersion });
+                    }
+                    return;
+                }
+
                 switch (request.Method)
                 {
                     case "initialize":
                         await HandleInitializeAsync(request);
+                        break;
+                    case "server/discover":
+                        await HandleServerDiscoverAsync(request);
                         break;
                     case "tools/list":
                         await HandleToolsListAsync(request);
                         break;
                     case "tools/call":
                         await HandleToolsCallAsync(request);
+                        break;
+                    case "ping":
+                        await SendResultAsync(request.Id, new { });
                         break;
                     case "notifications/initialized":
                         break;
@@ -107,18 +134,43 @@ namespace DotNetOutdated
 
         private async Task HandleInitializeAsync(JsonRpcRequest request)
         {
+            // Legacy (pre-2026-07-28) handshake: echo the requested version if we support it,
+            // otherwise offer the latest legacy version we do.
+            var negotiatedVersion = SupportedLegacyProtocolVersions[0];
+            if (request.Params is { ValueKind: JsonValueKind.Object } initParams &&
+                initParams.TryGetProperty("protocolVersion", out var versionProp) &&
+                versionProp.ValueKind == JsonValueKind.String &&
+                SupportedLegacyProtocolVersions.Contains(versionProp.GetString()))
+            {
+                negotiatedVersion = versionProp.GetString()!;
+            }
+
             var result = new
             {
-                protocolVersion = "2024-11-05",
+                protocolVersion = negotiatedVersion,
                 capabilities = new
                 {
                     tools = new { }
                 },
-                serverInfo = new
-                {
-                    name = "dotnet-outdated",
-                    version = "1.0.0"
-                }
+                serverInfo = GetServerInfo()
+            };
+
+            await SendResultAsync(request.Id, result);
+        }
+
+        private async Task HandleServerDiscoverAsync(JsonRpcRequest request)
+        {
+            var result = new Dictionary<string, object>
+            {
+                ["resultType"] = "complete",
+                ["supportedVersions"] = new[] { ModernProtocolVersion },
+                ["capabilities"] = new { tools = new { } },
+                ["instructions"] = "Analyzes .NET projects for outdated NuGet packages. " +
+                    "Use discover_projects to find projects in a directory, analyze_project to check a project for outdated packages, " +
+                    "and update_package to upgrade a package to a specific version.",
+                ["ttlMs"] = 3600000,
+                ["cacheScope"] = "public",
+                ["_meta"] = GetServerInfoMeta()
             };
 
             await SendResultAsync(request.Id, result);
@@ -178,7 +230,16 @@ namespace DotNetOutdated
                 }
             };
 
-            await SendResultAsync(request.Id, new { tools });
+            var result = new Dictionary<string, object>
+            {
+                ["resultType"] = "complete",
+                ["tools"] = tools,
+                ["ttlMs"] = 3600000,
+                ["cacheScope"] = "public",
+                ["_meta"] = GetServerInfoMeta()
+            };
+
+            await SendResultAsync(request.Id, result);
         }
 
         private async Task HandleToolsCallAsync(JsonRpcRequest request)
@@ -196,9 +257,9 @@ namespace DotNetOutdated
                 return;
             }
 
-            object result = null;
+            Dictionary<string, object> result = null;
 
-            try 
+            try
             {
                 switch (toolCall.Name)
                 {
@@ -222,10 +283,28 @@ namespace DotNetOutdated
                 return;
             }
 
+            result["resultType"] = "complete";
+            result["_meta"] = GetServerInfoMeta();
+
             await SendResultAsync(request.Id, result);
         }
 
-        private async Task<object> HandleDiscoverProjects(JsonElement arguments)
+        private static Dictionary<string, object> CreateToolResult(string text, bool isError = false)
+        {
+            var result = new Dictionary<string, object>
+            {
+                ["content"] = new[] { new { type = "text", text } }
+            };
+
+            if (isError)
+            {
+                result["isError"] = true;
+            }
+
+            return result;
+        }
+
+        private async Task<Dictionary<string, object>> HandleDiscoverProjects(JsonElement arguments)
         {
             if (!arguments.TryGetProperty("path", out var pathProp) || pathProp.ValueKind == JsonValueKind.Null || pathProp.GetString() is null)
             {
@@ -245,21 +324,11 @@ namespace DotNetOutdated
             }
 
             var projects = _projectDiscoveryService.DiscoverProjects(path, recursive, includeFileBasedApps);
-            
-            return new
-            {
-                content = new[]
-                {
-                    new
-                    {
-                        type = "text",
-                        text = JsonSerializer.Serialize(projects)
-                    }
-                }
-            };
+
+            return CreateToolResult(JsonSerializer.Serialize(projects));
         }
 
-        private async Task<object> HandleAnalyzeProject(JsonElement arguments)
+        private async Task<Dictionary<string, object>> HandleAnalyzeProject(JsonElement arguments)
         {
             string projectPath = arguments.GetProperty("projectPath").GetString();
             bool includeTransitive = false;
@@ -322,17 +391,7 @@ namespace DotNetOutdated
                 result.Add(new { name = project.Name, filePath = project.FilePath, targetFrameworks = frameworks });
             }
 
-            return new
-            {
-                content = new[]
-                {
-                    new
-                    {
-                        type = "text",
-                        text = JsonSerializer.Serialize(result)
-                    }
-                }
-            };
+            return CreateToolResult(JsonSerializer.Serialize(result));
         }
 
         private string GetUpgradeSeverity(NuGetVersion resolved, NuGetVersion latest)
@@ -350,7 +409,7 @@ namespace DotNetOutdated
             return "None";
         }
 
-        private async Task<object> HandleUpdatePackage(JsonElement arguments)
+        private async Task<Dictionary<string, object>> HandleUpdatePackage(JsonElement arguments)
         {
             string projectPath = arguments.GetProperty("projectPath").GetString();
             string packageName = arguments.GetProperty("packageName").GetString();
@@ -375,20 +434,38 @@ namespace DotNetOutdated
 
             if (status.IsSuccess)
             {
-                return new
-                {
-                    content = new[] { new { type = "text", text = $"Successfully updated {packageName} to {version}" } }
-                };
+                return CreateToolResult($"Successfully updated {packageName} to {version}");
             }
             else
             {
-                return new
-                {
-                    content = new[] { new { type = "text", text = $"Failed to update package: {status.Errors}" } },
-                    isError = true
-                };
+                return CreateToolResult($"Failed to update package: {status.Errors}", isError: true);
             }
         }
+
+        private static string? GetRequestedProtocolVersion(JsonRpcRequest request)
+        {
+            if (request.Params is { ValueKind: JsonValueKind.Object } requestParams &&
+                requestParams.TryGetProperty("_meta", out var meta) &&
+                meta.ValueKind == JsonValueKind.Object &&
+                meta.TryGetProperty(ProtocolVersionMetaKey, out var version) &&
+                version.ValueKind == JsonValueKind.String)
+            {
+                return version.GetString();
+            }
+
+            return null;
+        }
+
+        private static object GetServerInfo() => new
+        {
+            name = "dotnet-outdated",
+            version = Program.GetVersion() ?? "0.0.0"
+        };
+
+        private static Dictionary<string, object> GetServerInfoMeta() => new()
+        {
+            [ServerInfoMetaKey] = GetServerInfo()
+        };
 
         private async Task SendResultAsync(object? id, object result)
         {
