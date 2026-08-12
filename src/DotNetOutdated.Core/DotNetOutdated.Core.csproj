@@ -18,11 +18,11 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="NuGet.Configuration" Version="7.6.0" />
-    <PackageReference Include="NuGet.Credentials" Version="7.6.0" />
-    <PackageReference Include="NuGet.ProjectModel" Version="7.6.0" />
-    <PackageReference Include="NuGet.Protocol" Version="7.6.0" />
-    <PackageReference Include="NuGet.Versioning" Version="7.6.0" />
+    <PackageReference Include="NuGet.Configuration" Version="7.9.0" />
+    <PackageReference Include="NuGet.Credentials" Version="7.9.0" />
+    <PackageReference Include="NuGet.ProjectModel" Version="7.9.0" />
+    <PackageReference Include="NuGet.Protocol" Version="7.9.0" />
+    <PackageReference Include="NuGet.Versioning" Version="7.9.0" />
     <PackageReference Include="System.Formats.Asn1" Version="10.0.9" />
     <PackageReference Include="System.IO.Abstractions" Version="22.2.0" />
   </ItemGroup>
