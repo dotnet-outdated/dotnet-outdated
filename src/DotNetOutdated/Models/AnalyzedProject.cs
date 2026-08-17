@@ -100,6 +100,18 @@ namespace DotNetOutdated.Models
             }
         }
 
+        [JsonPropertyOrder(4)]
+        [JsonConverter(typeof(JsonStringEnumConverter))]
+        public RepositoryStatus RepositoryStatus { get; }
+
+        [JsonIgnore]
+        public string RepositoryStatusDescription => RepositoryStatus switch
+        {
+            DotNetOutdated.Core.Models.RepositoryStatus.Archived => "Archived",
+            DotNetOutdated.Core.Models.RepositoryStatus.NotFound => "Not Found",
+            _ => string.Empty
+        };
+
         public AnalyzedDependency(Dependency dependency)
         {
             _dependency = dependency;
@@ -108,6 +120,11 @@ namespace DotNetOutdated.Models
         public AnalyzedDependency(Dependency dependency, NuGetVersion latestVersion) : this(dependency)
         {
             LatestVersion = latestVersion;
+        }
+
+        public AnalyzedDependency(Dependency dependency, NuGetVersion latestVersion, RepositoryStatus repositoryStatus) : this(dependency, latestVersion)
+        {
+            RepositoryStatus = repositoryStatus;
         }
     }
 
@@ -119,5 +136,6 @@ namespace DotNetOutdated.Models
         public string ResolvedVersion { get; set; }
         public string LatestVersion { get; set; }
         public string UpgradeSeverity { get; set; }
+        public string RepositoryStatus { get; set; }
     }
 }

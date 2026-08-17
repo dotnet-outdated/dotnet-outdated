@@ -1,4 +1,4 @@
-using DotNetOutdated.Core;
+﻿using DotNetOutdated.Core;
 using DotNetOutdated.Core.Exceptions;
 using DotNetOutdated.Core.Models;
 using DotNetOutdated.Core.Services;
@@ -14,6 +14,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO.Abstractions;
 using System.Linq;
+using System.Net.Http;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
@@ -36,6 +37,7 @@ namespace DotNetOutdated
         IProjectAnalysisService projectAnalysisService,
         IProjectDiscoveryService projectDiscoveryService,
         IDotNetPackageService dotNetPackageService,
+        IRepositoryStatusService repositoryStatusService,
         DotNetRunnerOptions dotNetRunnerOptions) : CommandBase
    {
       private readonly IFileSystem _fileSystem = fileSystem;
@@ -44,6 +46,7 @@ namespace DotNetOutdated
       private readonly IProjectAnalysisService _projectAnalysisService = projectAnalysisService;
       private readonly IProjectDiscoveryService _projectDiscoveryService = projectDiscoveryService;
       private readonly IDotNetPackageService _dotNetPackageService = dotNetPackageService;
+      private readonly IRepositoryStatusService _repositoryStatusService = repositoryStatusService;
       private readonly DotNetRunnerOptions _dotNetRunnerOptions = dotNetRunnerOptions;
 
       [Option(CommandOptionType.NoValue, Description = "Specifies whether to include auto-referenced packages.",
@@ -166,8 +169,10 @@ namespace DotNetOutdated
                          provider.GetService<IFileSystem>(),
                          msg => provider.GetService<IReporter>().Warn(msg)))
                  .AddSingleton<IDotNetPackageService, DotNetPackageService>()
+                 .AddSingleton(_ => new HttpClient { Timeout = TimeSpan.FromSeconds(5) })
                  .AddSingleton<INuGetPackageInfoService, NuGetPackageInfoService>()
                  .AddSingleton<INuGetPackageResolutionService, NuGetPackageResolutionService>()
+                 .AddSingleton<IRepositoryStatusService, GitHubRepositoryStatusService>()
                  .BuildServiceProvider();
 
          using var app = new CommandLineApplication<Program>();
@@ -395,6 +400,8 @@ namespace DotNetOutdated
                var dependencies = targetFramework.Dependencies;
 
                int[] columnWidths = dependencies.DetermineColumnWidths();
+               bool showRepositoryStatus = dependencies.Any(d =>
+                   d.RepositoryStatus is RepositoryStatus.Archived or RepositoryStatus.NotFound);
 
                foreach (var dependency in dependencies)
                {
@@ -402,6 +409,12 @@ namespace DotNetOutdated
                   console.Write(dependency.Description?.PadRight(columnWidths[0] + 2));
 
                   WriteColoredUpgrade(dependency.UpgradeSeverity, dependency.ResolvedVersion, dependency.LatestVersion, columnWidths[1], columnWidths[2], console);
+
+                  if (showRepositoryStatus)
+                  {
+                     console.Write("  ");
+                     console.Write(dependency.RepositoryStatusDescription.PadRight(columnWidths[3]));
+                  }
 
                   console.WriteLine();
                }
@@ -587,14 +600,29 @@ namespace DotNetOutdated
 
                if (absoluteLatestVersion == null || referencedVersion > absoluteLatestVersion)
                {
-                  outdatedDependencies.Add(new AnalyzedDependency(dependency, latestVersion));
+                  await AddAnalyzedDependency(project, dependency, latestVersion, outdatedDependencies).ConfigureAwait(false);
                }
             }
             else
             {
-               outdatedDependencies.Add(new AnalyzedDependency(dependency, latestVersion));
+               await AddAnalyzedDependency(project, dependency, latestVersion, outdatedDependencies).ConfigureAwait(false);
             }
          }
+      }
+
+      private async Task AddAnalyzedDependency(
+          Project project,
+          Dependency dependency,
+          NuGetVersion latestVersion,
+          ConcurrentBag<AnalyzedDependency> outdatedDependencies)
+      {
+         RepositoryStatus repositoryStatus = await _repositoryStatusService.GetRepositoryStatus(
+             dependency.Name,
+             dependency.ResolvedVersion,
+             project.Sources,
+             project.FilePath).ConfigureAwait(false);
+
+         outdatedDependencies.Add(new AnalyzedDependency(dependency, latestVersion, repositoryStatus));
       }
 
       private static ConsoleColor GetUpgradeSeverityColor(DependencyUpgradeSeverity? upgradeSeverity)

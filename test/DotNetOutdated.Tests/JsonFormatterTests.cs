@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Threading.Tasks;
@@ -55,19 +55,22 @@ public class JsonFormatterTests
                         "Name": "Microsoft.Extensions.Http.Diagnostics",
                         "ResolvedVersion": "9.0.0-preview.4.24261.1",
                         "LatestVersion": "9.0.0-preview.4.24263.5",
-                        "UpgradeSeverity": "Major"
+                        "UpgradeSeverity": "Major",
+                        "RepositoryStatus": "Unknown"
                       },
                       {
                         "Name": "Microsoft.Extensions.Http.Resilience",
                         "ResolvedVersion": "9.0.0-preview.4.24261.1",
                         "LatestVersion": "9.0.0-preview.4.24263.5",
-                        "UpgradeSeverity": "Major"
+                        "UpgradeSeverity": "Major",
+                        "RepositoryStatus": "Unknown"
                       },
                       {
                         "Name": "Microsoft.Extensions.Telemetry",
                         "ResolvedVersion": "9.0.0-preview.4.24261.1",
                         "LatestVersion": "9.0.0-preview.4.24263.5",
-                        "UpgradeSeverity": "Major"
+                        "UpgradeSeverity": "Major",
+                        "RepositoryStatus": "Unknown"
                       }
                     ]
                   }
