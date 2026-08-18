@@ -103,5 +103,14 @@ namespace DotNetOutdated.Core.Resources {
                 return ResourceManager.GetString("FileNotAValidSolutionOrProject", resourceCulture);
             }
         }
+
+        /// <summary>
+        ///   Looks up a localized string similar to No projects were found to analyze in &apos;{0}&apos;. Make sure the solution references at least one project..
+        /// </summary>
+        internal static string NoRestorableProjectsFound {
+            get {
+                return ResourceManager.GetString("NoRestorableProjectsFound", resourceCulture);
+            }
+        }
     }
 }

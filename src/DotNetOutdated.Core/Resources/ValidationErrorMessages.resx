@@ -132,4 +132,7 @@
   <data name="FileNotAValidSolutionOrProject" xml:space="preserve">
     <value>The file '{0}' is not a valid solution, project, or file-based app.</value>
   </data>
+  <data name="NoRestorableProjectsFound" xml:space="preserve">
+    <value>No projects were found to analyze in '{0}'. Make sure the solution references at least one project.</value>
+  </data>
 </root>
