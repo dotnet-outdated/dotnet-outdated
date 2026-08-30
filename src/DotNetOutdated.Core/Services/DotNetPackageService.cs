@@ -178,7 +178,7 @@ namespace DotNetOutdated.Core.Services
                     {
                         string newFileContent = Regex.Replace(
                             fileContent,
-                            $"(<(?:PackageVersion|GlobalPackageReference)\\s*(?:Include|Update)=\"{Regex.Escape(packageName)}\"\\s*Version=\")([^\"]*)(\".*\\/>)",
+                            $"(<(?:PackageVersion|GlobalPackageReference)\\s*(?:Include|Update)=\"{Regex.Escape(packageName)}\"\\s*Version=\")([^\"]*)(\")",
                             m => $"{m.Groups[1].Captures[0].Value}{version}{m.Groups[3].Captures[0].Value}");
 
                         if (newFileContent != fileContent)
