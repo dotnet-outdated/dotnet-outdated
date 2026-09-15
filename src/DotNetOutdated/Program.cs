@@ -259,7 +259,7 @@ namespace DotNetOutdated
          }
       }
 
-      private bool UpgradePackages(List<AnalyzedProject> projects, IConsole console)
+      internal bool UpgradePackages(List<AnalyzedProject> projects, IConsole console)
       {
          bool success = true;
 
@@ -323,6 +323,14 @@ namespace DotNetOutdated
                      console.WriteLine();
                      console.Write(status.Errors, Constants.ReportingColors.UpgradeFailure);
                      console.WriteLine();
+                     // dotnet add package reports NuGet restore/edit failures (for example when the
+                     // package's version is declared in an imported file it cannot edit) on stdout
+                     // rather than stderr, so surface the output as well to keep the cause visible.
+                     if (!string.IsNullOrWhiteSpace(status.Output))
+                     {
+                        console.Write(status.Output, Constants.ReportingColors.UpgradeFailure);
+                        console.WriteLine();
+                     }
                   }
                }
             }
