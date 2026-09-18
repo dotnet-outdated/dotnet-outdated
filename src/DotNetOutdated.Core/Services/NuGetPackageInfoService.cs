@@ -1,11 +1,14 @@
 ﻿using NuGet.Common;
 using NuGet.Configuration;
 using NuGet.Frameworks;
+using NuGet.Packaging;
+using NuGet.Packaging.Core;
 using NuGet.Protocol;
 using NuGet.Protocol.Core.Types;
 using NuGet.Versioning;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Threading;
@@ -19,11 +22,15 @@ namespace DotNetOutdated.Core.Services
     {
         private IEnumerable<PackageSource> _enabledSources;
 
+        private ISettings _settings;
+
         private PackageSourceMapping _packageSourceMapping;
 
         private readonly SourceCacheContext _context;
 
         private readonly ConcurrentDictionary<string, Task<PackageMetadataResource>> _metadataResourceRequests = [];
+
+        private readonly ConcurrentDictionary<string, Lazy<Task<string>>> _repositoryUrlRequests = [];
 
         public NuGetPackageInfoService()
         {
@@ -37,16 +44,16 @@ namespace DotNetOutdated.Core.Services
         {
             if (_enabledSources == null)
             {
-                var settings = Settings.LoadDefaultSettings(root);
-                _enabledSources = SettingsUtility.GetEnabledSources(settings);
-                _packageSourceMapping = PackageSourceMapping.GetPackageSourceMapping(settings);
+                _settings = Settings.LoadDefaultSettings(root);
+                _enabledSources = SettingsUtility.GetEnabledSources(_settings);
+                _packageSourceMapping = PackageSourceMapping.GetPackageSourceMapping(_settings);
             }
 
             return _enabledSources;
         }
 
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "This method is supposed to fail silently")]
-        private async Task<PackageMetadataResource> FindMetadataResourceForSource(Uri source, string projectFilePath, string packageId)
+        private SourceRepository FindSourceRepositoryForSource(Uri source, string projectFilePath, string packageId)
         {
             try
             {
@@ -69,10 +76,26 @@ namespace DotNetOutdated.Core.Services
                     }
                 }
 
-                var sourceRepository = enabledSource != null
+                return enabledSource != null
                                            ? new SourceRepository(enabledSource, Repository.Provider.GetCoreV3())
                                            : Repository.Factory.GetCoreV3(resourceUrl);
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        }
 
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "This method is supposed to fail silently")]
+        private async Task<PackageMetadataResource> FindMetadataResourceForSource(Uri source, string projectFilePath, string packageId)
+        {
+            try
+            {
+                var sourceRepository = FindSourceRepositoryForSource(source, projectFilePath, packageId);
+                if (sourceRepository == null)
+                    return null;
+
+                string resourceUrl = source.AbsoluteUri;
                 var metadataResourceRequest = _metadataResourceRequests.GetOrAdd(resourceUrl, _ => sourceRepository.GetResourceAsync<PackageMetadataResource>());
 
                 return await metadataResourceRequest.ConfigureAwait(false);
@@ -158,6 +181,71 @@ namespace DotNetOutdated.Core.Services
             }
 
             return allVersions;
+        }
+
+        public async Task<string> GetRepositoryUrl(string package, NuGetVersion version, IEnumerable<Uri> sources, string projectFilePath)
+        {
+            ArgumentNullException.ThrowIfNull(sources);
+
+            var sourceList = sources.ToList();
+            string cacheKey = string.Join("|", package, version, projectFilePath, string.Join(";", sourceList.Select(s => s.AbsoluteUri)));
+            var request = new Lazy<Task<string>>(() => GetRepositoryUrlCore(package, version, sourceList, projectFilePath));
+            return await _repositoryUrlRequests.GetOrAdd(cacheKey, request).Value.ConfigureAwait(false);
+        }
+
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Repository metadata must not fail package analysis")]
+        private async Task<string> GetRepositoryUrlCore(string package, NuGetVersion version, IReadOnlyList<Uri> sources, string projectFilePath)
+        {
+            try
+            {
+                GetEnabledSources(projectFilePath);
+                string globalPackagesFolder = SettingsUtility.GetGlobalPackagesFolder(_settings);
+                var pathResolver = new VersionFolderPathResolver(globalPackagesFolder);
+                string installPath = pathResolver.GetInstallPath(package, version);
+
+                if (!string.IsNullOrEmpty(installPath) && Directory.Exists(installPath))
+                {
+                    using var packageReader = new PackageFolderReader(installPath);
+                    return await GetRepositoryUrl(packageReader).ConfigureAwait(false);
+                }
+
+                foreach (var source in sources)
+                {
+                    try
+                    {
+                        var sourceRepository = FindSourceRepositoryForSource(source, projectFilePath, package);
+                        if (sourceRepository == null)
+                            continue;
+
+                        var downloadResource = await sourceRepository.GetResourceAsync<DownloadResource>().ConfigureAwait(false);
+                        var downloadContext = new PackageDownloadContext(_context);
+                        using var downloadResult = await downloadResource.GetDownloadResourceResultAsync(
+                            new PackageIdentity(package, version),
+                            downloadContext,
+                            globalPackagesFolder,
+                            NullLogger.Instance,
+                            CancellationToken.None).ConfigureAwait(false);
+
+                        if (downloadResult.PackageReader != null)
+                            return await GetRepositoryUrl(downloadResult.PackageReader).ConfigureAwait(false);
+                    }
+                    catch (Exception)
+                    {
+                    }
+                }
+            }
+            catch (Exception)
+            {
+            }
+
+            return null;
+        }
+
+        private static async Task<string> GetRepositoryUrl(PackageReaderBase packageReader)
+        {
+            var nuspecReader = await packageReader.GetNuspecReaderAsync(CancellationToken.None).ConfigureAwait(false);
+            string repositoryUrl = nuspecReader.GetRepositoryMetadata()?.Url;
+            return string.IsNullOrWhiteSpace(repositoryUrl) ? nuspecReader.GetProjectUrl() : repositoryUrl;
         }
 
         public void Dispose()
