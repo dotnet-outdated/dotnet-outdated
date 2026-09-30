@@ -241,6 +241,52 @@ public static class EndToEndTests
         Assert.DoesNotContain("Cake.Generator", content);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public static void Packages_Injected_By_Custom_Sdk_Are_Auto_Referenced(bool includeAutoReferences)
+    {
+        using var project = TestSetup("sdk-injected-packages");
+
+        var outputPath = Path.Combine(project.Path, "output.json");
+
+        List<string> arguments = [project.Path, "--output", outputPath, "--output-format:json"];
+        if (includeAutoReferences)
+        {
+            arguments.Add("--include-auto-references");
+        }
+
+        var actual = Program.Main([.. arguments]);
+        Assert.Equal(0, actual);
+
+        using var output = JsonDocument.Parse(File.ReadAllText(outputPath));
+        var dependencyNames = output.RootElement
+            .GetProperty("Projects").EnumerateArray()
+            .SelectMany(p => p.GetProperty("TargetFrameworks").EnumerateArray())
+            .SelectMany(tfm => tfm.GetProperty("Dependencies").EnumerateArray())
+            .Select(d => d.GetProperty("Name").GetString())
+            .ToList();
+
+        Assert.Contains("Newtonsoft.Json", dependencyNames);
+        Assert.Equal(includeAutoReferences, dependencyNames.Contains("MSTest.TestFramework"));
+        Assert.Equal(includeAutoReferences, dependencyNames.Contains("Microsoft.NET.Test.Sdk"));
+    }
+
+    [Fact]
+    public static void Can_Upgrade_Project_With_Packages_Injected_By_Custom_Sdk()
+    {
+        using var project = TestSetup("sdk-injected-packages");
+
+        var actual = Program.Main([project.Path, "--upgrade"]);
+        Assert.Equal(0, actual);
+
+        var content = File.ReadAllText(Path.Combine(project.Path, "sdk-injected-packages.csproj"));
+
+        Assert.DoesNotContain("<PackageReference Include=\"Newtonsoft.Json\" Version=\"11.0.1\" />", content);
+        Assert.DoesNotContain("MSTest.TestFramework", content);
+        Assert.DoesNotContain("Microsoft.NET.Test.Sdk", content);
+    }
+
     [Fact]
     public static void Can_Upgrade_Project_With_Maximum_Version()
     {
