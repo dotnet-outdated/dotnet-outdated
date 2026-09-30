@@ -241,6 +241,24 @@ public static class EndToEndTests
         Assert.DoesNotContain("Cake.Generator", content);
     }
 
+    [Theory]
+    [InlineData("project-sdk-attribute", "<Project Sdk=\"Microsoft.Build.NoTargets/3.7.0\">")]
+    [InlineData("project-sdk-element", "<Sdk Name=\"Microsoft.Build.NoTargets\" Version=\"3.7.0\" />")]
+    public static void Can_Upgrade_Project_With_Versioned_Project_Sdk(string testProjectName, string originalSdkDeclaration)
+    {
+        using var project = TestSetup(testProjectName);
+
+        var actual = Program.Main([project.Path, "--upgrade"]);
+        Assert.Equal(0, actual);
+
+        var projectFilePath = Path.Combine(project.Path, $"{testProjectName}.csproj");
+        var content = File.ReadAllText(projectFilePath);
+
+        Assert.Contains("Microsoft.Build.NoTargets", content);
+        Assert.DoesNotContain(originalSdkDeclaration, content);
+        Assert.DoesNotContain("PackageReference", content);
+    }
+
     [Fact]
     public static void Can_Upgrade_Project_With_Maximum_Version()
     {

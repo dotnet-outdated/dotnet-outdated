@@ -79,7 +79,9 @@ namespace DotNetOutdated
                 // Otherwise the query will return no results and the project type will be misidentified.
                 // e.g. <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" Sdk="Microsoft.NET.Sdk">
                 XNamespace ns = xml.Root.GetDefaultNamespace();
-                return xml.Root.Name == (ns + "Project") && !string.IsNullOrEmpty(xml.Root.Attribute("Sdk")?.Value);
+                // SDKs can also be declared with child elements, e.g. <Sdk Name="Microsoft.Build.NoTargets" Version="3.7.0" />
+                return xml.Root.Name == (ns + "Project") &&
+                       (!string.IsNullOrEmpty(xml.Root.Attribute("Sdk")?.Value) || xml.Root.Elements(ns + "Sdk").Any());
             }
             catch (Exception ex)
             {
