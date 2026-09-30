@@ -7,9 +7,12 @@ using NuGet.Protocol;
 using NuGet.Versioning;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.IO.Abstractions;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Xml;
+using System.Xml.Linq;
 
 namespace DotNetOutdated.Core.Services
 {
@@ -91,6 +94,8 @@ namespace DotNetOutdated.Core.Services
                 var project = new Project(projectName, analyzedProjectPath, packageSpec.RestoreMetadata.Sources.Select(s => s.SourceUri).ToList(), packageSpec.Version);
                 projects.Add(project);
 
+                var usesCustomSdk = !isFileBasedApp && UsesCustomSdk(analyzedProjectPath);
+
                 // Get the target frameworks with their dependencies
                 foreach (var targetFrameworkInformation in packageSpec.TargetFrameworks)
                 {
@@ -129,6 +134,11 @@ namespace DotNetOutdated.Core.Services
                             // Use the normalized full path so directive discovery (and its cache) keys off the
                             // same path used for restore and asset loading, even when the caller passed a relative path.
                             ApplyFileBasedAppDirectives(analyzedProjectPath, targetFramework);
+                        }
+
+                        if (usesCustomSdk)
+                        {
+                            MarkPackageDefinedReferencesAsAutoReferenced(analyzedProjectPath, targetFrameworkInformation.TargetAlias, packageSpec, targetFramework);
                         }
                     }
                 }
@@ -170,6 +180,68 @@ namespace DotNetOutdated.Core.Services
                     isDevelopmentDependency: false);
             }
         }
+
+        /// <summary>
+        /// Determines whether a project file declares an MSBuild SDK other than the <c>Microsoft.NET.Sdk</c> family.
+        /// Such SDKs are usually resolved from NuGet and can add package references of their own.
+        /// </summary>
+        private bool UsesCustomSdk(string projectPath)
+        {
+            try
+            {
+                var root = XDocument.Parse(_fileSystem.File.ReadAllText(projectPath)).Root;
+                if (root == null)
+                {
+                    return false;
+                }
+
+                var sdkNames = (root.Attribute("Sdk")?.Value ?? string.Empty)
+                    .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Concat(root.Descendants().Where(e => e.Name.LocalName == "Sdk").Select(e => e.Attribute("Name")?.Value))
+                    .Concat(root.Descendants().Where(e => e.Name.LocalName == "Import").Select(e => e.Attribute("Sdk")?.Value))
+                    .Where(name => !string.IsNullOrWhiteSpace(name))
+                    .Select(name => name.Split('/')[0].Trim());
+
+                return sdkNames.Any(name => !name.StartsWith("Microsoft.NET.Sdk", StringComparison.OrdinalIgnoreCase));
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or XmlException)
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Marks direct dependencies as auto-referenced when every <c>PackageReference</c> item for them is defined inside
+        /// a NuGet package, such as the props or targets of an SDK like <c>Cake.Sdk</c> or <c>MSTest.Sdk</c>. Their versions
+        /// come from the package, so <c>dotnet add package</c> cannot upgrade them in the project.
+        /// </summary>
+        private void MarkPackageDefinedReferencesAsAutoReferenced(string projectPath, string targetAlias, PackageSpec packageSpec, TargetFramework targetFramework)
+        {
+            var packageFolders = new[] { packageSpec.RestoreMetadata.PackagesPath }
+                .Concat(packageSpec.RestoreMetadata.FallbackFolders ?? [])
+                .Where(folder => !string.IsNullOrEmpty(folder))
+                .Select(folder => _fileSystem.Path.TrimEndingDirectorySeparator(_fileSystem.Path.GetFullPath(folder)) + _fileSystem.Path.DirectorySeparatorChar)
+                .ToList();
+
+            var packageDefinedNames = (_dependencyGraphService.GetPackageReferenceItems(projectPath, targetAlias) ?? [])
+                .GroupBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
+                .Where(items => items.All(item => IsInPackageFolder(item.DefiningProjectFullPath, packageFolders)))
+                .Select(items => items.Key)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var (key, dependency) in targetFramework.Dependencies.ToList())
+            {
+                if (!dependency.IsTransitive && !dependency.IsAutoReferenced && packageDefinedNames.Contains(dependency.Name))
+                {
+                    targetFramework.Dependencies[key] = new Dependency(dependency.Name, dependency.VersionRange, dependency.ResolvedVersion,
+                        isAutoReferenced: true, isTransitive: false, dependency.IsDevelopmentDependency);
+                }
+            }
+        }
+
+        private bool IsInPackageFolder(string path, List<string> packageFolders) =>
+            !string.IsNullOrEmpty(path) &&
+            packageFolders.Any(folder => _fileSystem.Path.GetFullPath(path).StartsWith(folder, StringComparison.OrdinalIgnoreCase));
 
         private void AddDependencies(TargetFramework targetFramework, LockFileTargetLibrary parentLibrary, LockFileTarget target, int level, int transitiveDepth)
         {
