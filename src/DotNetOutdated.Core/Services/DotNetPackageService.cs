@@ -77,6 +77,28 @@ namespace DotNetOutdated.Core.Services
                         : RestoreProject(projectPath, ignoreFailedSources);
                 }
             }
+            else
+            {
+                // `dotnet add package` cannot update an MSBuild project SDK, so rewrite its version in the project file.
+                var sdkReference = ProjectSdkReferenceHelper.Discover(_fileSystem, projectPath)
+                    .FirstOrDefault(reference => string.Equals(reference.Name, packageName, StringComparison.OrdinalIgnoreCase));
+
+                if (sdkReference != null)
+                {
+                    if (!ProjectSdkReferenceHelper.TryUpdate(_fileSystem, projectPath, packageName, version) &&
+                        sdkReference.ResolvedVersion != version)
+                    {
+                        return new RunStatus(
+                            string.Empty,
+                            $"Failed to update the version of SDK '{packageName}' in '{projectPath}'.",
+                            1);
+                    }
+
+                    return noRestore
+                        ? new RunStatus(string.Empty, string.Empty, 0)
+                        : RestoreProject(projectPath, ignoreFailedSources);
+                }
+            }
 
             // When --no-restore is used, `dotnet add package` has an upstream bug where it writes
             // version info to .csproj instead of Directory.Packages.props for CPM projects.

@@ -91,6 +91,10 @@ namespace DotNetOutdated.Core.Services
                 var project = new Project(projectName, analyzedProjectPath, packageSpec.RestoreMetadata.Sources.Select(s => s.SourceUri).ToList(), packageSpec.Version);
                 projects.Add(project);
 
+                var projectSdkReferences = isFileBasedApp
+                    ? []
+                    : ProjectSdkReferenceHelper.Discover(_fileSystem, analyzedProjectPath);
+
                 // Get the target frameworks with their dependencies
                 foreach (var targetFrameworkInformation in packageSpec.TargetFrameworks)
                 {
@@ -129,6 +133,17 @@ namespace DotNetOutdated.Core.Services
                             // Use the normalized full path so directive discovery (and its cache) keys off the
                             // same path used for restore and asset loading, even when the caller passed a relative path.
                             ApplyFileBasedAppDirectives(analyzedProjectPath, targetFramework);
+                        }
+
+                        foreach (var sdkReference in projectSdkReferences)
+                        {
+                            targetFramework.Dependencies[ProjectSdkReferenceHelper.GetDependencyDictionaryKey(sdkReference.Name)] = new Dependency(
+                                sdkReference.Name,
+                                sdkReference.VersionRange,
+                                sdkReference.ResolvedVersion,
+                                isAutoReferenced: false,
+                                isTransitive: false,
+                                isDevelopmentDependency: false);
                         }
                     }
                 }

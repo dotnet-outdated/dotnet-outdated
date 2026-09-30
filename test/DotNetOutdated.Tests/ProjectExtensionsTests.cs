@@ -94,6 +94,14 @@ public static class ProjectExtensionsTests
 
         testCases.Add(
             """
+            <Project>
+              <Sdk Name="Microsoft.Build.NoTargets" Version="3.7.0" />
+            </Project>
+            """,
+            true);
+
+        testCases.Add(
+            """
             <Foo Sdk="Microsoft.NET.Sdk"></Foo>
             """,
             false);
