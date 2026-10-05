@@ -72,6 +72,50 @@ namespace DotNetOutdated.Tests
         }
 
         [Fact]
+        public void CpmProjectWithNoRestore_UpdatesMultilinePackageVersion()
+        {
+            // Arrange
+            var propsPath = XFS.Path(@"c:\repo\Directory.Packages.props");
+            var projectPath = XFS.Path(@"c:\repo\src\MyProject\MyProject.csproj");
+            const string propsContent = @"<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageVersion
+      Include=""Microsoft.AspNetCore.Components.WebAssembly.Authentication""
+      Version=""9.0.7""
+    />
+  </ItemGroup>
+</Project>";
+
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { propsPath, new MockFileData(propsContent) },
+                { projectPath, new MockFileData("<Project></Project>") }
+            });
+
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem, EmptyVariableTrackingService());
+
+            // Act
+            var result = service.AddPackage(
+                projectPath,
+                "Microsoft.AspNetCore.Components.WebAssembly.Authentication",
+                "net8.0",
+                new NuGetVersion("10.0.0"),
+                noRestore: true);
+
+            // Assert
+            Assert.True(result.IsSuccess);
+            dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
+
+            var updatedContent = mockFileSystem.File.ReadAllText(propsPath);
+            Assert.Contains("Version=\"10.0.0\"", updatedContent);
+            Assert.DoesNotContain("Version=\"9.0.7\"", updatedContent);
+        }
+
+        [Fact]
         public void CpmProjectWithoutNoRestore_CallsDotNetAddPackage()
         {
             // Arrange
