@@ -242,6 +242,15 @@ public static class EndToEndTests
     }
 
     [Fact]
+    public static void Reports_Friendly_Message_For_Solution_With_No_Projects()
+    {
+        using var project = TestSetup("empty-solution");
+
+        var actual = Program.Main([project.Path]);
+        Assert.Equal(1, actual);
+    }
+
+    [Fact]
     public static void Can_Upgrade_Project_With_Maximum_Version()
     {
         using var directory = TestSetup("max-version");
