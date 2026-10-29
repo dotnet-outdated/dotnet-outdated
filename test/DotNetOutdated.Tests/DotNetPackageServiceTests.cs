@@ -268,6 +268,36 @@ namespace DotNetOutdated.Tests
         }
 
         [Theory]
+        [InlineData("<!--\n<PackageVersion Include=\"Newtonsoft.Json\" Version=\"12.0.3\" />\n-->")]
+        [InlineData("<PropertyGroup><Notes><![CDATA[<PackageVersion Include=\"Newtonsoft.Json\" Version=\"12.0.3\" />]]></Notes></PropertyGroup>")]
+        [InlineData("<?example <PackageVersion Include=\"Newtonsoft.Json\" Version=\"12.0.3\" /> ?>")]
+        public void CpmProjectWithRestore_PreservesInactivePackageMarkup(string inactiveMarkup)
+        {
+            var propsPath = XFS.Path(@"c:\repo\Directory.Packages.props");
+            var projectPath = XFS.Path(@"c:\repo\MyProject.csproj");
+            const string itemGroup = "  <ItemGroup>\n    <PackageVersion Include=\"Newtonsoft.Json\" Version=\"12.0.3\" />\n  </ItemGroup>";
+            var original = "<Project>\n\n" + inactiveMarkup + "\n\n" + itemGroup + "\n\n</Project>\n\n";
+            var expected = original.Replace(itemGroup, itemGroup.Replace("12.0.3", "13.0.1"));
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { propsPath, new MockFileData(original) },
+                { projectPath, new MockFileData("<Project></Project>") }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(_ =>
+            {
+                fileSystem.File.WriteAllText(propsPath, System.Xml.Linq.XDocument.Parse(expected).ToString());
+                return new RunStatus("", "", 0);
+            });
+            var service = new DotNetPackageService(dotNetRunner, fileSystem, EmptyVariableTrackingService());
+
+            var result = service.AddPackage(projectPath, "Newtonsoft.Json", "net8.0", new NuGetVersion("13.0.1"), noRestore: false);
+
+            Assert.True(result.IsSuccess);
+            Assert.Equal(expected, fileSystem.File.ReadAllText(propsPath));
+        }
+
+        [Theory]
         [InlineData(false, false)]
         [InlineData(false, true)]
         [InlineData(true, false)]
