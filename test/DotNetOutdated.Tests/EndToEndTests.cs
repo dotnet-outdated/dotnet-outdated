@@ -289,6 +289,27 @@ public static class EndToEndTests
     }
 
     [Fact]
+    public static void Can_Upgrade_CPM_Preserves_Props_Whitespace()
+    {
+        using var project = TestSetup("central-package-management");
+        var propsPath = Path.Combine(project.Path, "Directory.Packages.props");
+        var original = "<Project>\n\n" +
+            "\t<PropertyGroup>\n" +
+            "\t\t<ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>\n" +
+            "\t</PropertyGroup>\n\n" +
+            "\t<ItemGroup>\n" +
+            "\t\t<PackageVersion Include=\"Newtonsoft.Json\" Version=\"13.0.1\" />\n" +
+            "\t</ItemGroup>\n\n" +
+            "</Project>\n\n";
+        File.WriteAllText(propsPath, original);
+
+        var actual = Program.Main([project.Path, "--upgrade", "--maximum-version", "13.0.3"]);
+
+        Assert.Equal(0, actual);
+        Assert.Equal(original.Replace("13.0.1", "13.0.3"), File.ReadAllText(propsPath));
+    }
+
+    [Fact]
     public static void Can_Upgrade_CPVM_With_Variables_Preserves_Variable_References()
     {
         using var project = TestSetup("cpvm-variables");

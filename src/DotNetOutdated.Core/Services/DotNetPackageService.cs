@@ -1,11 +1,14 @@
-﻿using DotNetOutdated.Core;
+using DotNetOutdated.Core;
 using NuGet.Versioning;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Abstractions;
 using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
+using System.Xml;
+using System.Xml.Linq;
 
 namespace DotNetOutdated.Core.Services
 {
@@ -117,7 +120,19 @@ namespace DotNetOutdated.Core.Services
                 arguments.Add("--ignore-failed-sources");
             }
 
+            var originalCentralPackages = FindCentralPackagesFiles(projectPath)
+                .Select(file => (File: file, Bytes: _fileSystem.File.ReadAllBytes(file.FullName)))
+                .ToList();
+
             var result = _dotNetRunner.Run(_fileSystem.Path.GetDirectoryName(projectPath), [.. arguments]);
+
+            if (result.IsSuccess)
+            {
+                foreach (var original in originalCentralPackages)
+                {
+                    PreserveCentralPackagesFormatting(original.File, original.Bytes, packageName, version);
+                }
+            }
 
             // If the package originally used a variable reference, restore it after the update
             if (result.IsSuccess && variableInfo != null)
@@ -150,6 +165,28 @@ namespace DotNetOutdated.Core.Services
 
         private bool TryUpdateCentralPackageVersion(string projectPath, string packageName, NuGetVersion version)
         {
+            foreach (var cpvmFile in FindCentralPackagesFiles(projectPath))
+            {
+                var fileContent = _fileSystem.File.ReadAllText(cpvmFile.FullName);
+                if (!fileContent.Contains($"\"{packageName}\"", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var newFileContent = UpdateCentralPackageVersion(fileContent, packageName, version);
+                if (newFileContent != fileContent)
+                {
+                    _fileSystem.File.WriteAllText(cpvmFile.FullName, newFileContent);
+                }
+
+                return true;
+            }
+
+            return false;
+        }
+
+        private IEnumerable<IFileInfo> FindCentralPackagesFiles(string projectPath)
+        {
             var projectFile = _fileSystem.FileInfo.New(projectPath);
             var directory = projectFile.Directory;
 
@@ -168,32 +205,72 @@ namespace DotNetOutdated.Core.Services
 
                 if (cpvmFile != null)
                 {
-                    string fileContent;
-                    using (var reader = cpvmFile.OpenText())
-                    {
-                        fileContent = reader.ReadToEnd();
-                    }
-
-                    if (fileContent.Contains($"\"{packageName}\"", StringComparison.OrdinalIgnoreCase))
-                    {
-                        string newFileContent = Regex.Replace(
-                            fileContent,
-                            $"(<(?:PackageVersion|GlobalPackageReference)\\s*(?:Include|Update)=\"{Regex.Escape(packageName)}\"\\s*Version=\")([^\"]*)(\".*\\/>)",
-                            m => $"{m.Groups[1].Captures[0].Value}{version}{m.Groups[3].Captures[0].Value}");
-
-                        if (newFileContent != fileContent)
-                        {
-                            _fileSystem.File.WriteAllText(cpvmFile.FullName, newFileContent);
-                        }
-
-                        return true;
-                    }
+                    yield return cpvmFile;
                 }
 
                 directory = directory.Parent;
             }
+        }
 
-            return false;
+        private static string UpdateCentralPackageVersion(string content, string packageName, NuGetVersion version) =>
+            Regex.Replace(
+                content,
+                $"(<(?:PackageVersion|GlobalPackageReference)\\s*(?:Include|Update)=\"{Regex.Escape(packageName)}\"\\s*Version=\")([^\"]*)(\".*\\/>)",
+                m => $"{m.Groups[1].Value}{version}{m.Groups[3].Value}");
+
+        private void PreserveCentralPackagesFormatting(IFileInfo file, byte[] originalBytes, string packageName, NuGetVersion version)
+        {
+            if (!_fileSystem.File.Exists(file.FullName))
+            {
+                return;
+            }
+
+            var updatedBytes = _fileSystem.File.ReadAllBytes(file.FullName);
+            if (originalBytes.AsSpan().SequenceEqual(updatedBytes))
+            {
+                return;
+            }
+
+            using var reader = new StreamReader(new MemoryStream(originalBytes), Encoding.UTF8);
+            var originalContent = reader.ReadToEnd();
+            var encoding = reader.CurrentEncoding;
+            var preamble = encoding.GetPreamble();
+            var hasPreamble = originalBytes.AsSpan().StartsWith(preamble);
+            if (!encoding.GetBytes(originalContent).AsSpan().SequenceEqual(originalBytes.AsSpan(hasPreamble ? preamble.Length : 0)))
+            {
+                // Do not replay content that could not be decoded without losing bytes.
+                return;
+            }
+
+            var formattedContent = Regex.Replace(
+                originalContent,
+                $@"(?<prefix><(?:PackageVersion|GlobalPackageReference)\b(?=[^>]*\b(?:Include|Update)\s*=\s*(?<packageQuote>[""'])(?i:{Regex.Escape(packageName)})\k<packageQuote>)[^>]*\bVersion\s*=\s*(?<versionQuote>[""']))[^""']*(?<suffix>\k<versionQuote>)",
+                m => $"{m.Groups["prefix"].Value}{version}{m.Groups["suffix"].Value}");
+            var updatedContent = _fileSystem.File.ReadAllText(file.FullName);
+
+            try
+            {
+                // Keep dotnet add's validation and any additional XML changes. Reuse the original
+                // layout only when changing the version produces the same document as the CLI.
+                if (formattedContent != updatedContent &&
+                    !XNode.DeepEquals(XDocument.Parse(formattedContent), XDocument.Parse(updatedContent)))
+                {
+                    return;
+                }
+            }
+            catch (XmlException)
+            {
+                return;
+            }
+
+            var contentBytes = encoding.GetBytes(formattedContent);
+            byte[] formattedBytes = hasPreamble
+                ? [.. preamble, .. contentBytes]
+                : contentBytes;
+            if (!formattedBytes.AsSpan().SequenceEqual(updatedBytes))
+            {
+                _fileSystem.File.WriteAllBytes(file.FullName, formattedBytes);
+            }
         }
 
         private static RunStatus FileBasedAppUpdateFailed(string projectPath, string packageName, string hint) =>
