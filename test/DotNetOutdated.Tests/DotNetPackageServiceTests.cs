@@ -180,6 +180,36 @@ namespace DotNetOutdated.Tests
         }
 
         [Fact]
+        public void CpmProjectWithRestore_PreservesWhitespaceAcrossMultipleUpgrades()
+        {
+            var propsPath = XFS.Path(@"c:\repo\Directory.Packages.props");
+            var projectPath = XFS.Path(@"c:\repo\MyProject.csproj");
+            var original = DirectoryPackagesPropsContent.Replace("  <PropertyGroup>", "\n  <PropertyGroup>") + "\n\n";
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { propsPath, new MockFileData(original) },
+                { projectPath, new MockFileData("<Project></Project>") }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(call =>
+            {
+                var arguments = call.ArgAt<string[]>(1);
+                var oldVersion = arguments[3] == "Newtonsoft.Json" ? "12.0.3" : "2.10.0";
+                var content = fileSystem.File.ReadAllText(propsPath).Replace(oldVersion, arguments[5]);
+                fileSystem.File.WriteAllText(propsPath, System.Xml.Linq.XDocument.Parse(content).ToString());
+                return new RunStatus("", "", 0);
+            });
+            var service = new DotNetPackageService(dotNetRunner, fileSystem, EmptyVariableTrackingService());
+
+            var first = service.AddPackage(projectPath, "Newtonsoft.Json", "net8.0", new NuGetVersion("13.0.1"), noRestore: false);
+            var second = service.AddPackage(projectPath, "Serilog", "net8.0", new NuGetVersion("2.11.0"), noRestore: false);
+
+            Assert.True(first.IsSuccess);
+            Assert.True(second.IsSuccess);
+            Assert.Equal(original.Replace("12.0.3", "13.0.1").Replace("2.10.0", "2.11.0"), fileSystem.File.ReadAllText(propsPath));
+        }
+
+        [Fact]
         public void CpmProjectWithRestore_PreservesAdditionalChangesFromDotNet()
         {
             var propsPath = XFS.Path(@"c:\repo\Directory.Packages.props");
