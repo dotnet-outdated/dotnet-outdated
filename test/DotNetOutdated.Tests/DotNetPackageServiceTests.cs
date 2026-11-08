@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.IO.Abstractions.TestingHelpers;
 using DotNetOutdated.Core.Services;
 using NSubstitute;
@@ -597,6 +598,83 @@ Information(""Outdated Sdk"");")
             Assert.True(result.IsSuccess);
             dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
             Assert.Contains("#:sdk Cake.Sdk@6.2.0", mockFileSystem.File.ReadAllText(appPath));
+        }
+
+        [Fact]
+        public void ProjectSdk_UpdatesProjectFileAndRestoresWithoutAddingPackage()
+        {
+            var projectPath = XFS.Path(@"c:\repo\AppHost\AppHost.csproj");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { projectPath, new MockFileData(@"<Project Sdk=""Aspire.AppHost.Sdk/13.0.0""></Project>") }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus(string.Empty, string.Empty, 0));
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem, EmptyVariableTrackingService());
+
+            var result = service.AddPackage(projectPath, "Aspire.AppHost.Sdk", "net10.0", new NuGetVersion("13.0.2"));
+
+            Assert.True(result.IsSuccess);
+            Assert.Equal(@"<Project Sdk=""Aspire.AppHost.Sdk/13.0.2""></Project>", mockFileSystem.File.ReadAllText(projectPath));
+            dotNetRunner.Received(1).Run(XFS.Path(@"c:\repo\AppHost"), Arg.Is<string[]>(a => a.Length == 2 && a[0] == "restore" && a[1] == "AppHost.csproj"));
+            dotNetRunner.DidNotReceive().Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[0] == "add"));
+        }
+
+        [Fact]
+        public void ProjectSdk_ReadOnlyProjectFile_ReturnsFailureInsteadOfThrowing()
+        {
+            var projectPath = XFS.Path(@"c:\repo\AppHost\AppHost.csproj");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { projectPath, new MockFileData(@"<Project Sdk=""Aspire.AppHost.Sdk/13.0.0""></Project>") }
+            });
+            mockFileSystem.File.SetAttributes(projectPath, FileAttributes.ReadOnly);
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem, EmptyVariableTrackingService());
+
+            var result = service.AddPackage(projectPath, "Aspire.AppHost.Sdk", "net10.0", new NuGetVersion("13.0.2"));
+
+            Assert.False(result.IsSuccess);
+            Assert.Contains("Aspire.AppHost.Sdk", result.Errors);
+            dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
+        }
+
+        [Fact]
+        public void ProjectSdk_NoOpWhenAlreadyAtVersion_ReturnsSuccess()
+        {
+            var projectPath = XFS.Path(@"c:\repo\AppHost\AppHost.csproj");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { projectPath, new MockFileData(@"<Project Sdk=""Microsoft.NET.Sdk""><Sdk Name=""Aspire.AppHost.Sdk"" Version=""13.0.2"" /></Project>") }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem, EmptyVariableTrackingService());
+
+            var result = service.AddPackage(projectPath, "Aspire.AppHost.Sdk", "net10.0", new NuGetVersion("13.0.2"), noRestore: true);
+
+            Assert.True(result.IsSuccess);
+            dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
+        }
+
+        [Fact]
+        public void ProjectSdk_MultiTargetedProject_RestoresOnlyOnce()
+        {
+            var projectPath = XFS.Path(@"c:\repo\App\App.csproj");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { projectPath, new MockFileData(@"<Project Sdk=""Microsoft.Build.NoTargets/3.7.0""></Project>") }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus(string.Empty, string.Empty, 0));
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem, EmptyVariableTrackingService());
+
+            var first = service.AddPackage(projectPath, "Microsoft.Build.NoTargets", "net8.0", new NuGetVersion("3.7.134"));
+            var second = service.AddPackage(projectPath, "Microsoft.Build.NoTargets", "netstandard2.0", new NuGetVersion("3.7.134"));
+
+            Assert.True(first.IsSuccess);
+            Assert.True(second.IsSuccess);
+            Assert.Equal(@"<Project Sdk=""Microsoft.Build.NoTargets/3.7.134""></Project>", mockFileSystem.File.ReadAllText(projectPath));
+            dotNetRunner.Received(1).Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[0] == "restore"));
         }
     }
 }
