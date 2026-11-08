@@ -1,11 +1,8 @@
 using DotNetOutdated.Core.Models;
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.IO.Abstractions;
 using System.Linq;
-using System.Xml;
-using System.Xml.Linq;
 
 namespace DotNetOutdated.Core.Services
 {
@@ -46,7 +43,7 @@ namespace DotNetOutdated.Core.Services
                 foreach (var fileName in DirectoryBuildFileNames)
                 {
                     var path = fileSystem.Path.Combine(directory, fileName);
-                    if (fileSystem.File.Exists(path) && FileDeclaresCustomSdk(fileSystem, path))
+                    if (FileDeclaresCustomSdk(fileSystem, path))
                     {
                         return true;
                     }
@@ -56,49 +53,14 @@ namespace DotNetOutdated.Core.Services
             return false;
         }
 
-        private static bool FileDeclaresCustomSdk(IFileSystem fileSystem, string path)
-        {
-            try
-            {
-                return DeclaresCustomSdk(fileSystem.File.ReadAllText(path));
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                return false;
-            }
-        }
-
         /// <summary>
         /// Determines whether an MSBuild file declares an SDK other than the <c>Microsoft.NET.Sdk</c> family, in the
         /// <c>Sdk</c> attribute of the project, an <c>&lt;Sdk&gt;</c> element or an <c>&lt;Import Sdk&gt;</c>.
         /// Such SDKs are usually resolved from NuGet and can add package references of their own.
         /// </summary>
-        /// <returns><c>false</c> when the content is not valid XML.</returns>
-        public static bool DeclaresCustomSdk(string msbuildXml)
-        {
-            XElement root;
-            try
-            {
-                root = XDocument.Parse(msbuildXml).Root;
-            }
-            catch (XmlException)
-            {
-                return false;
-            }
-
-            if (root == null)
-            {
-                return false;
-            }
-
-            return (root.Attribute("Sdk")?.Value ?? string.Empty)
-                .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .Concat(root.Descendants().Where(e => e.Name.LocalName == "Sdk").Select(e => e.Attribute("Name")?.Value))
-                .Concat(root.Descendants().Where(e => e.Name.LocalName == "Import").Select(e => e.Attribute("Sdk")?.Value))
-                .Where(name => !string.IsNullOrWhiteSpace(name))
-                .Select(name => name.Split('/')[0].Trim())
-                .Any(IsCustomSdkName);
-        }
+        /// <returns><c>false</c> when the file is missing, unreadable or not valid XML.</returns>
+        private static bool FileDeclaresCustomSdk(IFileSystem fileSystem, string path) =>
+            ProjectSdkReferenceHelper.GetDeclarations(fileSystem, path).Any(declaration => IsCustomSdkName(declaration.Name));
 
         /// <summary>
         /// Determines whether an SDK name is outside the <c>Microsoft.NET.Sdk</c> family, which ships with the .NET SDK

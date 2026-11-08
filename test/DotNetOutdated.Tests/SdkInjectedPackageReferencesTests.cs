@@ -31,9 +31,11 @@ namespace DotNetOutdated.Tests
         [InlineData("<Project><PropertyGroup /></Project>", false)]
         [InlineData("<Project Sdk=\"Cake.Sdk\"", false)]
         [InlineData("<Project Sdk=\"Microsoft.NET.SdkExtras/1.0.0\" />", true)]
-        public void DeclaresCustomSdk(string xml, bool expected)
+        public void CustomSdkDeclarationInProjectFileIsDetected(string xml, bool expected)
         {
-            Assert.Equal(expected, SdkInjectedPackageReferences.DeclaresCustomSdk(xml));
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData> { [ProjectFile] = new(xml) });
+
+            Assert.Equal(expected, SdkInjectedPackageReferences.UsesCustomSdk(fileSystem, ProjectFile));
         }
 
         [Theory]
