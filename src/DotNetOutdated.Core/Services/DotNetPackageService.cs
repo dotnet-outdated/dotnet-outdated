@@ -167,7 +167,13 @@ namespace DotNetOutdated.Core.Services
         {
             foreach (var cpvmFile in FindCentralPackagesFiles(projectPath))
             {
-                var fileContent = _fileSystem.File.ReadAllText(cpvmFile.FullName);
+                var fileBytes = _fileSystem.File.ReadAllBytes(cpvmFile.FullName);
+                var decoded = TryDecode(fileBytes, out var fileContent, out var encoding, out var preamble);
+                if (!decoded)
+                {
+                    fileContent = _fileSystem.File.ReadAllText(cpvmFile.FullName);
+                }
+
                 if (!fileContent.Contains($"\"{packageName}\"", StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
@@ -176,7 +182,15 @@ namespace DotNetOutdated.Core.Services
                 var newFileContent = UpdateCentralPackageVersion(fileContent, packageName, version);
                 if (newFileContent != fileContent)
                 {
-                    _fileSystem.File.WriteAllText(cpvmFile.FullName, newFileContent);
+                    if (decoded)
+                    {
+                        // Keep the original encoding and byte order mark.
+                        _fileSystem.File.WriteAllBytes(cpvmFile.FullName, Encode(newFileContent, encoding, preamble));
+                    }
+                    else
+                    {
+                        _fileSystem.File.WriteAllText(cpvmFile.FullName, newFileContent);
+                    }
                 }
 
                 return true;
@@ -231,12 +245,7 @@ namespace DotNetOutdated.Core.Services
                 return;
             }
 
-            using var reader = new StreamReader(new MemoryStream(originalBytes), Encoding.UTF8);
-            var originalContent = reader.ReadToEnd();
-            var encoding = reader.CurrentEncoding;
-            var preamble = encoding.GetPreamble();
-            var hasPreamble = originalBytes.AsSpan().StartsWith(preamble);
-            if (!encoding.GetBytes(originalContent).AsSpan().SequenceEqual(originalBytes.AsSpan(hasPreamble ? preamble.Length : 0)))
+            if (!TryDecode(originalBytes, out var originalContent, out var encoding, out var preamble))
             {
                 // Do not replay content that could not be decoded without losing bytes.
                 return;
@@ -266,15 +275,33 @@ namespace DotNetOutdated.Core.Services
                 return;
             }
 
-            var contentBytes = encoding.GetBytes(formattedContent);
-            byte[] formattedBytes = hasPreamble
-                ? [.. preamble, .. contentBytes]
-                : contentBytes;
+            var formattedBytes = Encode(formattedContent, encoding, preamble);
             if (!formattedBytes.AsSpan().SequenceEqual(updatedBytes))
             {
                 _fileSystem.File.WriteAllBytes(file.FullName, formattedBytes);
             }
         }
+
+        /// <summary>
+        /// Decodes <paramref name="bytes"/> using its byte order mark (UTF-8 when there is none).
+        /// Returns false when re-encoding the text would not reproduce the original bytes.
+        /// </summary>
+        private static bool TryDecode(byte[] bytes, out string content, out Encoding encoding, out byte[] preamble)
+        {
+            using var reader = new StreamReader(new MemoryStream(bytes), Encoding.UTF8);
+            content = reader.ReadToEnd();
+            encoding = reader.CurrentEncoding;
+            preamble = encoding.GetPreamble();
+            if (!bytes.AsSpan().StartsWith(preamble))
+            {
+                preamble = [];
+            }
+
+            return encoding.GetBytes(content).AsSpan().SequenceEqual(bytes.AsSpan(preamble.Length));
+        }
+
+        private static byte[] Encode(string content, Encoding encoding, byte[] preamble) =>
+            [.. preamble, .. encoding.GetBytes(content)];
 
         private static RunStatus FileBasedAppUpdateFailed(string projectPath, string packageName, string hint) =>
             new(

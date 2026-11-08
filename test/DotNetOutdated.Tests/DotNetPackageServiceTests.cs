@@ -331,6 +331,34 @@ namespace DotNetOutdated.Tests
         }
 
         [Theory]
+        [InlineData(false, false)]
+        [InlineData(false, true)]
+        [InlineData(true, true)] // UTF-16 is only detectable through its byte order mark.
+        public void CpmProjectWithNoRestore_PreservesPropsEncoding(bool utf16, bool bom)
+        {
+            var propsPath = XFS.Path(@"c:\repo\Directory.Packages.props");
+            var projectPath = XFS.Path(@"c:\repo\MyProject.csproj");
+            var original = DirectoryPackagesPropsContent.Replace("\r\n", "\n").Replace("\n", "\r\n") + "\r\n";
+            Encoding encoding = utf16 ? new UnicodeEncoding(false, bom) : new UTF8Encoding(bom);
+            byte[] originalBytes = [.. encoding.GetPreamble(), .. encoding.GetBytes(original)];
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { propsPath, new MockFileData(originalBytes) },
+                { projectPath, new MockFileData("<Project></Project>") }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            var service = new DotNetPackageService(dotNetRunner, fileSystem, EmptyVariableTrackingService());
+
+            var result = service.AddPackage(projectPath, "Newtonsoft.Json", "net8.0",
+                new NuGetVersion("13.0.1"), noRestore: true);
+
+            byte[] expected = [.. encoding.GetPreamble(), .. encoding.GetBytes(original.Replace("12.0.3", "13.0.1"))];
+            Assert.True(result.IsSuccess);
+            Assert.Equal(expected, fileSystem.File.ReadAllBytes(propsPath));
+            dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
+        }
+
+        [Theory]
         [InlineData(false)]
         [InlineData(true)]
         public void CpmProjectWithRestore_DoesNotRewriteUnsupportedEncoding(bool cliUpdatesFile)
