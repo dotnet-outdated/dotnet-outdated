@@ -259,7 +259,7 @@ namespace DotNetOutdated
          }
       }
 
-      private bool UpgradePackages(List<AnalyzedProject> projects, IConsole console)
+      internal bool UpgradePackages(List<AnalyzedProject> projects, IConsole console)
       {
          bool success = true;
 
@@ -321,8 +321,12 @@ namespace DotNetOutdated
                      success = false;
                      console.Write($"An error occurred while upgrading {project.Project}", Constants.ReportingColors.UpgradeFailure);
                      console.WriteLine();
-                     console.Write(status.Errors, Constants.ReportingColors.UpgradeFailure);
-                     console.WriteLine();
+                     string failureDetails = status.FailureDetails;
+                     if (failureDetails.Length > 0)
+                     {
+                        console.Write(failureDetails, Constants.ReportingColors.UpgradeFailure);
+                        console.WriteLine();
+                     }
                   }
                }
             }
