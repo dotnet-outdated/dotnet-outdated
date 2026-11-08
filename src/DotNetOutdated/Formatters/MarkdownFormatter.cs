@@ -34,8 +34,8 @@ internal class MarkdownFormatter : IOutputFormatter
             {
                 sb.AppendLine($"### Target:{targetFramework.Name}");
                 sb.AppendLine();
-                sb.AppendLine("|Package|Transitive|Current|Last|Severity|");
-                sb.AppendLine("|-|-|-:|-:|-:|");
+                sb.AppendLine("|Package|Transitive|Current|Last|Severity|Repository Status|");
+                sb.AppendLine("|-|-|-:|-:|-:|-|");
                 foreach (var dependency in targetFramework.Dependencies)
                 {
                     sb.Append('|');
@@ -71,7 +71,10 @@ internal class MarkdownFormatter : IOutputFormatter
                         sb.Append('$');
                     }
                     sb.Append('|');
-                    sb.AppendLine(dependency.UpgradeSeverity.ToString());
+                    sb.Append(dependency.UpgradeSeverity.ToString());
+                    sb.Append('|');
+                    sb.Append(dependency.RepositoryStatus.ToString());
+                    sb.AppendLine("|");
                 }
                 sb.AppendLine();
             }

@@ -32,7 +32,8 @@ internal class CsvFormatter : IOutputFormatter
                             DependencyName = dependency.Name,
                             ResolvedVersion = dependency.ResolvedVersion?.ToString(),
                             LatestVersion = dependency.LatestVersion?.ToString(),
-                            UpgradeSeverity = upgradeSeverity
+                            UpgradeSeverity = upgradeSeverity,
+                            RepositoryStatus = Enum.GetName(dependency.RepositoryStatus)
                         });
                     }
                 }

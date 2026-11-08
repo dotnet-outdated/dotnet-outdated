@@ -15,7 +15,8 @@ namespace DotNetOutdated
             [
                 packages.Max(p => p.Description.Length),
                 packages.Max(p => p.ResolvedVersion?.ToString().Length ?? 0),
-                packages.Max(p => p.LatestVersion?.ToString().Length ?? 0)
+                packages.Max(p => p.LatestVersion?.ToString().Length ?? 0),
+                packages.Max(p => p.RepositoryStatusDescription.Length)
             ];
         }
     }
