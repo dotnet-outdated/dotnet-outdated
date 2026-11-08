@@ -310,12 +310,7 @@ namespace DotNetOutdated
 
                   if (status is null || status.IsSuccess)
                   {
-                     var newVersionRange = project.OriginalVersionRange.Satisfies(package.LatestVersion)
-                        ? new VersionRange(
-                           minVersion: package.LatestVersion,
-                           maxVersion: project.OriginalVersionRange.MaxVersion,
-                           includeMaxVersion: project.OriginalVersionRange.IsMaxInclusive)
-                        : new VersionRange(package.LatestVersion);
+                     var newVersionRange = UpgradeVersionRange.Compute(project.OriginalVersionRange, package.LatestVersion);
 
                      status = _dotNetPackageService.AddPackage(project.ProjectFilePath, package.Name, project.Framework.GetShortFolderName(), newVersionRange, NoRestore, IgnoreFailedSources);
                   }
