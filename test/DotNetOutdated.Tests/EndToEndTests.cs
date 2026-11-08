@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -244,6 +245,27 @@ public static class EndToEndTests
         Assert.DoesNotContain("Cake.Generator", content);
     }
 
+    [Theory]
+    [InlineData("empty-solution", null, "Empty.sln")]
+    [InlineData("empty-solution", "Empty.sln", "Empty.sln")]
+    [InlineData("empty-slnx", "Empty.slnx", "Empty.slnx")]
+    [InlineData("empty-solution-filter", "Empty.slnf", "Empty.slnf")]
+    public static void Reports_Friendly_Message_For_Solution_With_No_Projects(string testProjectName, string inputFile, string reportedFile)
+    {
+        using var project = TestSetup(testProjectName);
+        var input = inputFile is null ? project.Path : Path.Combine(project.Path, inputFile);
+
+        var (exitCode, output) = RunAndCaptureOutput(input);
+
+        Assert.Equal(1, exitCode);
+        var expected = string.Format(
+            CultureInfo.InvariantCulture,
+            DotNetOutdated.Core.Resources.ValidationErrorMessages.NoRestorableProjectsInSolution,
+            Path.Combine(project.Path, reportedFile));
+        Assert.Contains(expected, output, StringComparison.Ordinal);
+        Assert.DoesNotContain("Unhandled exception", output, StringComparison.Ordinal);
+    }
+
     [Fact]
     public static void Can_Upgrade_Project_With_Maximum_Version()
     {
@@ -277,6 +299,48 @@ public static class EndToEndTests
             .ToDictionary(e => (string)e.Attribute("Include"), e => (string)e.Attribute("Version"));
 
         Assert.StartsWith("8.0.", csprojDependencyVersions["System.Text.Json"]);
+    }
+
+    [Fact]
+    public static void Maximum_Version_Never_Widens_Declared_Version_Ranges()
+    {
+        using var directory = TestSetup("max-version-ranges");
+
+        var outputPath = Path.Combine(directory.Path, "output.json");
+
+        var actual = Program.Main([directory.Path, "--maximum-version:8.0", "--output", outputPath, "--output-format:json"]);
+        Assert.Equal(0, actual);
+
+        using var output = JsonDocument.Parse(File.ReadAllText(outputPath));
+
+        var latestVersions = new Dictionary<string, NuGetVersion>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var project in output.RootElement.GetProperty("Projects").EnumerateArray())
+        {
+            foreach (var tfm in project.GetProperty("TargetFrameworks").EnumerateArray())
+            {
+                foreach (var dependency in tfm.GetProperty("Dependencies").EnumerateArray())
+                {
+                    latestVersions[dependency.GetProperty("Name").GetString()] =
+                        NuGetVersion.Parse(dependency.GetProperty("LatestVersion").GetString());
+                }
+            }
+        }
+
+        // Exact pins are never upgraded, whether they are below or above the maximum version
+        Assert.DoesNotContain("System.Text.Encodings.Web", latestVersions.Keys);
+        Assert.DoesNotContain("Microsoft.Bcl.AsyncInterfaces", latestVersions.Keys);
+
+        // A declared upper bound below the maximum version wins: [6.0.0, 7.0.0)
+        Assert.Equal(6, latestVersions["Microsoft.Extensions.Options"].Major);
+
+        // The maximum version wins over a higher declared upper bound: [6.0.0, 10.0.0)
+        Assert.Equal(8, latestVersions["Microsoft.Extensions.Logging"].Major);
+        Assert.Equal(0, latestVersions["Microsoft.Extensions.Logging"].Minor);
+
+        // An open-ended version is capped at the maximum version: 6.0.0
+        Assert.Equal(8, latestVersions["System.Text.Json"].Major);
+        Assert.Equal(0, latestVersions["System.Text.Json"].Minor);
     }
 
     [Fact]
@@ -412,6 +476,25 @@ public static class EndToEndTests
         Assert.True(systemTextJson.MinVersion > new NuGetVersion(6, 0, 0));
         Assert.Equal(new NuGetVersion(7, 0, 0), systemTextJson.MaxVersion);
         Assert.False(systemTextJson.IsMaxInclusive);
+    }
+
+    private static (int ExitCode, string Output) RunAndCaptureOutput(string path)
+    {
+        var originalOut = Console.Out;
+        var originalError = Console.Error;
+        using var output = new StringWriter();
+        Console.SetOut(output);
+        Console.SetError(output);
+        try
+        {
+            var exitCode = Program.Main([path]);
+            return (exitCode, output.ToString());
+        }
+        finally
+        {
+            Console.SetOut(originalOut);
+            Console.SetError(originalError);
+        }
     }
 
     private static TemporaryDirectory TestSetup(string testProjectName)

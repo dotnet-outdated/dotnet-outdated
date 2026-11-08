@@ -543,9 +543,11 @@ namespace DotNetOutdated
          NuGetVersion latestVersion = null;
 
         if (maximumVersion is not null &&
-            (versionRange.MaxVersion is null || maximumVersion > versionRange.MaxVersion))
+            (versionRange.MaxVersion is null || maximumVersion < versionRange.MaxVersion))
         {
-            // Patch the version range to include the user-specified maximum
+            // Cap the declared version range at the user-specified maximum: the effective
+            // upper bound is whichever of the two is lower, so pinned versions (e.g. [1.0.0])
+            // and bounded ranges (e.g. [1.0.0, 2.0.0)) are never widened by --maximum-version.
             versionRange = new(
                 versionRange.MinVersion,
                 versionRange.IsMinInclusive,
