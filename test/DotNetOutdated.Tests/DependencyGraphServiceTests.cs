@@ -69,8 +69,11 @@ namespace DotNetOutdated.Tests
         }
 
         [Fact]
-        public async Task EmptySolutionReturnsEmptyDependencyGraph()
+        public async Task EmptyGraphFileReturnsEmptyDependencyGraph()
         {
+            // Covers MSBuild writing a restore graph that lists no projects. Current SDKs (8.0 to 11.0)
+            // write no file at all for an empty solution; that case is covered by
+            // SolutionWithoutGraphFileThrowsNoRestorableProjectsMessage.
             var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>());
 
             // Arrange
