@@ -37,11 +37,21 @@ public interface IVariableTrackingService
     /// Updates a package's variable value to a version range (e.g. <c>[13.0.4, 14.0.0)</c>) and restores the variable reference.
     /// File-based app variables only hold single versions, so they receive the range's lower bound.
     /// </summary>
-    void UpdatePackageVariable(PackageVariableInfo variableInfo, VersionRange newVersionRange);
+    /// <remarks>
+    /// The default implementation keeps existing implementers of this interface working: a plain minimum
+    /// version is passed to the <see cref="NuGetVersion"/> overload, and any other range is not updated.
+    /// </remarks>
+    void UpdatePackageVariable(PackageVariableInfo variableInfo, VersionRange newVersionRange) =>
+        TryUpdatePackageVariable(variableInfo, newVersionRange);
 
     /// <inheritdoc cref="UpdatePackageVariable(PackageVariableInfo, VersionRange)"/>
     /// <returns><see langword="true"/> when at least one file was updated; otherwise <see langword="false"/>.</returns>
-    bool TryUpdatePackageVariable(PackageVariableInfo variableInfo, VersionRange newVersionRange);
+    bool TryUpdatePackageVariable(PackageVariableInfo variableInfo, VersionRange newVersionRange)
+    {
+        ArgumentNullException.ThrowIfNull(newVersionRange);
+
+        return newVersionRange.IsPlainVersion() && TryUpdatePackageVariable(variableInfo, newVersionRange.MinVersion);
+    }
 
     /// <summary>
     /// Updates a literal <c>#:package</c> or <c>#:sdk</c> directive in a file-based app source file.

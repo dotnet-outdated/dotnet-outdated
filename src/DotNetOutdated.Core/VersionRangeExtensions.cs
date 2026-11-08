@@ -10,8 +10,14 @@ namespace DotNetOutdated.Core
         /// upgrades are unchanged; anything else uses NuGet's short range syntax, e.g. <c>[1.2.3, 2.0.0)</c>.
         /// </summary>
         public static string ToVersionString(this VersionRange versionRange) =>
-            versionRange is { HasLowerBound: true, IsMinInclusive: true, HasUpperBound: false, IsFloating: false }
+            versionRange.IsPlainVersion()
                 ? versionRange.MinVersion.ToString()
                 : versionRange.ToShortString();
+
+        /// <summary>
+        /// Whether the range is just a minimum version (<c>[1.2.3, )</c>), i.e. equivalent to a single <see cref="NuGetVersion"/>.
+        /// </summary>
+        public static bool IsPlainVersion(this VersionRange versionRange) =>
+            versionRange is { HasLowerBound: true, IsMinInclusive: true, HasUpperBound: false, IsFloating: false };
     }
 }
