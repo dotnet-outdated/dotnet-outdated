@@ -146,7 +146,18 @@ namespace DotNetOutdated.Core.Services
                 // This avoids the dotnet CPM bug AND preserves the variable reference.
                 if (variableInfo != null && variableInfo.ElementType != "PackageReference")
                 {
-                    _variableTrackingService.UpdatePackageVariable(variableInfo, versionRange);
+                    // No change is fine when the property already holds the requested value
+                    // (e.g. the second target framework of a multi-targeted project).
+                    if (!_variableTrackingService.TryUpdatePackageVariable(variableInfo, versionRange) &&
+                        !IsVariableAtRequestedVersionRange(variableInfo, versionRange))
+                    {
+                        return new RunStatus(
+                            string.Empty,
+                            $"Failed to update '{packageName}': could not write '{versionRange.ToVersionString()}' to the " +
+                            $"$({variableInfo.VariableName}) property in '{variableInfo.FilePath}'.",
+                            1);
+                    }
+
                     return new RunStatus(string.Empty, string.Empty, 0);
                 }
 
@@ -366,6 +377,9 @@ namespace DotNetOutdated.Core.Services
 
             return string.Equals(variableInfo.VariableValue, version.ToString(), StringComparison.OrdinalIgnoreCase);
         }
+
+        private static bool IsVariableAtRequestedVersionRange(PackageVariableInfo variableInfo, VersionRange versionRange) =>
+            VersionRange.TryParse(variableInfo.VariableValue, out var current) && current.Equals(versionRange);
 
         private static bool IsFileBasedAppDirectReferenceAtRequestedVersion(FileBasedAppReference reference, NuGetVersion version) =>
             reference.ResolvedVersion == version;

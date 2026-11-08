@@ -453,6 +453,40 @@ namespace DotNetOutdated.Tests
             }
         }
 
+        [Theory]
+        [InlineData(true, "[12.0.1,14.0.0)", true)]
+        [InlineData(false, "[13.0.4,14.0.0)", true)]
+        [InlineData(false, "[12.0.1,14.0.0)", false)]
+        public void CpmVariableWithNoRestore_ReportsFailureWhenRangeCannotBeWritten(bool updated, string currentValue, bool expectSuccess)
+        {
+            var projectPath = XFS.Path(@"c:\repo\src\MyProject\MyProject.csproj");
+            var variableInfo = new PackageVariableInfo
+            {
+                PackageName = "Newtonsoft.Json",
+                VariableName = "NewtonsoftJsonVersion",
+                VariableValue = currentValue,
+                FilePath = XFS.Path(@"c:\repo\Directory.Packages.props"),
+                PackageReferenceFilePath = XFS.Path(@"c:\repo\Directory.Packages.props"),
+                ElementType = "PackageVersion"
+            };
+            var variableTracking = Substitute.For<IVariableTrackingService>();
+            variableTracking.DiscoverPackageVariables(projectPath).Returns(new Dictionary<string, PackageVariableInfo> { ["Newtonsoft.Json"] = variableInfo });
+            variableTracking.DiscoverFileBasedAppReferences(projectPath).Returns([]);
+            variableTracking.TryUpdatePackageVariable(variableInfo, Arg.Any<VersionRange>()).Returns(updated);
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            var service = new DotNetPackageService(dotNetRunner, new MockFileSystem(), variableTracking);
+
+            var result = service.AddPackage(projectPath, "Newtonsoft.Json", "net8.0",
+                VersionRange.Parse("[13.0.4, 14.0.0)"), noRestore: true, ignoreFailedSources: false);
+
+            Assert.Equal(expectSuccess, result.IsSuccess);
+            if (!expectSuccess)
+            {
+                Assert.Contains("$(NewtonsoftJsonVersion)", result.Errors);
+            }
+            dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
+        }
+
         [Fact]
         public void CpmProjectWithRestore_PreservesWhitespaceAcrossMultipleUpgrades()
         {
