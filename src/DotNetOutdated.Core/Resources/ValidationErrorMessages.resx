@@ -132,4 +132,10 @@
   <data name="FileNotAValidSolutionOrProject" xml:space="preserve">
     <value>The file '{0}' is not a valid solution, project, or file-based app.</value>
   </data>
+  <data name="NoDependencyGraphForProject" xml:space="preserve">
+    <value>MSBuild did not produce a dependency graph for '{0}'. Make sure it is an SDK-style project or file-based app that supports NuGet restore.</value>
+  </data>
+  <data name="NoRestorableProjectsInSolution" xml:space="preserve">
+    <value>No restorable projects were found in '{0}'. Make sure it includes at least one SDK-style project, and that a solution filter or the active build configuration does not exclude it.</value>
+  </data>
 </root>

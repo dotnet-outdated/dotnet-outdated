@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -242,6 +243,27 @@ public static class EndToEndTests
         Assert.DoesNotContain("Cake.Generator", content);
     }
 
+    [Theory]
+    [InlineData("empty-solution", null, "Empty.sln")]
+    [InlineData("empty-solution", "Empty.sln", "Empty.sln")]
+    [InlineData("empty-slnx", "Empty.slnx", "Empty.slnx")]
+    [InlineData("empty-solution-filter", "Empty.slnf", "Empty.slnf")]
+    public static void Reports_Friendly_Message_For_Solution_With_No_Projects(string testProjectName, string inputFile, string reportedFile)
+    {
+        using var project = TestSetup(testProjectName);
+        var input = inputFile is null ? project.Path : Path.Combine(project.Path, inputFile);
+
+        var (exitCode, output) = RunAndCaptureOutput(input);
+
+        Assert.Equal(1, exitCode);
+        var expected = string.Format(
+            CultureInfo.InvariantCulture,
+            DotNetOutdated.Core.Resources.ValidationErrorMessages.NoRestorableProjectsInSolution,
+            Path.Combine(project.Path, reportedFile));
+        Assert.Contains(expected, output, StringComparison.Ordinal);
+        Assert.DoesNotContain("Unhandled exception", output, StringComparison.Ordinal);
+    }
+
     [Fact]
     public static void Can_Upgrade_Project_With_Maximum_Version()
     {
@@ -374,6 +396,25 @@ public static class EndToEndTests
         // Verify old versions are not present in Directory.Build.props
         Assert.DoesNotContain("<NewtonsoftJsonVersion>11.0.1</NewtonsoftJsonVersion>", propsContent);
         Assert.DoesNotContain("<MicrosoftExtensionsVersion>2.1.0</MicrosoftExtensionsVersion>", propsContent);
+    }
+
+    private static (int ExitCode, string Output) RunAndCaptureOutput(string path)
+    {
+        var originalOut = Console.Out;
+        var originalError = Console.Error;
+        using var output = new StringWriter();
+        Console.SetOut(output);
+        Console.SetError(output);
+        try
+        {
+            var exitCode = Program.Main([path]);
+            return (exitCode, output.ToString());
+        }
+        finally
+        {
+            Console.SetOut(originalOut);
+            Console.SetError(originalError);
+        }
     }
 
     private static TemporaryDirectory TestSetup(string testProjectName)
