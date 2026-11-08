@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -9,6 +10,7 @@ using DotNetOutdated.Core.Services;
 using DotNetOutdated.Models;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
+using NuGet.Versioning;
 using Xunit;
 
 namespace DotNetOutdated.Tests
@@ -159,6 +161,35 @@ namespace DotNetOutdated.Tests
             // Assert
             Assert.Contains("project1.csproj", output);
             Assert.Contains("\"resultType\":\"complete\"", output);
+        }
+
+        [Theory]
+        [InlineData("(,14.0.0)")]
+        [InlineData("*")]
+        [InlineData("13.*")]
+        [InlineData("[13.0.1, 14.0.0)")]
+        public async Task UpdatePackage_RejectsVersionRangesAndFloatingVersions(string version)
+        {
+            var input = "{\"jsonrpc\": \"2.0\", \"method\": \"tools/call\", \"params\": { \"name\": \"update_package\", \"arguments\": " +
+                $"{{ \"projectPath\": \"/test/p.csproj\", \"packageName\": \"Newtonsoft.Json\", \"version\": \"{version}\", \"framework\": \"net8.0\" }} }}, \"id\": 4}}\n";
+
+            var output = await RunServerAsync(input);
+
+            Assert.Contains("Invalid version", output);
+            _dotNetPackageService.ReceivedCalls().ToList().ForEach(call => Assert.NotEqual("AddPackage", call.GetMethodInfo().Name));
+        }
+
+        [Fact]
+        public async Task UpdatePackage_PassesExactVersion()
+        {
+            var input = "{\"jsonrpc\": \"2.0\", \"method\": \"tools/call\", \"params\": { \"name\": \"update_package\", \"arguments\": " +
+                "{ \"projectPath\": \"/test/p.csproj\", \"packageName\": \"Newtonsoft.Json\", \"version\": \"13.0.1\", \"framework\": \"net8.0\" } }, \"id\": 5}\n";
+            _dotNetPackageService.AddPackage("/test/p.csproj", "Newtonsoft.Json", "net8.0", new NuGetVersion("13.0.1"))
+                .Returns(new RunStatus("", "", 0));
+
+            var output = await RunServerAsync(input);
+
+            Assert.Contains("Successfully updated Newtonsoft.Json to 13.0.1", output);
         }
     }
 }

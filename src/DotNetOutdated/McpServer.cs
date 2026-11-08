@@ -420,7 +420,7 @@ namespace DotNetOutdated
                 framework = frameworkProp.GetString();
             }
             
-            if (!VersionRange.TryParse(versionString, out var version))
+            if (!NuGetVersion.TryParse(versionString, out var version))
             {
                  throw new ArgumentException($"Invalid version: {versionString}");
             }
