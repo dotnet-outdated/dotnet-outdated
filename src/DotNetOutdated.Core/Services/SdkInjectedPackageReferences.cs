@@ -1,0 +1,97 @@
+using DotNetOutdated.Core.Models;
+using System;
+using System.Collections.Generic;
+using System.IO.Abstractions;
+using System.Linq;
+using System.Xml;
+using System.Xml.Linq;
+
+namespace DotNetOutdated.Core.Services
+{
+    /// <summary>
+    /// Finds package references that an MSBuild SDK or package adds to a project from its own props or targets files,
+    /// such as <c>Cake.Generator</c> from <c>Cake.Sdk</c> or the MSTest packages from <c>MSTest.Sdk</c>. Their versions
+    /// come from the SDK, so <c>dotnet add package</c> cannot upgrade them in the project.
+    /// </summary>
+    internal static class SdkInjectedPackageReferences
+    {
+        /// <summary>
+        /// Determines whether an MSBuild file declares an SDK other than the <c>Microsoft.NET.Sdk</c> family, in the
+        /// <c>Sdk</c> attribute of the project, an <c>&lt;Sdk&gt;</c> element or an <c>&lt;Import Sdk&gt;</c>.
+        /// Such SDKs are usually resolved from NuGet and can add package references of their own.
+        /// </summary>
+        /// <returns><c>false</c> when the content is not valid XML.</returns>
+        public static bool DeclaresCustomSdk(string msbuildXml)
+        {
+            XElement root;
+            try
+            {
+                root = XDocument.Parse(msbuildXml).Root;
+            }
+            catch (XmlException)
+            {
+                return false;
+            }
+
+            if (root == null)
+            {
+                return false;
+            }
+
+            return (root.Attribute("Sdk")?.Value ?? string.Empty)
+                .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Concat(root.Descendants().Where(e => e.Name.LocalName == "Sdk").Select(e => e.Attribute("Name")?.Value))
+                .Concat(root.Descendants().Where(e => e.Name.LocalName == "Import").Select(e => e.Attribute("Sdk")?.Value))
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Select(name => name.Split('/')[0].Trim())
+                .Any(IsCustomSdkName);
+        }
+
+        /// <summary>
+        /// Determines whether an SDK name is outside the <c>Microsoft.NET.Sdk</c> family, which ships with the .NET SDK
+        /// and marks its own package references as implicitly defined.
+        /// </summary>
+        public static bool IsCustomSdkName(string sdkName) =>
+            !sdkName.StartsWith("Microsoft.NET.Sdk", StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Returns the names of the packages whose <c>PackageReference</c> items are all defined in a file inside one of
+        /// <paramref name="packageFolders"/>. A package with at least one item defined elsewhere, for example in the
+        /// project or in a <c>Directory.Build.props</c> file, is referenced by the user and is not returned.
+        /// </summary>
+        public static HashSet<string> GetPackageDefinedNames(IFileSystem fileSystem, IEnumerable<PackageReferenceItem> items, IEnumerable<string> packageFolders)
+        {
+            var folders = packageFolders
+                .Where(folder => !string.IsNullOrEmpty(folder))
+                .Select(folder => fileSystem.Path.TrimEndingDirectorySeparator(fileSystem.Path.GetFullPath(folder)) + fileSystem.Path.DirectorySeparatorChar)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            return items
+                .Where(item => !string.IsNullOrEmpty(item.Name))
+                .GroupBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
+                .Where(group => group.All(item => IsInFolder(fileSystem, item.DefiningProjectFullPath, folders)))
+                .Select(group => group.Key)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Marks the direct dependencies named in <paramref name="packageDefinedNames"/> as auto-referenced.
+        /// </summary>
+        public static void MarkAsAutoReferenced(TargetFramework targetFramework, ISet<string> packageDefinedNames)
+        {
+            foreach (var (key, dependency) in targetFramework.Dependencies.ToList())
+            {
+                if (!dependency.IsTransitive && !dependency.IsAutoReferenced && packageDefinedNames.Contains(dependency.Name))
+                {
+                    targetFramework.Dependencies[key] = new Dependency(dependency.Name, dependency.VersionRange, dependency.ResolvedVersion,
+                        isAutoReferenced: true, isTransitive: false, dependency.IsDevelopmentDependency);
+                }
+            }
+        }
+
+        private static bool IsInFolder(IFileSystem fileSystem, string path, List<string> folders) =>
+            !string.IsNullOrEmpty(path) &&
+            folders.Any(folder => fileSystem.Path.GetFullPath(path).StartsWith(folder, StringComparison.OrdinalIgnoreCase));
+    }
+}
