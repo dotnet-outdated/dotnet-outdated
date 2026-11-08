@@ -474,5 +474,26 @@ Information(""Outdated Sdk"");")
             Assert.True(result.IsSuccess);
             dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
         }
+
+        [Fact]
+        public void ProjectSdk_MultiTargetedProject_RestoresOnlyOnce()
+        {
+            var projectPath = XFS.Path(@"c:\repo\App\App.csproj");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { projectPath, new MockFileData(@"<Project Sdk=""Microsoft.Build.NoTargets/3.7.0""></Project>") }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus(string.Empty, string.Empty, 0));
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem, EmptyVariableTrackingService());
+
+            var first = service.AddPackage(projectPath, "Microsoft.Build.NoTargets", "net8.0", new NuGetVersion("3.7.134"));
+            var second = service.AddPackage(projectPath, "Microsoft.Build.NoTargets", "netstandard2.0", new NuGetVersion("3.7.134"));
+
+            Assert.True(first.IsSuccess);
+            Assert.True(second.IsSuccess);
+            Assert.Equal(@"<Project Sdk=""Microsoft.Build.NoTargets/3.7.134""></Project>", mockFileSystem.File.ReadAllText(projectPath));
+            dotNetRunner.Received(1).Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[0] == "restore"));
+        }
     }
 }

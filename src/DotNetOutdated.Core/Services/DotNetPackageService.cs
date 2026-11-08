@@ -98,12 +98,16 @@ namespace DotNetOutdated.Core.Services
                             1);
                     }
 
-                    if (!updated && sdkReference.ResolvedVersion != version)
+                    if (!updated)
                     {
-                        return new RunStatus(
-                            string.Empty,
-                            $"Failed to update the version of SDK '{packageName}' in '{projectPath}'.",
-                            1);
+                        // Already at the requested version: a multi-targeted project gets one call per target
+                        // framework, and the first call has already rewritten the file and restored.
+                        return sdkReference.ResolvedVersion == version
+                            ? new RunStatus(string.Empty, string.Empty, 0)
+                            : new RunStatus(
+                                string.Empty,
+                                $"Failed to update the version of SDK '{packageName}' in '{projectPath}'.",
+                                1);
                     }
 
                     return noRestore
