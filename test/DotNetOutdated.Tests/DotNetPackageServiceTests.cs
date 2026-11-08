@@ -1432,5 +1432,27 @@ Information(""Outdated Sdk"");")
             Assert.Equal(packagesContent, fileSystem.File.ReadAllText(packagesPath));
             dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
         }
+
+        [Fact]
+        public void UnsupportedVariableInProjectFile_FallsBackToLiteralWithAWarning()
+        {
+            var projectPath = XFS.Path(@"c:\repo\A\A.csproj");
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                [projectPath] = new("<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><Major>8</Major></PropertyGroup>" +
+                                    "<ItemGroup><PackageReference Include=\"Serilog\" Version=\"$(Major).0.3\" /></ItemGroup></Project>"),
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
+            var warnings = new List<string>();
+            var service = new DotNetPackageService(dotNetRunner, fileSystem, new VariableTrackingService(fileSystem), warnings.Add);
+
+            Assert.True(service.AddPackage(projectPath, "Serilog", "net8.0", new NuGetVersion("9.0.0"), noRestore: false).IsSuccess);
+
+            dotNetRunner.Received(1).Run(XFS.Path(@"c:\repo\A"), Arg.Is<string[]>(a => a[0] == "add" && a[3] == "Serilog"));
+            var warning = Assert.Single(warnings);
+            Assert.Contains("literal version", warning);
+            Assert.Contains("$(Major).0.3", warning);
+        }
     }
 }

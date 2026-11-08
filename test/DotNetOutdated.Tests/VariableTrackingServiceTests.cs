@@ -1401,5 +1401,24 @@ Information(""Outdated Sdk"");")
             Assert.Equal("MauiVersion", rediscovered.VariableName);
             Assert.Equal("8.0.100", rediscovered.VariableValue);
         }
+
+        [Fact]
+        public void Update_StaleDefinitionIndex_IsRefusedWithAWarning()
+        {
+            var projectPath = XFS.Path(@"c:\repo\MyProject.csproj");
+            var original = "<Project><PropertyGroup><V>1.0.0</V></PropertyGroup><ItemGroup><PackageReference Include=\"Serilog\" Version=\"$(V)\" /></ItemGroup></Project>";
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData> { [projectPath] = new(original) });
+            var warnings = new List<string>();
+            var service = new VariableTrackingService(fileSystem, warnings.Add);
+            var info = service.DiscoverPackageVariables(projectPath)["Serilog"];
+
+            // Someone else edits the property between discovery and update.
+            var edited = original.Replace("<V>1.0.0</V>", "<V>1.5.0</V>");
+            fileSystem.File.WriteAllText(projectPath, edited);
+
+            Assert.False(service.TryUpdatePackageVariable(info, new NuGetVersion("2.0.0")));
+            Assert.Equal(edited, fileSystem.File.ReadAllText(projectPath));
+            Assert.Contains(warnings, w => w.Contains("changed since it was scanned"));
+        }
     }
 }

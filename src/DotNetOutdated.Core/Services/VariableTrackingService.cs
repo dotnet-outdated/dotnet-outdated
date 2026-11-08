@@ -252,7 +252,18 @@ public sealed partial class VariableTrackingService : IVariableTrackingService
         }
         else
         {
-            newContent = PackageVersionMarkup.ReplacePropertyValueAt(content, variableInfo.VariableName, variableInfo.PropertyElementIndex, newValue);
+            var elements = PropertyElements(doc, variableInfo.VariableName);
+            var index = variableInfo.PropertyElementIndex;
+            if (index >= elements.Count ||
+                (!string.IsNullOrEmpty(variableInfo.VariableValue) &&
+                 !string.Equals(elements[index].Value.Trim(), variableInfo.VariableValue, StringComparison.Ordinal)))
+            {
+                _onWarning?.Invoke(
+                    $"Not updating $({variableInfo.VariableName}) in '{variableInfo.FilePath}': the file changed since it was scanned.");
+                return false;
+            }
+
+            newContent = PackageVersionMarkup.ReplacePropertyValueAt(content, variableInfo.VariableName, index, newValue);
         }
 
         if (string.Equals(content, newContent, StringComparison.Ordinal))
@@ -260,8 +271,56 @@ public sealed partial class VariableTrackingService : IVariableTrackingService
             return false;
         }
 
+        if (!IsExpectedPropertyEdit(doc, newContent, variableInfo.VariableName, newValue))
+        {
+            _onWarning?.Invoke(
+                $"Not updating $({variableInfo.VariableName}) in '{variableInfo.FilePath}': the edit did not change exactly one definition as expected.");
+            return false;
+        }
+
         propertyFile.Write(_fileSystem, variableInfo.FilePath, newContent);
         return true;
+    }
+
+    // Guards the text-level edit against regex/XML disagreements: the edited document must still parse, and
+    // exactly one definition of the property must differ (holding newValue) or have been added; nothing else
+    // about the property's definitions may change.
+    private static bool IsExpectedPropertyEdit(XDocument before, string newContent, string propertyName, string newValue)
+    {
+        XDocument after;
+        try
+        {
+            after = XDocument.Parse(newContent);
+        }
+        catch (System.Xml.XmlException)
+        {
+            return false;
+        }
+
+        var oldValues = PropertyElements(before, propertyName).Select(e => e.Value.Trim()).ToList();
+        var newValues = PropertyElements(after, propertyName).Select(e => e.Value.Trim()).ToList();
+
+        if (newValues.Count == oldValues.Count)
+        {
+            var changed = Enumerable.Range(0, oldValues.Count).Where(i => oldValues[i] != newValues[i]).ToList();
+            return changed.Count == 1 && newValues[changed[0]] == newValue;
+        }
+
+        if (newValues.Count != oldValues.Count + 1)
+        {
+            return false;
+        }
+
+        // Inserted: removing one occurrence of newValue must give back the original sequence.
+        for (var i = 0; i < newValues.Count; i++)
+        {
+            if (newValues[i] == newValue && newValues.Where((_, j) => j != i).SequenceEqual(oldValues))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private bool TryUpdateXmlPropertyFile(string propertyFilePath, string variableName, string newMSBuildValue)

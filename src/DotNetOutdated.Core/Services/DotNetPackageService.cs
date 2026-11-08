@@ -11,8 +11,18 @@ using System.Xml.Linq;
 
 namespace DotNetOutdated.Core.Services
 {
-    public class DotNetPackageService(IDotNetRunner dotNetRunner, IFileSystem fileSystem, IVariableTrackingService variableTrackingService) : IDotNetPackageService
+    public class DotNetPackageService(
+        IDotNetRunner dotNetRunner,
+        IFileSystem fileSystem,
+        IVariableTrackingService variableTrackingService,
+        Action<string> onWarning) : IDotNetPackageService
     {
+        public DotNetPackageService(IDotNetRunner dotNetRunner, IFileSystem fileSystem, IVariableTrackingService variableTrackingService)
+            : this(dotNetRunner, fileSystem, variableTrackingService, null)
+        {
+        }
+
+        private readonly Action<string> _onWarning = onWarning;
         private readonly IDotNetRunner _dotNetRunner = dotNetRunner;
         private readonly IFileSystem _fileSystem = fileSystem;
         private readonly IVariableTrackingService _variableTrackingService = variableTrackingService;
@@ -163,6 +173,9 @@ namespace DotNetOutdated.Core.Services
                 }
 
                 // Treat it like a literal version: the expression is replaced with the new version.
+                _onWarning?.Invoke(
+                    $"'{packageName}' in '{variableInfo.PackageReferenceFilePath}' will be set to a literal version because " +
+                    $"{variableInfo.UnsupportedReason}; its version expression '{variableInfo.PackageReferenceVersion}' is not preserved.");
                 variableInfo = null;
             }
 
