@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
 using System.IO.Abstractions.TestingHelpers;
 using DotNetOutdated.Core.Services;
 using NSubstitute;
@@ -69,6 +71,186 @@ namespace DotNetOutdated.Tests
             Assert.DoesNotContain("Version=\"12.0.3\"", updatedContent);
             // Serilog should be untouched
             Assert.Contains("Version=\"2.10.0\"", updatedContent);
+        }
+
+        [Fact]
+        public void CpmProjectWithNoRestore_UpdatesMultilinePackageVersion()
+        {
+            const string propsContent = @"<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageVersion
+      Include=""Microsoft.AspNetCore.Components.WebAssembly.Authentication""
+      Version=""9.0.7""
+    />
+  </ItemGroup>
+</Project>";
+            const string expectedContent = @"<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageVersion
+      Include=""Microsoft.AspNetCore.Components.WebAssembly.Authentication""
+      Version=""10.0.0""
+    />
+  </ItemGroup>
+</Project>";
+
+            AssertNoRestoreUpdate(propsContent, "Microsoft.AspNetCore.Components.WebAssembly.Authentication", "10.0.0", expectedContent);
+        }
+
+        [Fact]
+        public void CpmProjectWithNoRestore_UpdatesPackageVersionWithChildElements()
+        {
+            const string propsContent = @"<Project>
+  <ItemGroup>
+    <PackageVersion Include=""SomeGenerator"" Version=""1.0.0"">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageVersion>
+    <PackageVersion Include=""Serilog"" Version=""2.10.0"" />
+  </ItemGroup>
+</Project>";
+            const string expectedContent = @"<Project>
+  <ItemGroup>
+    <PackageVersion Include=""SomeGenerator"" Version=""2.0.0"">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageVersion>
+    <PackageVersion Include=""Serilog"" Version=""2.10.0"" />
+  </ItemGroup>
+</Project>";
+
+            AssertNoRestoreUpdate(propsContent, "SomeGenerator", "2.0.0", expectedContent);
+        }
+
+        [Fact]
+        public void CpmProjectWithNoRestore_UpdatesGlobalPackageReferenceWithChildElements()
+        {
+            const string propsContent = @"<Project>
+  <ItemGroup>
+    <GlobalPackageReference Include=""coverlet.collector"" Version=""6.0.0"">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </GlobalPackageReference>
+  </ItemGroup>
+</Project>";
+            const string expectedContent = @"<Project>
+  <ItemGroup>
+    <GlobalPackageReference Include=""coverlet.collector"" Version=""6.0.2"">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </GlobalPackageReference>
+  </ItemGroup>
+</Project>";
+
+            AssertNoRestoreUpdate(propsContent, "coverlet.collector", "6.0.2", expectedContent);
+        }
+
+        [Fact]
+        public void CpmProjectWithNoRestore_UnmatchedEntry_ReportsFailureAndLeavesFileUnchanged()
+        {
+            // Version before Include is valid MSBuild, but the regex does not recognise it.
+            const string propsContent = @"<Project>
+  <ItemGroup>
+    <PackageVersion Version=""1.0.0"" Include=""SomePackage"" />
+  </ItemGroup>
+</Project>";
+            var propsPath = XFS.Path(@"c:\repo\Directory.Packages.props");
+            var projectPath = XFS.Path(@"c:\repo\src\MyProject\MyProject.csproj");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { propsPath, new MockFileData(propsContent) },
+                { projectPath, new MockFileData("<Project></Project>") }
+            });
+
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem, EmptyVariableTrackingService());
+
+            var result = service.AddPackage(projectPath, "SomePackage", "net8.0", new NuGetVersion("2.0.0"), noRestore: true);
+
+            Assert.False(result.IsSuccess);
+            Assert.Contains("SomePackage", result.Errors);
+            Assert.Contains(propsPath, result.Errors);
+            // Must not fall back to `dotnet add package --no-restore`, which writes the version into the project file.
+            dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
+            Assert.Equal(propsContent, mockFileSystem.File.ReadAllText(propsPath));
+        }
+
+        [Fact]
+        public void CpmProjectWithNoRestore_EntryAlreadyAtVersion_ReportsSuccess()
+        {
+            // A multi-targeted project upgrades the same central entry once per framework;
+            // the second call finds the version already written and must still succeed.
+            AssertNoRestoreUpdate(DirectoryPackagesPropsContent, "Newtonsoft.Json", "12.0.3", DirectoryPackagesPropsContent);
+        }
+
+        [Fact]
+        public void CpmProjectWithNoRestore_PackageIdCasingDiffers_UpdatesEntryAndKeepsItsCasing()
+        {
+            // NuGet package ids are case-insensitive.
+            const string propsContent = @"<Project>
+  <ItemGroup>
+    <PackageVersion Include=""newtonsoft.json"" Version=""12.0.3"" />
+  </ItemGroup>
+</Project>";
+            const string expectedContent = @"<Project>
+  <ItemGroup>
+    <PackageVersion Include=""newtonsoft.json"" Version=""13.0.1"" />
+  </ItemGroup>
+</Project>";
+
+            AssertNoRestoreUpdate(propsContent, "Newtonsoft.Json", "13.0.1", expectedContent);
+        }
+
+        [Fact]
+        public void CpmProjectWithNoRestore_PackageIdCasingDiffers_MatchesIndependentOfCulture()
+        {
+            // Under tr-TR, culture-aware case folding does not map 'I' to 'i'.
+            const string propsContent = @"<Project>
+  <ItemGroup>
+    <PackageVersion Include=""microsoft.identitymodel.tokens"" Version=""7.0.0"" />
+  </ItemGroup>
+</Project>";
+            const string expectedContent = @"<Project>
+  <ItemGroup>
+    <PackageVersion Include=""microsoft.identitymodel.tokens"" Version=""8.0.0"" />
+  </ItemGroup>
+</Project>";
+
+            var originalCulture = CultureInfo.CurrentCulture;
+            try
+            {
+                CultureInfo.CurrentCulture = new CultureInfo("tr-TR");
+                AssertNoRestoreUpdate(propsContent, "Microsoft.IdentityModel.Tokens", "8.0.0", expectedContent);
+            }
+            finally
+            {
+                CultureInfo.CurrentCulture = originalCulture;
+            }
+        }
+
+        private static void AssertNoRestoreUpdate(string propsContent, string packageName, string version, string expectedContent)
+        {
+            var propsPath = XFS.Path(@"c:\repo\Directory.Packages.props");
+            var projectPath = XFS.Path(@"c:\repo\src\MyProject\MyProject.csproj");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { propsPath, new MockFileData(propsContent) },
+                { projectPath, new MockFileData("<Project></Project>") }
+            });
+
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem, EmptyVariableTrackingService());
+
+            var result = service.AddPackage(projectPath, packageName, "net8.0", new NuGetVersion(version), noRestore: true);
+
+            Assert.True(result.IsSuccess);
+            dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
+            Assert.Equal(expectedContent, mockFileSystem.File.ReadAllText(propsPath));
         }
 
         [Fact]
@@ -416,6 +598,83 @@ Information(""Outdated Sdk"");")
             Assert.True(result.IsSuccess);
             dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
             Assert.Contains("#:sdk Cake.Sdk@6.2.0", mockFileSystem.File.ReadAllText(appPath));
+        }
+
+        [Fact]
+        public void ProjectSdk_UpdatesProjectFileAndRestoresWithoutAddingPackage()
+        {
+            var projectPath = XFS.Path(@"c:\repo\AppHost\AppHost.csproj");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { projectPath, new MockFileData(@"<Project Sdk=""Aspire.AppHost.Sdk/13.0.0""></Project>") }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus(string.Empty, string.Empty, 0));
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem, EmptyVariableTrackingService());
+
+            var result = service.AddPackage(projectPath, "Aspire.AppHost.Sdk", "net10.0", new NuGetVersion("13.0.2"));
+
+            Assert.True(result.IsSuccess);
+            Assert.Equal(@"<Project Sdk=""Aspire.AppHost.Sdk/13.0.2""></Project>", mockFileSystem.File.ReadAllText(projectPath));
+            dotNetRunner.Received(1).Run(XFS.Path(@"c:\repo\AppHost"), Arg.Is<string[]>(a => a.Length == 2 && a[0] == "restore" && a[1] == "AppHost.csproj"));
+            dotNetRunner.DidNotReceive().Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[0] == "add"));
+        }
+
+        [Fact]
+        public void ProjectSdk_ReadOnlyProjectFile_ReturnsFailureInsteadOfThrowing()
+        {
+            var projectPath = XFS.Path(@"c:\repo\AppHost\AppHost.csproj");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { projectPath, new MockFileData(@"<Project Sdk=""Aspire.AppHost.Sdk/13.0.0""></Project>") }
+            });
+            mockFileSystem.File.SetAttributes(projectPath, FileAttributes.ReadOnly);
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem, EmptyVariableTrackingService());
+
+            var result = service.AddPackage(projectPath, "Aspire.AppHost.Sdk", "net10.0", new NuGetVersion("13.0.2"));
+
+            Assert.False(result.IsSuccess);
+            Assert.Contains("Aspire.AppHost.Sdk", result.Errors);
+            dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
+        }
+
+        [Fact]
+        public void ProjectSdk_NoOpWhenAlreadyAtVersion_ReturnsSuccess()
+        {
+            var projectPath = XFS.Path(@"c:\repo\AppHost\AppHost.csproj");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { projectPath, new MockFileData(@"<Project Sdk=""Microsoft.NET.Sdk""><Sdk Name=""Aspire.AppHost.Sdk"" Version=""13.0.2"" /></Project>") }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem, EmptyVariableTrackingService());
+
+            var result = service.AddPackage(projectPath, "Aspire.AppHost.Sdk", "net10.0", new NuGetVersion("13.0.2"), noRestore: true);
+
+            Assert.True(result.IsSuccess);
+            dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
+        }
+
+        [Fact]
+        public void ProjectSdk_MultiTargetedProject_RestoresOnlyOnce()
+        {
+            var projectPath = XFS.Path(@"c:\repo\App\App.csproj");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { projectPath, new MockFileData(@"<Project Sdk=""Microsoft.Build.NoTargets/3.7.0""></Project>") }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus(string.Empty, string.Empty, 0));
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem, EmptyVariableTrackingService());
+
+            var first = service.AddPackage(projectPath, "Microsoft.Build.NoTargets", "net8.0", new NuGetVersion("3.7.134"));
+            var second = service.AddPackage(projectPath, "Microsoft.Build.NoTargets", "netstandard2.0", new NuGetVersion("3.7.134"));
+
+            Assert.True(first.IsSuccess);
+            Assert.True(second.IsSuccess);
+            Assert.Equal(@"<Project Sdk=""Microsoft.Build.NoTargets/3.7.134""></Project>", mockFileSystem.File.ReadAllText(projectPath));
+            dotNetRunner.Received(1).Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[0] == "restore"));
         }
     }
 }

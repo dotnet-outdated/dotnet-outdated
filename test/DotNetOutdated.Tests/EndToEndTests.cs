@@ -7,6 +7,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text.Json;
+using DotNetOutdated.Core.Services;
 using NuGet.Versioning;
 using Xunit;
 
@@ -288,6 +289,28 @@ public static class EndToEndTests
         Assert.DoesNotContain("<PackageReference Include=\"Newtonsoft.Json\" Version=\"11.0.1\" />", content);
         Assert.DoesNotContain("MSTest.TestFramework", content);
         Assert.DoesNotContain("Microsoft.NET.Test.Sdk", content);
+    }
+
+    [Theory]
+    [InlineData("project-sdk-attribute", "<Project Sdk=\"Microsoft.Build.NoTargets/3.7.0\">")]
+    [InlineData("project-sdk-element", "<Sdk Name=\"Microsoft.Build.NoTargets\" Version=\"3.7.0\" />")]
+    [InlineData("project-sdk-import", "Sdk=\"Microsoft.Build.NoTargets\" Version=\"3.7.0\"")]
+    public static void Can_Upgrade_Project_With_Versioned_Project_Sdk(string testProjectName, string originalSdkDeclaration)
+    {
+        using var project = TestSetup(testProjectName);
+
+        var actual = Program.Main([project.Path, "--upgrade"]);
+        Assert.Equal(0, actual);
+
+        var projectFilePath = Path.Combine(project.Path, $"{testProjectName}.csproj");
+        var content = File.ReadAllText(projectFilePath);
+
+        Assert.DoesNotContain(originalSdkDeclaration, content);
+        Assert.DoesNotContain("PackageReference", content);
+
+        var sdk = Assert.Single(ProjectSdkReferenceHelper.Discover(new System.IO.Abstractions.FileSystem(), projectFilePath));
+        Assert.Equal("Microsoft.Build.NoTargets", sdk.Name);
+        Assert.True(sdk.ResolvedVersion > new NuGetVersion("3.7.0"), $"Expected an upgraded SDK version, got {sdk.ResolvedVersion}");
     }
 
     [Theory]
