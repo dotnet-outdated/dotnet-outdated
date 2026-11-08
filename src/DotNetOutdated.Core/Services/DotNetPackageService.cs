@@ -15,6 +15,18 @@ namespace DotNetOutdated.Core.Services
         private readonly IFileSystem _fileSystem = fileSystem;
         private readonly IVariableTrackingService _variableTrackingService = variableTrackingService;
 
+        public RunStatus AddPackage(string projectPath, string packageName, string frameworkName, NuGetVersion version)
+        {
+            return AddPackage(projectPath, packageName, frameworkName, version, false);
+        }
+
+        public RunStatus AddPackage(string projectPath, string packageName, string frameworkName, NuGetVersion version, bool noRestore, bool ignoreFailedSources = false)
+        {
+            ArgumentNullException.ThrowIfNull(version);
+
+            return AddPackage(projectPath, packageName, frameworkName, new VersionRange(version), noRestore, ignoreFailedSources);
+        }
+
         public RunStatus AddPackage(string projectPath, string packageName, string frameworkName, VersionRange versionRange)
         {
             return AddPackage(projectPath, packageName, frameworkName, versionRange, false);
@@ -23,8 +35,12 @@ namespace DotNetOutdated.Core.Services
         public RunStatus AddPackage(string projectPath, string packageName, string frameworkName, VersionRange versionRange, bool noRestore, bool ignoreFailedSources = false)
         {
             ArgumentNullException.ThrowIfNull(versionRange);
+            if (!versionRange.HasLowerBound)
+            {
+                throw new ArgumentException($"Version range '{versionRange}' must have a lower bound.", nameof(versionRange));
+            }
 
-            // Paths that can only express a single version (MSBuild/file-based variables, #:sdk) use the lower bound.
+            // Paths that can only express a single version (file-based app variables, #:sdk) use the lower bound.
             var version = versionRange.MinVersion;
 
             // Check if this package uses a variable reference
@@ -103,7 +119,7 @@ namespace DotNetOutdated.Core.Services
 
             string projectName = _fileSystem.Path.GetFileName(projectPath);
 
-            List<string> arguments = ["add", projectName, "package", packageName, "-v", versionRange.ToShortString()];
+            List<string> arguments = ["add", projectName, "package", packageName, "-v", versionRange.ToVersionString()];
             // File-based apps declare TargetFramework via #:property; dotnet add rejects -f on .cs paths with newer SDKs.
             if (!projectPath.IsCSharpFile())
             {
@@ -182,7 +198,7 @@ namespace DotNetOutdated.Core.Services
                         string newFileContent = Regex.Replace(
                             fileContent,
                             $"(<(?:PackageVersion|GlobalPackageReference)\\s*(?:Include|Update)=\"{Regex.Escape(packageName)}\"\\s*Version=\")([^\"]*)(\".*\\/>)",
-                            m => $"{m.Groups[1].Captures[0].Value}{versionRange.ToShortString()}{m.Groups[3].Captures[0].Value}");
+                            m => $"{m.Groups[1].Captures[0].Value}{versionRange.ToVersionString()}{m.Groups[3].Captures[0].Value}");
 
                         if (newFileContent != fileContent)
                         {
