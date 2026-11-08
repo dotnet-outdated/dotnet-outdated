@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO.Abstractions.TestingHelpers;
 using DotNetOutdated.Core.Services;
 using NSubstitute;
@@ -202,6 +203,33 @@ namespace DotNetOutdated.Tests
 </Project>";
 
             AssertNoRestoreUpdate(propsContent, "Newtonsoft.Json", "13.0.1", expectedContent);
+        }
+
+        [Fact]
+        public void CpmProjectWithNoRestore_PackageIdCasingDiffers_MatchesIndependentOfCulture()
+        {
+            // Under tr-TR, culture-aware case folding does not map 'I' to 'i'.
+            const string propsContent = @"<Project>
+  <ItemGroup>
+    <PackageVersion Include=""microsoft.identitymodel.tokens"" Version=""7.0.0"" />
+  </ItemGroup>
+</Project>";
+            const string expectedContent = @"<Project>
+  <ItemGroup>
+    <PackageVersion Include=""microsoft.identitymodel.tokens"" Version=""8.0.0"" />
+  </ItemGroup>
+</Project>";
+
+            var originalCulture = CultureInfo.CurrentCulture;
+            try
+            {
+                CultureInfo.CurrentCulture = new CultureInfo("tr-TR");
+                AssertNoRestoreUpdate(propsContent, "Microsoft.IdentityModel.Tokens", "8.0.0", expectedContent);
+            }
+            finally
+            {
+                CultureInfo.CurrentCulture = originalCulture;
+            }
         }
 
         private static void AssertNoRestoreUpdate(string propsContent, string packageName, string version, string expectedContent)

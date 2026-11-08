@@ -207,7 +207,8 @@ namespace DotNetOutdated.Core.Services
                             {
                                 matched = true;
                                 return $"{m.Groups[1].Captures[0].Value}{version}{m.Groups[3].Captures[0].Value}";
-                            });
+                            },
+                            RegexOptions.CultureInvariant);
 
                         if (!matched)
                         {
