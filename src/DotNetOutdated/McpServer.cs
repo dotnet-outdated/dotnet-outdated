@@ -438,7 +438,7 @@ namespace DotNetOutdated
             }
             else
             {
-                return CreateToolResult($"Failed to update package: {status.Errors}", isError: true);
+                return CreateToolResult($"Failed to update package: {status.FailureDetails}", isError: true);
             }
         }
 
