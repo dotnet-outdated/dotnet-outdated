@@ -3,6 +3,7 @@ using DotNetOutdated.Core.Exceptions;
 using NuGet.ProjectModel;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO.Abstractions;
 using System.Linq;
 using System.Text.Json;
@@ -31,6 +32,17 @@ namespace DotNetOutdated.Core.Services
 
             if (runStatus.IsSuccess)
             {
+                // MSBuild reports success without writing the restore graph file when there is nothing to
+                // restore: an empty solution, a solution filter that selects no projects, or a solution whose
+                // projects are all excluded from the build configuration or are not restorable (issue #747).
+                if (!_fileSystem.File.Exists(dgOutput))
+                {
+                    var message = projectPath.IsSolutionFile()
+                        ? Resources.ValidationErrorMessages.NoRestorableProjectsInSolution
+                        : Resources.ValidationErrorMessages.NoDependencyGraphForProject;
+                    throw new CommandValidationException(string.Format(CultureInfo.InvariantCulture, message, projectPath));
+                }
+
                 var dependencyGraphText = await _fileSystem.File.ReadAllTextAsync(dgOutput).ConfigureAwait(false);
                 return new ExtendedDependencyGraphSpec(dependencyGraphText);
             }
