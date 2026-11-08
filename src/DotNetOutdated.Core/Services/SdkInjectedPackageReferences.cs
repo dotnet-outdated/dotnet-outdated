@@ -52,7 +52,8 @@ namespace DotNetOutdated.Core.Services
         /// and marks its own package references as implicitly defined.
         /// </summary>
         public static bool IsCustomSdkName(string sdkName) =>
-            !sdkName.StartsWith("Microsoft.NET.Sdk", StringComparison.OrdinalIgnoreCase);
+            !string.Equals(sdkName, "Microsoft.NET.Sdk", StringComparison.OrdinalIgnoreCase) &&
+            !sdkName.StartsWith("Microsoft.NET.Sdk.", StringComparison.OrdinalIgnoreCase);
 
         /// <summary>
         /// Returns the names of the packages whose <c>PackageReference</c> items are all defined in a file inside one of

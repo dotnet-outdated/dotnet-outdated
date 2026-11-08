@@ -30,6 +30,7 @@ namespace DotNetOutdated.Tests
         [InlineData("<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><Sdk>Cake.Sdk</Sdk></PropertyGroup></Project>", false)]
         [InlineData("<Project><PropertyGroup /></Project>", false)]
         [InlineData("<Project Sdk=\"Cake.Sdk\"", false)]
+        [InlineData("<Project Sdk=\"Microsoft.NET.SdkExtras/1.0.0\" />", true)]
         public void DeclaresCustomSdk(string xml, bool expected)
         {
             Assert.Equal(expected, SdkInjectedPackageReferences.DeclaresCustomSdk(xml));
