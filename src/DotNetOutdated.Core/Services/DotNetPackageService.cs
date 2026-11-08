@@ -103,7 +103,9 @@ namespace DotNetOutdated.Core.Services
 
             string projectName = _fileSystem.Path.GetFileName(projectPath);
 
-            List<string> arguments = ["add", projectName, "package", packageName, "-v", version.ToString()];
+            // The formatting replay writes back exactly the text passed to `dotnet add package -v`.
+            var versionText = version.ToString();
+            List<string> arguments = ["add", projectName, "package", packageName, "-v", versionText];
             // File-based apps declare TargetFramework via #:property; dotnet add rejects -f on .cs paths with newer SDKs.
             if (!projectPath.IsCSharpFile())
             {
@@ -130,7 +132,7 @@ namespace DotNetOutdated.Core.Services
             {
                 foreach (var original in originalCentralPackages)
                 {
-                    PreserveCentralPackagesFormatting(original.File, original.Bytes, packageName, version);
+                    PreserveCentralPackagesFormatting(original.File, original.Bytes, packageName, versionText);
                 }
             }
 
@@ -232,7 +234,7 @@ namespace DotNetOutdated.Core.Services
                 $"(<(?:PackageVersion|GlobalPackageReference)\\s*(?:Include|Update)=\"{Regex.Escape(packageName)}\"\\s*Version=\")([^\"]*)(\".*\\/>)",
                 m => $"{m.Groups[1].Value}{version}{m.Groups[3].Value}");
 
-        private void PreserveCentralPackagesFormatting(IFileInfo file, byte[] originalBytes, string packageName, NuGetVersion version)
+        private void PreserveCentralPackagesFormatting(IFileInfo file, byte[] originalBytes, string packageName, string versionText)
         {
             if (!_fileSystem.File.Exists(file.FullName))
             {
@@ -256,7 +258,7 @@ namespace DotNetOutdated.Core.Services
                 @"<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>|<\?[\s\S]*?\?>|" +
                 $@"(?<prefix><(?:PackageVersion|GlobalPackageReference)\b(?=[^>]*\b(?:Include|Update)\s*=\s*(?<packageQuote>[""'])(?i:{Regex.Escape(packageName)})\k<packageQuote>)[^>]*\bVersion\s*=\s*(?<versionQuote>[""']))[^""']*(?<suffix>\k<versionQuote>)",
                 m => m.Groups["prefix"].Success
-                    ? $"{m.Groups["prefix"].Value}{version}{m.Groups["suffix"].Value}"
+                    ? $"{m.Groups["prefix"].Value}{versionText}{m.Groups["suffix"].Value}"
                     : m.Value);
             var updatedContent = _fileSystem.File.ReadAllText(file.FullName);
 
