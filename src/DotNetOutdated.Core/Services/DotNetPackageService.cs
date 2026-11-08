@@ -94,9 +94,18 @@ namespace DotNetOutdated.Core.Services
                 }
 
                 // For CPM projects without a variable reference, update Directory.Packages.props directly.
-                if (TryUpdateCentralPackageVersion(projectPath, packageName, version))
+                switch (TryUpdateCentralPackageVersion(projectPath, packageName, version, out var centralPackagesPath))
                 {
-                    return new RunStatus(string.Empty, string.Empty, 0);
+                    case CentralPackageVersionUpdate.Updated:
+                        return new RunStatus(string.Empty, string.Empty, 0);
+                    case CentralPackageVersionUpdate.NoMatchingEntry:
+                        // Don't fall back to `dotnet add package --no-restore`: it would write the
+                        // version into the project file (NuGet/Home#12552).
+                        return new RunStatus(
+                            string.Empty,
+                            $"Could not update '{packageName}' in '{centralPackagesPath}': no <PackageVersion> or <GlobalPackageReference> " +
+                            "element was found with an Include or Update attribute followed by a Version attribute. Update the version manually.",
+                            1);
                 }
             }
 
@@ -164,8 +173,21 @@ namespace DotNetOutdated.Core.Services
             return _dotNetRunner.Run(_fileSystem.Path.GetDirectoryName(projectPath), [.. arguments]);
         }
 
-        private bool TryUpdateCentralPackageVersion(string projectPath, string packageName, NuGetVersion version)
+        private enum CentralPackageVersionUpdate
         {
+            /// <summary>No Directory.Packages.props mentions the package.</summary>
+            NotFound,
+
+            /// <summary>The entry was found and now has the requested version.</summary>
+            Updated,
+
+            /// <summary>The nearest Directory.Packages.props mentions the package, but no entry could be updated.</summary>
+            NoMatchingEntry,
+        }
+
+        private CentralPackageVersionUpdate TryUpdateCentralPackageVersion(string projectPath, string packageName, NuGetVersion version, out string centralPackagesPath)
+        {
+            centralPackagesPath = null;
             foreach (var cpvmFile in FindCentralPackagesFiles(projectPath))
             {
                 var file = EncodedText.Read(_fileSystem, cpvmFile.FullName);
@@ -175,17 +197,33 @@ namespace DotNetOutdated.Core.Services
                     continue;
                 }
 
-                var newFileContent = UpdateCentralPackageVersion(fileContent, packageName, version);
+                centralPackagesPath = cpvmFile.FullName;
+                var matched = false;
+                var newFileContent = Regex.Replace(
+                    fileContent,
+                    $"(<(?:PackageVersion|GlobalPackageReference)\\s*(?:Include|Update)=\"(?i:{Regex.Escape(packageName)})\"\\s*Version=\")([^\"]*)(\")",
+                    m =>
+                    {
+                        matched = true;
+                        return $"{m.Groups[1].Captures[0].Value}{version}{m.Groups[3].Captures[0].Value}";
+                    },
+                    RegexOptions.CultureInvariant);
+
+                if (!matched)
+                {
+                    return CentralPackageVersionUpdate.NoMatchingEntry;
+                }
+
                 if (newFileContent != fileContent)
                 {
                     // Keep the original encoding and byte order mark.
                     file.Write(_fileSystem, cpvmFile.FullName, newFileContent);
                 }
 
-                return true;
+                return CentralPackageVersionUpdate.Updated;
             }
 
-            return false;
+            return CentralPackageVersionUpdate.NotFound;
         }
 
         private IEnumerable<IFileInfo> FindCentralPackagesFiles(string projectPath)
@@ -214,12 +252,6 @@ namespace DotNetOutdated.Core.Services
                 directory = directory.Parent;
             }
         }
-
-        private static string UpdateCentralPackageVersion(string content, string packageName, NuGetVersion version) =>
-            Regex.Replace(
-                content,
-                $"(<(?:PackageVersion|GlobalPackageReference)\\s*(?:Include|Update)=\"{Regex.Escape(packageName)}\"\\s*Version=\")([^\"]*)(\".*\\/>)",
-                m => $"{m.Groups[1].Value}{version}{m.Groups[3].Value}");
 
         private void PreserveCentralPackagesFormatting(IFileInfo file, byte[] originalBytes, string packageName, string versionText)
         {
