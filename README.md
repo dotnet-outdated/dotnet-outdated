@@ -178,6 +178,8 @@ Before version 1.2 of **dotnet-outdated**, it used to include automatically refe
 
 From version 1.2, if you want these packages reported, you can pass the `-i|--include-auto-references` option. These packages will also be denoted with the text **[A]** appearing in the output after the package name.
 
+MSBuild SDKs that are resolved from NuGet, such as `MSTest.Sdk` or `Cake.Sdk`, can add package references of their own. Their versions come from the SDK, so they cannot be upgraded in the project. **dotnet-outdated** treats a package as auto-referenced when every reference to it is defined in a file inside a NuGet packages folder, and you upgrade it by upgrading the SDK. A package you also reference yourself, in the project or in a `Directory.Build.props` file, is reported as usual. This check runs for projects that declare an SDK other than `Microsoft.NET.Sdk*` in the project file or in a `Directory.Build.props` or `Directory.Build.targets` file in the project's directory or above. SDKs imported from other files are not detected.
+
 ## Saving results to a file
 
 You can save the results of **dotnet-outdated** to a file by specifying the name of an output file using the `-o|--output` option. By default, the results will be saved in JSON format. You can specify an alternate format using the `-of|--output-format` option.
