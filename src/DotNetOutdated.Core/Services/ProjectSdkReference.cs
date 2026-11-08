@@ -65,26 +65,16 @@ public sealed record ProjectSdkDeclaration(string Name, string? Version, Project
 /// </summary>
 internal static partial class ProjectSdkReferenceHelper
 {
-    [GeneratedRegex(@"(<Project\b[^>]*?\bSdk\s*=\s*)(""[^""]*""|'[^']*')")]
-    private static partial Regex ProjectSdkAttributeRegex();
+    // A <Project>, <Sdk> or <Import> start tag. Quoted attribute values are consumed whole, so a '>' inside a
+    // value such as Condition="'$(A)' > '0'" does not end the tag.
+    [GeneratedRegex(@"<(Project|Sdk|Import)\b((?:[^>""']|""[^""]*""|'[^']*')*)>")]
+    private static partial Regex SdkDeclarationTagRegex();
 
-    [GeneratedRegex(@"<Sdk\b[^>]*>")]
-    private static partial Regex SdkElementRegex();
-
-    [GeneratedRegex(@"(\bVersion\s*=\s*)(""[^""]*""|'[^']*')")]
-    private static partial Regex VersionAttributeRegex();
-
-    [GeneratedRegex(@"<Import\b[^>]*>")]
-    private static partial Regex ImportElementRegex();
-
-    [GeneratedRegex(@"\bSdk\s*=\s*(""[^""]*""|'[^']*')")]
-    private static partial Regex SdkAttributeRegex();
+    [GeneratedRegex(@"([\w:.-]+)\s*=\s*(""[^""]*""|'[^']*')")]
+    private static partial Regex AttributeRegex();
 
     [GeneratedRegex(@"<!--.*?-->|<!\[CDATA\[.*?\]\]>", RegexOptions.Singleline)]
     private static partial Regex CommentOrCDataRegex();
-
-    [GeneratedRegex(@"\bName\s*=\s*(""[^""]*""|'[^']*')")]
-    private static partial Regex NameAttributeRegex();
 
     /// <summary>
     /// Gets the dictionary key for storing an SDK reference in <see cref="Models.TargetFramework.Dependencies"/>,
@@ -191,34 +181,41 @@ internal static partial class ProjectSdkReferenceHelper
         var searchable = CommentOrCDataRegex().Replace(content, match => new string(' ', match.Length));
         var edits = new List<(int Index, int Length, string Value)>();
 
-        var projectSdk = ProjectSdkAttributeRegex().Match(searchable);
-        if (projectSdk.Success)
+        var seenProject = false;
+        foreach (Match tag in SdkDeclarationTagRegex().Matches(searchable))
         {
-            var quotedValue = projectSdk.Groups[2];
-            var sdks = Unquote(quotedValue.Value).Split(';').Select(sdk =>
+            var attributes = GetAttributes(tag.Groups[2]);
+            switch (tag.Groups[1].Value)
             {
-                var separatorIndex = sdk.IndexOf('/');
-                return separatorIndex > 0 && IsLiteralMatch(sdk[..separatorIndex], sdk[(separatorIndex + 1)..], name)
-                    ? $"{sdk[..(separatorIndex + 1)]}{newVersion}"
-                    : sdk;
-            });
+                // Only the root <Project> declares SDKs; skip any later tag with the same name.
+                case "Project" when !seenProject:
+                    seenProject = true;
+                    if (attributes.TryGetValue("Sdk", out var quotedValue))
+                    {
+                        var sdks = Unquote(quotedValue.Value).Split(';').Select(sdk =>
+                        {
+                            var separatorIndex = sdk.IndexOf('/');
+                            return separatorIndex > 0 && IsLiteralMatch(sdk[..separatorIndex], sdk[(separatorIndex + 1)..], name)
+                                ? $"{sdk[..(separatorIndex + 1)]}{newVersion}"
+                                : sdk;
+                        });
 
-            edits.Add((quotedValue.Index, quotedValue.Length, $"{quotedValue.Value[0]}{string.Join(';', sdks)}{quotedValue.Value[0]}"));
-        }
+                        edits.Add((quotedValue.Index, quotedValue.Length, $"{quotedValue.Value[0]}{string.Join(';', sdks)}{quotedValue.Value[0]}"));
+                    }
 
-        // <Sdk Name="Id" Version="..." /> and <Import Project="Sdk.props" Sdk="Id" Version="..." />
-        var elements = SdkElementRegex().Matches(searchable).Select(match => (Element: match, NameRegex: NameAttributeRegex()))
-            .Concat(ImportElementRegex().Matches(searchable).Select(match => (Element: match, NameRegex: SdkAttributeRegex())));
+                    break;
 
-        foreach (var (element, nameRegex) in elements)
-        {
-            var nameAttribute = nameRegex.Match(element.Value);
-            var versionAttribute = VersionAttributeRegex().Match(element.Value);
-            if (nameAttribute.Success && versionAttribute.Success &&
-                IsLiteralMatch(Unquote(nameAttribute.Groups[1].Value), Unquote(versionAttribute.Groups[2].Value), name))
-            {
-                var quotedVersion = versionAttribute.Groups[2];
-                edits.Add((element.Index + quotedVersion.Index, quotedVersion.Length, $"{quotedVersion.Value[0]}{newVersion}{quotedVersion.Value[0]}"));
+                // <Sdk Name="Id" Version="..." /> and <Import Project="Sdk.props" Sdk="Id" Version="..." />
+                case "Sdk" or "Import":
+                    var nameAttribute = tag.Groups[1].Value == "Sdk" ? "Name" : "Sdk";
+                    if (attributes.TryGetValue(nameAttribute, out var quotedName) &&
+                        attributes.TryGetValue("Version", out var quotedVersion) &&
+                        IsLiteralMatch(Unquote(quotedName.Value), Unquote(quotedVersion.Value), name))
+                    {
+                        edits.Add((quotedVersion.Index, quotedVersion.Length, $"{quotedVersion.Value[0]}{newVersion}{quotedVersion.Value[0]}"));
+                    }
+
+                    break;
             }
         }
 
@@ -235,6 +232,22 @@ internal static partial class ProjectSdkReferenceHelper
 
         fileSystem.File.WriteAllText(projectFilePath, newContent.ToString(), encoding);
         return true;
+    }
+
+    /// <summary>
+    /// Gets the quoted values of the attributes in a start tag, keyed by attribute name. Each value's index is an index
+    /// into the text the tag was matched in.
+    /// </summary>
+    private static Dictionary<string, (int Index, int Length, string Value)> GetAttributes(Group attributesText)
+    {
+        var attributes = new Dictionary<string, (int Index, int Length, string Value)>(StringComparer.Ordinal);
+        foreach (Match attribute in AttributeRegex().Matches(attributesText.Value))
+        {
+            var value = attribute.Groups[2];
+            attributes.TryAdd(attribute.Groups[1].Value, (attributesText.Index + value.Index, value.Length, value.Value));
+        }
+
+        return attributes;
     }
 
     /// <summary>

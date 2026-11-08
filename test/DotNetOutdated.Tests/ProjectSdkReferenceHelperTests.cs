@@ -262,6 +262,34 @@ namespace DotNetOutdated.Tests
         }
 
         [Fact]
+        public void TryUpdate_GreaterThanInsideQuotedAttribute_DoesNotEndTag()
+        {
+            var fileSystem = CreateFileSystem(@"<Project>
+  <Import Project=""Sdk.props"" Condition=""'1' > '0'"" Sdk=""Microsoft.Build.NoTargets"" Version=""3.7.0"" />
+  <Sdk Label=""a > b"" Name=""Aspire.AppHost.Sdk"" Version=""9.5.0"" />
+  <Import Project=""Sdk.targets"" Sdk=""Microsoft.Build.NoTargets"" Version=""3.7.0"" />
+</Project>");
+
+            Assert.True(ProjectSdkReferenceHelper.TryUpdate(fileSystem, ProjectPath, "Microsoft.Build.NoTargets", new NuGetVersion("3.7.134")));
+            Assert.True(ProjectSdkReferenceHelper.TryUpdate(fileSystem, ProjectPath, "Aspire.AppHost.Sdk", new NuGetVersion("9.5.2")));
+
+            Assert.Equal(@"<Project>
+  <Import Project=""Sdk.props"" Condition=""'1' > '0'"" Sdk=""Microsoft.Build.NoTargets"" Version=""3.7.134"" />
+  <Sdk Label=""a > b"" Name=""Aspire.AppHost.Sdk"" Version=""9.5.2"" />
+  <Import Project=""Sdk.targets"" Sdk=""Microsoft.Build.NoTargets"" Version=""3.7.134"" />
+</Project>", fileSystem.File.ReadAllText(ProjectPath));
+        }
+
+        [Fact]
+        public void TryUpdate_VersionTextInsideAnotherAttribute_IsNotChanged()
+        {
+            var fileSystem = CreateFileSystem(@"<Project><Sdk Label=""Version='1.0.0'"" Name=""X.Sdk"" Version=""1.0.0"" /></Project>");
+
+            Assert.True(ProjectSdkReferenceHelper.TryUpdate(fileSystem, ProjectPath, "X.Sdk", new NuGetVersion("2.0.0")));
+            Assert.Equal(@"<Project><Sdk Label=""Version='1.0.0'"" Name=""X.Sdk"" Version=""2.0.0"" /></Project>", fileSystem.File.ReadAllText(ProjectPath));
+        }
+
+        [Fact]
         public void TryUpdate_PropertyBackedVersion_IsNotChanged()
         {
             const string content = @"<Project Sdk=""Microsoft.NET.Sdk"">
