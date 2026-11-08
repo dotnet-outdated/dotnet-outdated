@@ -56,7 +56,7 @@ namespace DotNetOutdated.Core.Services
             var runStatus = _dotNetRunner.Run(_fileSystem.Path.GetDirectoryName(projectPath), arguments);
             if (!runStatus.IsSuccess)
             {
-                return [];
+                return null;
             }
 
             try
@@ -76,7 +76,7 @@ namespace DotNetOutdated.Core.Services
             }
             catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException)
             {
-                return [];
+                return null;
             }
         }
 

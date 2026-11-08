@@ -12,7 +12,10 @@ namespace DotNetOutdated.Core.Services
         /// Evaluates a project for one target framework and returns its <c>PackageReference</c> items,
         /// including the file that defined each item.
         /// </summary>
-        /// <returns>The evaluated items, or an empty list when the project could not be evaluated.</returns>
+        /// <returns>
+        /// The evaluated items, or <c>null</c> when the project could not be evaluated. The default implementation
+        /// returns an empty list.
+        /// </returns>
         IReadOnlyList<PackageReferenceItem> GetPackageReferenceItems(string projectPath, string targetFramework) => [];
     }
 

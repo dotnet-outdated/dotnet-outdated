@@ -173,13 +173,28 @@ namespace DotNetOutdated.Tests
 
         [Theory]
         [InlineData("not json", 0)]
-        [InlineData("{}", 0)]
-        [InlineData("{ \"Items\": {} }", 0)]
+        [InlineData("{ \"Items\": { \"PackageReference\": [] } }\nTrailing text", 0)]
+        [InlineData("{ \"Items\": { \"PackageReference\": [ { \"Version\": \"1.0.0\" } ] } }", 0)]
+        [InlineData("[]", 0)]
         [InlineData("", 1)]
-        public void GetPackageReferenceItemsReturnsEmptyWhenEvaluationFails(string output, int exitCode)
+        public void GetPackageReferenceItemsReturnsNullWhenEvaluationFails(string output, int exitCode)
         {
             var dotNetRunner = Substitute.For<IDotNetRunner>();
             dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus(output, string.Empty, exitCode));
+
+            var graphService = new DependencyGraphService(dotNetRunner, new MockFileSystem());
+
+            Assert.Null(graphService.GetPackageReferenceItems(XFS.Path(@"c:\path\proj.csproj"), "net8.0"));
+        }
+
+        [Theory]
+        [InlineData("{}")]
+        [InlineData("{ \"Items\": {} }")]
+        [InlineData("{ \"Items\": { \"PackageReference\": [] } }")]
+        public void GetPackageReferenceItemsReturnsEmptyWhenThereAreNoItems(string output)
+        {
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus(output, string.Empty, exitCode: 0));
 
             var graphService = new DependencyGraphService(dotNetRunner, new MockFileSystem());
 

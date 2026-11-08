@@ -200,7 +200,14 @@ namespace DotNetOutdated.Core.Services
             await _evaluationThrottle.WaitAsync().ConfigureAwait(false);
             try
             {
-                var items = await Task.Run(() => _dependencyGraphService.GetPackageReferenceItems(evaluation.ProjectPath, evaluation.TargetAlias)).ConfigureAwait(false) ?? [];
+                var items = await Task.Run(() => _dependencyGraphService.GetPackageReferenceItems(evaluation.ProjectPath, evaluation.TargetAlias)).ConfigureAwait(false);
+                if (items == null)
+                {
+                    _logger.LogVerbose($"Could not evaluate the package references of '{evaluation.ProjectPath}' for {evaluation.TargetAlias}. " +
+                        "Packages that its SDK adds are reported as direct dependencies.");
+                    return;
+                }
+
                 var packageDefinedNames = SdkInjectedPackageReferences.GetPackageDefinedNames(_fileSystem, items, evaluation.PackageFolders);
                 SdkInjectedPackageReferences.MarkAsAutoReferenced(evaluation.TargetFramework, packageDefinedNames);
             }
