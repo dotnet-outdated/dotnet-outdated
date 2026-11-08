@@ -1,8 +1,0 @@
-<Project>
-	<ItemGroup>
-		<GlobalPackageReference Include="GlobalFakePackage" Version="1.0.0" />
-	</ItemGroup>
-	<ItemGroup>
-		<PackageVersion Include="FakePackage" Version="1.0.0" />
-	</ItemGroup>
-</Project>

@@ -28,6 +28,7 @@ namespace DotNetOutdated
        Name = "dotnet outdated",
        FullName = "A .NET Core global tool to list outdated Nuget packages.")]
    [VersionOptionFromMember(MemberName = nameof(GetVersion))]
+   [Subcommand(typeof(McpCommand))]
    internal class Program(
         IFileSystem fileSystem,
         IReporter reporter,
@@ -35,7 +36,7 @@ namespace DotNetOutdated
         IProjectAnalysisService projectAnalysisService,
         IProjectDiscoveryService projectDiscoveryService,
         IDotNetPackageService dotNetPackageService,
-        ICentralPackageVersionManagementService centralPackageVersionManagementService) : CommandBase
+        DotNetRunnerOptions dotNetRunnerOptions) : CommandBase
    {
       private readonly IFileSystem _fileSystem = fileSystem;
       private readonly IReporter _reporter = reporter;
@@ -43,13 +44,13 @@ namespace DotNetOutdated
       private readonly IProjectAnalysisService _projectAnalysisService = projectAnalysisService;
       private readonly IProjectDiscoveryService _projectDiscoveryService = projectDiscoveryService;
       private readonly IDotNetPackageService _dotNetPackageService = dotNetPackageService;
-      private readonly ICentralPackageVersionManagementService _centralPackageVersionManagementService = centralPackageVersionManagementService;
+      private readonly DotNetRunnerOptions _dotNetRunnerOptions = dotNetRunnerOptions;
 
       [Option(CommandOptionType.NoValue, Description = "Specifies whether to include auto-referenced packages.",
           LongName = "include-auto-references")]
       public bool IncludeAutoReferences { get; set; } = false;
 
-      [Argument(0, Description = "The path to a .sln, .slnx, .slnf, .csproj or .fsproj file, or to a directory containing a .NET Core solution/project. " +
+      [Argument(0, Description = "The path to a .sln, .slnx, .slnf, .csproj, .fsproj or .cs file-based app, or to a directory containing a .NET Core solution/project. " +
                                  "If none is specified, the current directory will be used.")]
       public string Path { get; set; }
 
@@ -111,6 +112,10 @@ namespace DotNetOutdated
           ShortName = "r", LongName = "recursive")]
       public bool Recursive { get; set; } = false;
 
+      [Option(CommandOptionType.NoValue, Description = "Include loose file-based apps when recursively searching a directory.",
+          ShortName = "fba", LongName = "include-file-based-apps")]
+      public bool IncludeFileBasedApps { get; set; } = false;
+
       [Option(CommandOptionType.NoValue, Description = "Treat package source failures as warnings.", ShortName = "ifs", LongName = "ignore-failed-sources")]
       public bool IgnoreFailedSources { get; set; } = false;
 
@@ -137,6 +142,11 @@ namespace DotNetOutdated
                                                            "For example, a value of '8.0' would upgrade System.Text.Json 6.0.0 to the latest patch version of 8.0.x",
          ShortName = "mv", LongName = "maximum-version")]
       public string MaxVersion { get; set; } = string.Empty;
+
+      [Option(CommandOptionType.SingleValue, Description = "Specifies the idle timeout in seconds to wait for output from the dotnet executable before assuming it has hung. " +
+                                                           "Default is 120 seconds.",
+          ShortName = "it", LongName = "idle-timeout")]
+      public int IdleTimeout { get; set; } = 120;
       
       public static int Main(string[] args)
       {
@@ -144,15 +154,20 @@ namespace DotNetOutdated
                  .AddSingleton(PhysicalConsole.Singleton)
                  .AddSingleton<IReporter>(provider => new ConsoleReporter(provider.GetService<IConsole>()))
                  .AddSingleton<IFileSystem, FileSystem>()
+                 .AddSingleton<ILogger>(provider => new ConsoleLogger(provider.GetService<IConsole>(), LogLevel.Warning))
                  .AddSingleton<IProjectDiscoveryService, ProjectDiscoveryService>()
                  .AddSingleton<IProjectAnalysisService, ProjectAnalysisService>()
-                 .AddSingleton<IDotNetRunner, DotNetRunner>()
+                 .AddSingleton<DotNetRunnerOptions>()
+                .AddSingleton<IDotNetRunner, DotNetRunner>()
                  .AddSingleton<IDependencyGraphService, DependencyGraphService>()
                  .AddSingleton<IDotNetRestoreService, DotNetRestoreService>()
+                 .AddSingleton<IVariableTrackingService>(provider =>
+                     new VariableTrackingService(
+                         provider.GetService<IFileSystem>(),
+                         msg => provider.GetService<IReporter>().Warn(msg)))
                  .AddSingleton<IDotNetPackageService, DotNetPackageService>()
                  .AddSingleton<INuGetPackageInfoService, NuGetPackageInfoService>()
                  .AddSingleton<INuGetPackageResolutionService, NuGetPackageResolutionService>()
-                 .AddSingleton<ICentralPackageVersionManagementService, CentralPackageVersionManagementService>()
                  .BuildServiceProvider();
 
          using var app = new CommandLineApplication<Program>();
@@ -172,6 +187,8 @@ namespace DotNetOutdated
       {
          ArgumentNullException.ThrowIfNull(app);
          ArgumentNullException.ThrowIfNull(console);
+         
+         _dotNetRunnerOptions.IdleTimeout = TimeSpan.FromSeconds(IdleTimeout);
 
          try
          {
@@ -186,7 +203,7 @@ namespace DotNetOutdated
 
             DefaultCredentialServiceUtility.SetupDefaultCredentialService(new ConsoleLogger(console, NuGetCredLogLevel), true);
 
-            var projectPaths = _projectDiscoveryService.DiscoverProjects(Path, Recursive);
+            var projectPaths = _projectDiscoveryService.DiscoverProjects(Path, Recursive, IncludeFileBasedApps);
 
             // Analyze the projects
             console.WriteLine("Analyzing project(s)...");
@@ -285,16 +302,14 @@ namespace DotNetOutdated
                {
                   RunStatus status = null;
 
-                  if (!project.IsProjectSdkStyle() && !package.IsVersionCentrallyManaged)
+                  if (!project.IsProjectSdkStyle())
                   {
                      console.WriteLine("Project format not SDK style or centrally managed, removing package before upgrade.");
                      status = _dotNetPackageService.RemovePackage(project.ProjectFilePath, package.Name);
                   }
 
                   if (status is null || status.IsSuccess)
-                     status = package.IsVersionCentrallyManaged
-                        ? _centralPackageVersionManagementService.AddPackage(project.ProjectFilePath, package.Name, package.LatestVersion, NoRestore)
-                        : _dotNetPackageService.AddPackage(project.ProjectFilePath, package.Name, project.Framework.ToString(), package.LatestVersion, NoRestore, IgnoreFailedSources);
+                     status = _dotNetPackageService.AddPackage(project.ProjectFilePath, package.Name, project.Framework.GetShortFolderName(), package.LatestVersion, NoRestore, IgnoreFailedSources);
 
                   if (status.IsSuccess)
                   {

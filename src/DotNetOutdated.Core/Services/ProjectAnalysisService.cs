@@ -1,8 +1,10 @@
-﻿using DotNetOutdated.Core.Models;
+﻿using DotNetOutdated.Core;
+using DotNetOutdated.Core.Models;
 using NuGet.Common;
 using NuGet.Packaging.Core;
 using NuGet.ProjectModel;
 using NuGet.Protocol;
+using NuGet.Versioning;
 using System;
 using System.Collections.Generic;
 using System.IO.Abstractions;
@@ -16,12 +18,47 @@ namespace DotNetOutdated.Core.Services
         private readonly IDependencyGraphService _dependencyGraphService;
         private readonly IDotNetRestoreService _dotNetRestoreService;
         private readonly IFileSystem _fileSystem;
+        private readonly IVariableTrackingService _variableTrackingService;
+        private readonly ILogger _logger;
 
-        public ProjectAnalysisService(IDependencyGraphService dependencyGraphService, IDotNetRestoreService dotNetRestoreService, IFileSystem fileSystem)
+        public ProjectAnalysisService(
+            IDependencyGraphService dependencyGraphService,
+            IDotNetRestoreService dotNetRestoreService,
+            IFileSystem fileSystem)
+            : this(dependencyGraphService, dotNetRestoreService, fileSystem, new VariableTrackingService(fileSystem))
+        {
+        }
+
+        public ProjectAnalysisService(
+            IDependencyGraphService dependencyGraphService,
+            IDotNetRestoreService dotNetRestoreService,
+            IFileSystem fileSystem,
+            ILogger logger)
+            : this(dependencyGraphService, dotNetRestoreService, fileSystem, new VariableTrackingService(fileSystem), logger)
+        {
+        }
+
+        public ProjectAnalysisService(
+            IDependencyGraphService dependencyGraphService,
+            IDotNetRestoreService dotNetRestoreService,
+            IFileSystem fileSystem,
+            IVariableTrackingService variableTrackingService)
+            : this(dependencyGraphService, dotNetRestoreService, fileSystem, variableTrackingService, NullLogger.Instance)
+        {
+        }
+
+        public ProjectAnalysisService(
+            IDependencyGraphService dependencyGraphService,
+            IDotNetRestoreService dotNetRestoreService,
+            IFileSystem fileSystem,
+            IVariableTrackingService variableTrackingService,
+            ILogger logger)
         {
             _dependencyGraphService = dependencyGraphService;
             _dotNetRestoreService = dotNetRestoreService;
             _fileSystem = fileSystem;
+            _variableTrackingService = variableTrackingService;
+            _logger = logger;
         }
 
         public async Task<List<Project>> AnalyzeProjectAsync(string projectPath, bool runRestore, bool includeTransitiveDependencies, int transitiveDepth,  string runtime)
@@ -30,21 +67,28 @@ namespace DotNetOutdated.Core.Services
             if (dependencyGraph == null)
                 return null;
 
+            var isFileBasedApp = projectPath.IsCSharpFile();
+            var projectFilePath = isFileBasedApp ? _fileSystem.Path.GetFullPath(projectPath) : null;
             var projects = new List<Project>();
             foreach (var packageSpec in dependencyGraph.Projects.Where(p => p.RestoreMetadata.ProjectStyle == ProjectStyle.PackageReference))
             {
+                var analyzedProjectPath = isFileBasedApp ? projectFilePath : packageSpec.FilePath;
+
                 // Restore the packages
                 if (runRestore)
                 {
-                    _dotNetRestoreService.Restore(packageSpec.FilePath);
+                    _dotNetRestoreService.Restore(analyzedProjectPath);
                 }
 
                 // Load the lock file
                 string lockFilePath = _fileSystem.Path.Combine(packageSpec.RestoreMetadata.OutputPath, "project.assets.json");
-                var lockFile = LockFileUtilities.GetLockFile(lockFilePath, NullLogger.Instance);
+                var lockFile = LockFileUtilities.GetLockFile(lockFilePath, _logger);
+                if (lockFile == null)
+                    throw new InvalidOperationException($"Could not load lock file '{lockFilePath}' for project '{analyzedProjectPath}'. The file may be missing, unreadable, or in an unsupported format. Try running 'dotnet restore' on the project.");
 
                 // Create a project
-                var project = new Project(packageSpec.Name, packageSpec.FilePath, packageSpec.RestoreMetadata.Sources.Select(s => s.SourceUri).ToList(), packageSpec.Version);
+                var projectName = isFileBasedApp ? _fileSystem.Path.GetFileName(projectPath) : packageSpec.Name;
+                var project = new Project(projectName, analyzedProjectPath, packageSpec.RestoreMetadata.Sources.Select(s => s.SourceUri).ToList(), packageSpec.Version);
                 projects.Add(project);
 
                 // Get the target frameworks with their dependencies
@@ -72,18 +116,59 @@ namespace DotNetOutdated.Core.Services
                             }
 
                             var dependency = new Dependency(projectDependency.Name, projectDependency.LibraryRange.VersionRange, projectLibrary?.Version,
-                                projectDependency.AutoReferenced, false, isDevelopmentDependency, projectDependency.VersionCentrallyManaged);
+                                projectDependency.AutoReferenced, false, isDevelopmentDependency);
                             targetFramework.Dependencies.TryAdd(dependency.Name, dependency);
 
                             // Process transitive dependencies for the library
                             if (includeTransitiveDependencies)
                                 AddDependencies(targetFramework, projectLibrary, target, 1, transitiveDepth);
                         }
+
+                        if (isFileBasedApp)
+                        {
+                            // Use the normalized full path so directive discovery (and its cache) keys off the
+                            // same path used for restore and asset loading, even when the caller passed a relative path.
+                            ApplyFileBasedAppDirectives(analyzedProjectPath, targetFramework);
+                        }
                     }
                 }
             }
 
             return projects;
+        }
+
+        private void ApplyFileBasedAppDirectives(string projectPath, TargetFramework targetFramework)
+        {
+            var fileBasedReferences = _variableTrackingService.DiscoverFileBasedAppReferences(projectPath);
+            if (fileBasedReferences.Count == 0)
+            {
+                return;
+            }
+
+            // The directives are the authoritative source of direct dependencies for a file-based app.
+            // Remove every non-transitive graph dependency (including graph entries for packages that are
+            // also declared as directives) and re-add the directive references below. Re-adding under the
+            // directive keys would otherwise leave a duplicate graph entry keyed by the plain package name.
+            var directDependencyKeys = targetFramework.Dependencies
+                .Where(pair => !pair.Value.IsTransitive)
+                .Select(pair => pair.Key)
+                .ToList();
+
+            foreach (var dependencyKey in directDependencyKeys)
+            {
+                targetFramework.Dependencies.Remove(dependencyKey);
+            }
+
+            foreach (var reference in fileBasedReferences)
+            {
+                targetFramework.Dependencies[FileBasedAppReferenceHelper.GetDependencyDictionaryKey(reference)] = new Dependency(
+                    reference.Name,
+                    reference.VersionRange,
+                    reference.ResolvedVersion,
+                    isAutoReferenced: false,
+                    isTransitive: false,
+                    isDevelopmentDependency: false);
+            }
         }
 
         private void AddDependencies(TargetFramework targetFramework, LockFileTargetLibrary parentLibrary, LockFileTarget target, int level, int transitiveDepth)
@@ -97,7 +182,7 @@ namespace DotNetOutdated.Core.Services
                     // Only add library and process child dependencies if we have not come across this dependency before
                     if (!targetFramework.Dependencies.ContainsKey(packageDependency.Id))
                     {
-                        var childDependency = new Dependency(packageDependency.Id, packageDependency.VersionRange, childLibrary?.Version, false, true, false, false);
+                        var childDependency = new Dependency(packageDependency.Id, packageDependency.VersionRange, childLibrary?.Version, false, true, false);
                         targetFramework.Dependencies.Add(childDependency.Name, childDependency);
 
                         // Process the dependency for this project dependency

@@ -69,9 +69,6 @@ namespace DotNetOutdated.Models
         [JsonIgnore]
         public bool IsTransitive => _dependency.IsTransitive;
 
-        [JsonIgnore]
-        public bool IsVersionCentrallyManaged => _dependency.IsVersionCentrallyManaged;
-
         [JsonPropertyOrder(0)]
         public string Name => _dependency.Name;
 

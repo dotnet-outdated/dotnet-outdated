@@ -57,7 +57,7 @@ dotnet tool update --global dotnet-outdated-tool
 Usage: dotnet outdated [options] <Path>
 
 Arguments:
-  Path                                                  The path to a .sln, .slnx, .slnf, .csproj or .fsproj file, or to a directory containing a .NET Core solution/project. If none is specified, the current directory will be used.
+  Path                                                  The path to a .sln, .slnx, .slnf, .csproj, .fsproj or .cs file-based app, or to a directory containing a .NET Core solution/project. If none is specified, the current directory will be used.
 
 Options:
   --version                                             Show version information.
@@ -87,6 +87,7 @@ Options:
                                                         Default value is: 0.
   -n|--no-restore                                       Add the reference without performing restore preview and compatibility check.
   -r|--recursive                                        Recursively search for all projects within the provided directory.
+  -fba|--include-file-based-apps                        Include loose file-based apps when recursively searching a directory.
   -ifs|--ignore-failed-sources                          Treat package source failures as warnings.
   -utd|--include-up-to-date                             Include all dependencies in the report even the ones not outdated.
   -prl|--pre-release-label <PRERELEASE_LABEL>           Specifies an optional label to restrict matches to when looking for pre-release versions of packages. For example, a label of 'rc.1' would only match
@@ -107,7 +108,11 @@ You can run **dotnet-outdated** without specifying the `Path` argument. In this 
 
 You can also pass a directory in the `Path` argument, in which case the same logic described above will be used, but in the directory specified.
 
-Lastly, you can specify the path to a solution (`.sln` or `.slnx`) or project (`.csproj` or `.fsproj`) which **dotnet-outdated** must analyze.
+Lastly, you can specify the path to a solution (`.sln` or `.slnx`), project (`.csproj` or `.fsproj`), or .NET file-based app (`.cs`) which **dotnet-outdated** must analyze. File-based apps require .NET SDK 10.0.300 or later.
+
+When `--recursive --include-file-based-apps` is used, **dotnet-outdated** also discovers loose `.cs` file-based apps that start with a shebang (`#!`). `.cs` files under a `.csproj` directory tree are ignored during recursive file-based app discovery.
+
+File-based apps can declare NuGet packages with `#:package` and MSBuild SDK packages with `#:sdk` (for example `#:sdk Cake.Sdk@6.0.0`). Variable-backed versions use `#:property` the same way as for packages.
 
 ## Upgrading packages
 
@@ -191,11 +196,55 @@ For failing CI builds, a proposed protocol is to have another CI build which wil
 
 Also, some companies/users do not feel comfortable jumping directly on the newest versions, as they might contain some bugs, and might want to wait for some time before updating to the newest package.
 
+## Model Context Protocol (MCP) Server
+
+**dotnet-outdated** includes a built-in [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server. This allows AI agents (like Claude Desktop, GitHub Copilot, etc.) to interact with your .NET projects to discover, analyze, and update outdated NuGet packages.
+
+### Usage
+
+To start the MCP server, run:
+
+```bash
+dotnet outdated mcp
+```
+
+### Configuration
+
+#### Claude Desktop
+
+Add the following to your `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "dotnet-outdated": {
+      "command": "dotnet-outdated",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+#### VS Code (with MCP Extension)
+
+Add the following to your `.vscode/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "dotnet-outdated": {
+      "command": "dotnet-outdated",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
 ## FAQ
 
 ### Why are unrelated changes made to .csproj files when running with `-u`?
 
-`dotnet-outdated` does not make any changes to .csproj files directly. Instead, it runs `dotnet add package` to update packages, so that command is responsible for all changes made. To track issues related to this command, head over to the [.NET CLI repo](https://github.com/dotnet/cli)
+`dotnet-outdated` does not make changes to .csproj files directly. Instead, it runs `dotnet add package` to update packages, so that command is responsible for those changes. For file-based apps that use variable-backed `#:package` or `#:sdk` directives, `dotnet-outdated` updates the referenced `#:property` value directly so the variable reference is preserved. Literal `#:package` and `#:sdk` directives are updated in the `.cs` source file. To track issues related to the .NET CLI command, head over to the [.NET SDK repo](https://github.com/dotnet/sdk)
 
 ### Why I am getting an error about required library hostfxr.dll/libhostfxr.so/libhostfxr.dylib not found?
 

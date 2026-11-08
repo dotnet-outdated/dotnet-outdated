@@ -30,9 +30,9 @@ public class JsonFormatterTests
             {
                 new AnalyzedTargetFramework(NuGetFramework.Parse("net9.0"), new List<AnalyzedDependency>
                 {
-                    new AnalyzedDependency(new Dependency("Microsoft.Extensions.Http.Diagnostics", new VersionRange(previewVersion), previewVersion, false, false, false, true), newerPreviewVersion),
-                    new AnalyzedDependency(new Dependency("Microsoft.Extensions.Http.Resilience", new VersionRange(previewVersion), previewVersion, false, false, false, true), newerPreviewVersion),
-                    new AnalyzedDependency(new Dependency("Microsoft.Extensions.Telemetry", new VersionRange(previewVersion), previewVersion, false, false, false, true), newerPreviewVersion)
+                    new AnalyzedDependency(new Dependency("Microsoft.Extensions.Http.Diagnostics", new VersionRange(previewVersion), previewVersion, false, false, false), newerPreviewVersion),
+                    new AnalyzedDependency(new Dependency("Microsoft.Extensions.Http.Resilience", new VersionRange(previewVersion), previewVersion, false, false, false), newerPreviewVersion),
+                    new AnalyzedDependency(new Dependency("Microsoft.Extensions.Telemetry", new VersionRange(previewVersion), previewVersion, false, false, false), newerPreviewVersion)
                 })
             })
         ];

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Xml.Linq;
+using DotNetOutdated.Core;
 using DotNetOutdated.Models;
 
 namespace DotNetOutdated
@@ -25,7 +26,6 @@ namespace DotNetOutdated
                                LatestVersion = d.LatestVersion,
                                IsAutoReferenced = d.IsAutoReferenced,
                                IsTransitive = d.IsTransitive,
-                               IsVersionCentrallyManaged = d.IsVersionCentrallyManaged,
                                UpgradeSeverity = d.UpgradeSeverity
                            };
 
@@ -37,7 +37,6 @@ namespace DotNetOutdated
                 p.LatestVersion,
                 p.IsTransitive,
                 p.IsAutoReferenced,
-                p.IsVersionCentrallyManaged,
                 p.UpgradeSeverity
             })
                 .Select(gp => new ConsolidatedPackage
@@ -47,7 +46,6 @@ namespace DotNetOutdated
                     LatestVersion = gp.Key.LatestVersion,
                     IsTransitive = gp.Key.IsTransitive,
                     IsAutoReferenced = gp.Key.IsAutoReferenced,
-                    IsVersionCentrallyManaged = gp.Key.IsVersionCentrallyManaged,
                     UpgradeSeverity = gp.Key.UpgradeSeverity,
                     Projects = gp.Select(v => new PackageProjectReference
                     {
@@ -63,6 +61,11 @@ namespace DotNetOutdated
 
         public static bool IsProjectSdkStyle(this PackageProjectReference project)
         {
+            if (project.ProjectFilePath.IsCSharpFile())
+            {
+                return true;
+            }
+
             try
             {
                 var xml = XDocument.Load(project.ProjectFilePath);
