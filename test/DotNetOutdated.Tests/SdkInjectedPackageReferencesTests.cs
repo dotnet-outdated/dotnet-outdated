@@ -36,6 +36,52 @@ namespace DotNetOutdated.Tests
             Assert.Equal(expected, SdkInjectedPackageReferences.DeclaresCustomSdk(xml));
         }
 
+        [Theory]
+        [InlineData(@"c:\repo\app\Directory.Build.props")]
+        [InlineData(@"c:\repo\Directory.Build.targets")]
+        [InlineData(@"c:\Directory.Build.props")]
+        public void CustomSdkImportedFromDirectoryBuildFileIsDetected(string directoryBuildFile)
+        {
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                [ProjectFile] = new("<Project Sdk=\"Microsoft.NET.Sdk\" />"),
+                [XFS.Path(directoryBuildFile)] = new("<Project><Import Project=\"Sdk.targets\" Sdk=\"Cake.Sdk\" /></Project>"),
+            });
+
+            Assert.True(SdkInjectedPackageReferences.UsesCustomSdk(fileSystem, ProjectFile));
+        }
+
+        [Fact]
+        public void CustomSdkInProjectFileIsDetected()
+        {
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                [ProjectFile] = new("<Project Sdk=\"Cake.Sdk/6.0.0\" />"),
+            });
+
+            Assert.True(SdkInjectedPackageReferences.UsesCustomSdk(fileSystem, ProjectFile));
+        }
+
+        [Fact]
+        public void ProjectWithoutCustomSdkIsNotDetected()
+        {
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                [ProjectFile] = new("<Project Sdk=\"Microsoft.NET.Sdk\" />"),
+                [XFS.Path(@"c:\repo\Directory.Build.props")] = new("<Project><PropertyGroup><Nullable>enable</Nullable></PropertyGroup></Project>"),
+                [XFS.Path(@"c:\repo\other\Directory.Build.props")] = new("<Project><Import Project=\"Sdk.props\" Sdk=\"Cake.Sdk\" /></Project>"),
+                [XFS.Path(@"c:\repo\Directory.Build.targets")] = new("not xml"),
+            });
+
+            Assert.False(SdkInjectedPackageReferences.UsesCustomSdk(fileSystem, ProjectFile));
+        }
+
+        [Fact]
+        public void MissingProjectFileIsNotDetected()
+        {
+            Assert.False(SdkInjectedPackageReferences.UsesCustomSdk(new MockFileSystem(), ProjectFile));
+        }
+
         [Fact]
         public void PackageDefinedInPackagesFolderIsReturned()
         {

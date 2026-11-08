@@ -1,6 +1,7 @@
 using DotNetOutdated.Core.Models;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.IO.Abstractions;
 using System.Linq;
 using System.Xml;
@@ -15,6 +16,54 @@ namespace DotNetOutdated.Core.Services
     /// </summary>
     internal static class SdkInjectedPackageReferences
     {
+        private static readonly string[] DirectoryBuildFileNames = ["Directory.Build.props", "Directory.Build.targets"];
+
+        /// <summary>
+        /// Determines whether a project can use an SDK other than the <c>Microsoft.NET.Sdk</c> family. It checks the
+        /// project file and every <c>Directory.Build.props</c> and <c>Directory.Build.targets</c> file in the project's
+        /// directory and its parents, because a repository can import a custom SDK for all of its projects from there.
+        /// </summary>
+        /// <remarks>
+        /// MSBuild imports only the nearest <c>Directory.Build.*</c> file, which may import the next one up. Checking
+        /// every file above the project can only cause an unneeded evaluation, never a missed one. SDKs imported from
+        /// other files, such as a custom <c>DirectoryBuildPropsPath</c>, are not detected.
+        /// </remarks>
+        public static bool UsesCustomSdk(IFileSystem fileSystem, string projectPath)
+        {
+            if (FileDeclaresCustomSdk(fileSystem, projectPath))
+            {
+                return true;
+            }
+
+            for (var directory = fileSystem.Path.GetDirectoryName(fileSystem.Path.GetFullPath(projectPath));
+                 !string.IsNullOrEmpty(directory);
+                 directory = fileSystem.Path.GetDirectoryName(directory))
+            {
+                foreach (var fileName in DirectoryBuildFileNames)
+                {
+                    var path = fileSystem.Path.Combine(directory, fileName);
+                    if (fileSystem.File.Exists(path) && FileDeclaresCustomSdk(fileSystem, path))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        private static bool FileDeclaresCustomSdk(IFileSystem fileSystem, string path)
+        {
+            try
+            {
+                return DeclaresCustomSdk(fileSystem.File.ReadAllText(path));
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return false;
+            }
+        }
+
         /// <summary>
         /// Determines whether an MSBuild file declares an SDK other than the <c>Microsoft.NET.Sdk</c> family, in the
         /// <c>Sdk</c> attribute of the project, an <c>&lt;Sdk&gt;</c> element or an <c>&lt;Import Sdk&gt;</c>.

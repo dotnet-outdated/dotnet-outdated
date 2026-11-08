@@ -7,7 +7,6 @@ using NuGet.Protocol;
 using NuGet.Versioning;
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.IO.Abstractions;
 using System.Linq;
 using System.Threading.Tasks;
@@ -92,7 +91,7 @@ namespace DotNetOutdated.Core.Services
                 var project = new Project(projectName, analyzedProjectPath, packageSpec.RestoreMetadata.Sources.Select(s => s.SourceUri).ToList(), packageSpec.Version);
                 projects.Add(project);
 
-                var usesCustomSdk = !isFileBasedApp && UsesCustomSdk(analyzedProjectPath);
+                var usesCustomSdk = !isFileBasedApp && SdkInjectedPackageReferences.UsesCustomSdk(_fileSystem, analyzedProjectPath);
 
                 // Get the target frameworks with their dependencies
                 foreach (var targetFrameworkInformation in packageSpec.TargetFrameworks)
@@ -176,21 +175,6 @@ namespace DotNetOutdated.Core.Services
                     isAutoReferenced: false,
                     isTransitive: false,
                     isDevelopmentDependency: false);
-            }
-        }
-
-        /// <summary>
-        /// Determines whether a project file declares an MSBuild SDK other than the <c>Microsoft.NET.Sdk</c> family.
-        /// </summary>
-        private bool UsesCustomSdk(string projectPath)
-        {
-            try
-            {
-                return SdkInjectedPackageReferences.DeclaresCustomSdk(_fileSystem.File.ReadAllText(projectPath));
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                return false;
             }
         }
 
