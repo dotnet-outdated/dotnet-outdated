@@ -11,6 +11,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Abstractions;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace DotNetOutdated.Core.Services
@@ -22,6 +23,10 @@ namespace DotNetOutdated.Core.Services
         private readonly IFileSystem _fileSystem;
         private readonly IVariableTrackingService _variableTrackingService;
         private readonly ILogger _logger;
+
+        // Limits the concurrent `dotnet msbuild` evaluations for SDK-injected package references across all projects
+        // being analyzed, since several projects can be analyzed at the same time.
+        private readonly SemaphoreSlim _evaluationThrottle = new(Environment.ProcessorCount);
 
         public ProjectAnalysisService(
             IDependencyGraphService dependencyGraphService,
@@ -72,6 +77,7 @@ namespace DotNetOutdated.Core.Services
             var isFileBasedApp = projectPath.IsCSharpFile();
             var projectFilePath = isFileBasedApp ? _fileSystem.Path.GetFullPath(projectPath) : null;
             var projects = new List<Project>();
+            var sdkEvaluations = new List<SdkEvaluation>();
             foreach (var packageSpec in dependencyGraph.Projects.Where(p => p.RestoreMetadata.ProjectStyle == ProjectStyle.PackageReference))
             {
                 var analyzedProjectPath = isFileBasedApp ? projectFilePath : packageSpec.FilePath;
@@ -93,7 +99,9 @@ namespace DotNetOutdated.Core.Services
                 var project = new Project(projectName, analyzedProjectPath, packageSpec.RestoreMetadata.Sources.Select(s => s.SourceUri).ToList(), packageSpec.Version);
                 projects.Add(project);
 
-                var usesCustomSdk = !isFileBasedApp && SdkInjectedPackageReferences.UsesCustomSdk(_fileSystem, analyzedProjectPath);
+                var packageFolders = !isFileBasedApp && SdkInjectedPackageReferences.UsesCustomSdk(_fileSystem, analyzedProjectPath)
+                    ? GetPackageFolders(analyzedProjectPath, packageSpec)
+                    : null;
 
                 // Get the target frameworks with their dependencies
                 foreach (var targetFrameworkInformation in packageSpec.TargetFrameworks)
@@ -135,13 +143,16 @@ namespace DotNetOutdated.Core.Services
                             ApplyFileBasedAppDirectives(analyzedProjectPath, targetFramework);
                         }
 
-                        if (usesCustomSdk)
+                        if (packageFolders != null)
                         {
-                            MarkPackageDefinedReferencesAsAutoReferenced(analyzedProjectPath, targetFrameworkInformation.TargetAlias, packageSpec, targetFramework);
+                            sdkEvaluations.Add(new SdkEvaluation(analyzedProjectPath, targetFrameworkInformation.TargetAlias, packageFolders, targetFramework));
                         }
                     }
                 }
             }
+
+            // Each evaluation is a separate `dotnet msbuild` process, so run them side by side.
+            await Task.WhenAll(sdkEvaluations.Select(MarkPackageDefinedReferencesAsAutoReferencedAsync)).ConfigureAwait(false);
 
             return projects;
         }
@@ -184,17 +195,27 @@ namespace DotNetOutdated.Core.Services
         /// Marks direct dependencies as auto-referenced when every <c>PackageReference</c> item for them is defined inside
         /// a NuGet package, such as the props or targets of an SDK like <c>Cake.Sdk</c> or <c>MSTest.Sdk</c>.
         /// </summary>
-        private void MarkPackageDefinedReferencesAsAutoReferenced(string projectPath, string targetAlias, PackageSpec packageSpec, TargetFramework targetFramework)
+        private async Task MarkPackageDefinedReferencesAsAutoReferencedAsync(SdkEvaluation evaluation)
         {
+            await _evaluationThrottle.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                var items = await Task.Run(() => _dependencyGraphService.GetPackageReferenceItems(evaluation.ProjectPath, evaluation.TargetAlias)).ConfigureAwait(false) ?? [];
+                var packageDefinedNames = SdkInjectedPackageReferences.GetPackageDefinedNames(_fileSystem, items, evaluation.PackageFolders);
+                SdkInjectedPackageReferences.MarkAsAutoReferenced(evaluation.TargetFramework, packageDefinedNames);
+            }
+            finally
+            {
+                _evaluationThrottle.Release();
+            }
+        }
+
+        private List<string> GetPackageFolders(string projectPath, PackageSpec packageSpec) =>
             // The SDK resolver finds SDKs in the global packages folder from the NuGet settings, while restore uses
             // RestorePackagesPath when it is set, so check both.
-            var packageFolders = new[] { packageSpec.RestoreMetadata.PackagesPath, GetConfiguredGlobalPackagesFolder(projectPath) }
-                .Concat(packageSpec.RestoreMetadata.FallbackFolders ?? []);
-
-            var items = _dependencyGraphService.GetPackageReferenceItems(projectPath, targetAlias) ?? [];
-            var packageDefinedNames = SdkInjectedPackageReferences.GetPackageDefinedNames(_fileSystem, items, packageFolders);
-            SdkInjectedPackageReferences.MarkAsAutoReferenced(targetFramework, packageDefinedNames);
-        }
+            new[] { packageSpec.RestoreMetadata.PackagesPath, GetConfiguredGlobalPackagesFolder(projectPath) }
+                .Concat(packageSpec.RestoreMetadata.FallbackFolders ?? [])
+                .ToList();
 
         private string GetConfiguredGlobalPackagesFolder(string projectPath)
         {
@@ -209,6 +230,8 @@ namespace DotNetOutdated.Core.Services
                 return null;
             }
         }
+
+        private sealed record SdkEvaluation(string ProjectPath, string TargetAlias, List<string> PackageFolders, TargetFramework TargetFramework);
 
         private void AddDependencies(TargetFramework targetFramework, LockFileTargetLibrary parentLibrary, LockFileTarget target, int level, int transitiveDepth)
         {
