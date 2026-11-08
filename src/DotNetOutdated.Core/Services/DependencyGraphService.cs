@@ -55,9 +55,9 @@ namespace DotNetOutdated.Core.Services
                                                 $"{Environment.NewLine}{Environment.NewLine}Here is the full error message returned from the Microsoft Build Engine:{Environment.NewLine}{Environment.NewLine}{runStatus.Output} - {runStatus.Errors} - exit code: {runStatus.ExitCode}");
         }
 
-        public IReadOnlyList<PackageReferenceItem> GetPackageReferenceItems(string projectPath, string targetFramework)
+        public IReadOnlyList<PackageReferenceItem> GetPackageReferenceItems(string projectPath, string targetFramework, string runtime = null)
         {
-            string[] arguments =
+            List<string> arguments =
             [
                 "msbuild",
                 projectPath,
@@ -65,7 +65,14 @@ namespace DotNetOutdated.Core.Services
                 $"-p:TargetFramework={targetFramework}"
             ];
 
-            var runStatus = _dotNetRunner.Run(_fileSystem.Path.GetDirectoryName(projectPath), arguments);
+            // Evaluate with the same runtime identifiers as the restore graph, so that runtime-conditioned
+            // references match the dependencies being classified.
+            if (!string.IsNullOrEmpty(runtime))
+            {
+                arguments.Add($"-p:RuntimeIdentifiers={runtime}");
+            }
+
+            var runStatus = _dotNetRunner.Run(_fileSystem.Path.GetDirectoryName(projectPath), [.. arguments]);
             if (!runStatus.IsSuccess)
             {
                 return null;

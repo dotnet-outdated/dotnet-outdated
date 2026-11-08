@@ -215,6 +215,21 @@ namespace DotNetOutdated.Tests
                 a.Length == 4 && a[0] == "msbuild" && a[1] == projectPath && a[2] == "-getItem:PackageReference" && a[3] == "-p:TargetFramework=net8.0"));
         }
 
+        [Fact]
+        public void GetPackageReferenceItemsPassesRuntimeIdentifiers()
+        {
+            var projectPath = XFS.Path(@"c:\path\proj.csproj");
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("{}", string.Empty, exitCode: 0));
+
+            var graphService = new DependencyGraphService(dotNetRunner, new MockFileSystem());
+
+            graphService.GetPackageReferenceItems(projectPath, "net8.0", "linux-x64");
+
+            dotNetRunner.Received().Run(_path, Arg.Is<string[]>(a =>
+                a.Length == 5 && a[2] == "-getItem:PackageReference" && a[3] == "-p:TargetFramework=net8.0" && a[4] == "-p:RuntimeIdentifiers=linux-x64"));
+        }
+
         [Theory]
         [InlineData("not json", 0)]
         [InlineData("{ \"Items\": { \"PackageReference\": [] } }\nTrailing text", 0)]

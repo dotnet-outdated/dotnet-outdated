@@ -145,7 +145,7 @@ namespace DotNetOutdated.Core.Services
 
                         if (packageFolders != null)
                         {
-                            sdkEvaluations.Add(new SdkEvaluation(analyzedProjectPath, targetFrameworkInformation.TargetAlias, packageFolders, targetFramework));
+                            sdkEvaluations.Add(new SdkEvaluation(analyzedProjectPath, targetFrameworkInformation.TargetAlias, runtime, packageFolders, targetFramework));
                         }
                     }
                 }
@@ -200,7 +200,7 @@ namespace DotNetOutdated.Core.Services
             await _evaluationThrottle.WaitAsync().ConfigureAwait(false);
             try
             {
-                var items = await Task.Run(() => _dependencyGraphService.GetPackageReferenceItems(evaluation.ProjectPath, evaluation.TargetAlias)).ConfigureAwait(false);
+                var items = await Task.Run(() => _dependencyGraphService.GetPackageReferenceItems(evaluation.ProjectPath, evaluation.TargetAlias, evaluation.Runtime)).ConfigureAwait(false);
                 if (items == null)
                 {
                     _logger.LogVerbose($"Could not evaluate the package references of '{evaluation.ProjectPath}' for {evaluation.TargetAlias}. " +
@@ -238,7 +238,7 @@ namespace DotNetOutdated.Core.Services
             }
         }
 
-        private sealed record SdkEvaluation(string ProjectPath, string TargetAlias, List<string> PackageFolders, TargetFramework TargetFramework);
+        private sealed record SdkEvaluation(string ProjectPath, string TargetAlias, string Runtime, List<string> PackageFolders, TargetFramework TargetFramework);
 
         private void AddDependencies(TargetFramework targetFramework, LockFileTargetLibrary parentLibrary, LockFileTarget target, int level, int transitiveDepth)
         {
