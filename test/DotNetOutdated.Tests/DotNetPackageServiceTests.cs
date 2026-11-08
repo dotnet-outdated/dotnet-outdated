@@ -153,10 +153,12 @@ namespace DotNetOutdated.Tests
         [Fact]
         public void CpmProjectWithNoRestore_UnmatchedEntry_ReportsFailureAndLeavesFileUnchanged()
         {
-            // Version before Include is valid MSBuild, but the regex does not recognise it.
+            // Version as child metadata is valid MSBuild, but it can't be updated in place.
             const string propsContent = @"<Project>
   <ItemGroup>
-    <PackageVersion Version=""1.0.0"" Include=""SomePackage"" />
+    <PackageVersion Include=""SomePackage"">
+      <Version>1.0.0</Version>
+    </PackageVersion>
   </ItemGroup>
 </Project>";
             var propsPath = XFS.Path(@"c:\repo\Directory.Packages.props");
@@ -231,6 +233,29 @@ namespace DotNetOutdated.Tests
             {
                 CultureInfo.CurrentCulture = originalCulture;
             }
+        }
+
+        [Theory]
+        [InlineData("<PackageVersion Version=\"{0}\" Include=\"Newtonsoft.Json\" />")]
+        [InlineData("<PackageVersion Include=\"Newtonsoft.Json\" Condition=\"'$(CI)' == 'true'\" Version=\"{0}\" />")]
+        [InlineData("<PackageVersion Include='Newtonsoft.Json' Version='{0}' />")]
+        [InlineData("<PackageVersion Include = \"Newtonsoft.Json\" Version = \"{0}\" />")]
+        [InlineData("<GlobalPackageReference Version=\"{0}\" Include=\"Newtonsoft.Json\" PrivateAssets=\"all\" />")]
+        public void CpmProjectWithNoRestore_UpdatesAnyAttributeLayout(string packageElement)
+        {
+            var propsContent = "<Project>\n  <ItemGroup>\n    " + string.Format(packageElement, "12.0.3") + "\n  </ItemGroup>\n</Project>\n";
+            var expectedContent = "<Project>\n  <ItemGroup>\n    " + string.Format(packageElement, "13.0.1") + "\n  </ItemGroup>\n</Project>\n";
+
+            AssertNoRestoreUpdate(propsContent, "Newtonsoft.Json", "13.0.1", expectedContent);
+        }
+
+        [Fact]
+        public void CpmProjectWithNoRestore_DoesNotRewriteCommentedOutEntry()
+        {
+            const string propsContent = "<Project>\n  <!-- <PackageVersion Include=\"Newtonsoft.Json\" Version=\"11.0.1\" /> old pin -->\n" +
+                "  <ItemGroup>\n    <PackageVersion Include=\"Newtonsoft.Json\" Version=\"12.0.3\" />\n  </ItemGroup>\n</Project>\n";
+
+            AssertNoRestoreUpdate(propsContent, "Newtonsoft.Json", "13.0.1", propsContent.Replace("12.0.3", "13.0.1"));
         }
 
         private static void AssertNoRestoreUpdate(string propsContent, string packageName, string version, string expectedContent)

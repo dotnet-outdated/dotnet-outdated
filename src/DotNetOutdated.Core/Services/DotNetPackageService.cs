@@ -104,7 +104,7 @@ namespace DotNetOutdated.Core.Services
                         return new RunStatus(
                             string.Empty,
                             $"Could not update '{packageName}' in '{centralPackagesPath}': no <PackageVersion> or <GlobalPackageReference> " +
-                            "element was found with an Include or Update attribute followed by a Version attribute. Update the version manually.",
+                            "element was found with an Include or Update attribute and a Version attribute. Update the version manually.",
                             1);
                 }
             }
@@ -192,22 +192,15 @@ namespace DotNetOutdated.Core.Services
             {
                 var file = EncodedText.Read(_fileSystem, cpvmFile.FullName);
                 var fileContent = file.Content;
-                if (!fileContent.Contains($"\"{packageName}\"", StringComparison.OrdinalIgnoreCase))
+                if (!fileContent.Contains($"\"{packageName}\"", StringComparison.OrdinalIgnoreCase) &&
+                    !fileContent.Contains($"'{packageName}'", StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
                 }
 
                 centralPackagesPath = cpvmFile.FullName;
-                var matched = false;
-                var newFileContent = Regex.Replace(
-                    fileContent,
-                    $"(<(?:PackageVersion|GlobalPackageReference)\\s*(?:Include|Update)=\"(?i:{Regex.Escape(packageName)})\"\\s*Version=\")([^\"]*)(\")",
-                    m =>
-                    {
-                        matched = true;
-                        return $"{m.Groups[1].Captures[0].Value}{version}{m.Groups[3].Captures[0].Value}";
-                    },
-                    RegexOptions.CultureInvariant);
+                var newFileContent = PackageVersionMarkup.ReplaceVersion(
+                    fileContent, PackageVersionMarkup.CentralPackageElements, packageName, version.ToString(), out var matched);
 
                 if (!matched)
                 {
