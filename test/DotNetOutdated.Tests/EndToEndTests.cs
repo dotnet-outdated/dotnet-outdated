@@ -8,6 +8,7 @@ using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Xml.Linq;
+using NuGet.Versioning;
 using Xunit;
 
 namespace DotNetOutdated.Tests;
@@ -369,6 +370,48 @@ public static class EndToEndTests
 
         Assert.Equal($"[{systemTextJsonVersion}, 8.0.0)", csprojDependencyVersions["System.Text.Json"]);
         Assert.Equal("[7.0.0]", csprojDependencyVersions["Microsoft.Extensions.DependencyInjection"]);
+    }
+
+    [Fact]
+    public static void Can_Upgrade_Version_Range_Held_In_Variable()
+    {
+        using var directory = TestSetup("version-range-variables");
+
+        var actual = Program.Main([directory.Path, "--upgrade"]);
+        Assert.Equal(0, actual);
+
+        var content = File.ReadAllText(Path.Combine(directory.Path, "version-range-variables.csproj"));
+        Assert.Contains("Version=\"$(NewtonsoftJsonVersion)\"", content);
+        Assert.Contains("<NewtonsoftJsonVersion>[12.0.3, 13.0.0)</NewtonsoftJsonVersion>", content);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public static void Can_Upgrade_CPM_Version_Ranges(bool noRestore)
+    {
+        using var directory = TestSetup("version-range-cpm");
+
+        List<string> args = [directory.Path, "--upgrade"];
+        if (noRestore)
+        {
+            args.Add("--no-restore");
+        }
+
+        var actual = Program.Main([.. args]);
+        Assert.Equal(0, actual);
+
+        var props = XDocument.Load(Path.Combine(directory.Path, "Directory.Packages.props"));
+        var packageVersions = props.Descendants("PackageVersion")
+            .ToDictionary(e => (string)e.Attribute("Include"), e => (string)e.Attribute("Version"));
+
+        Assert.Equal("$(NewtonsoftJsonVersion)", packageVersions["Newtonsoft.Json"]);
+        Assert.Equal("[12.0.3, 13.0.0)", (string)props.Descendants("NewtonsoftJsonVersion").Single());
+
+        var systemTextJson = VersionRange.Parse(packageVersions["System.Text.Json"]);
+        Assert.True(systemTextJson.MinVersion > new NuGetVersion(6, 0, 0));
+        Assert.Equal(new NuGetVersion(7, 0, 0), systemTextJson.MaxVersion);
+        Assert.False(systemTextJson.IsMaxInclusive);
     }
 
     private static TemporaryDirectory TestSetup(string testProjectName)

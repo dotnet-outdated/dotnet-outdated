@@ -106,7 +106,7 @@ namespace DotNetOutdated.Core.Services
                 // This avoids the dotnet CPM bug AND preserves the variable reference.
                 if (variableInfo != null && variableInfo.ElementType != "PackageReference")
                 {
-                    _variableTrackingService.UpdatePackageVariable(variableInfo, version);
+                    _variableTrackingService.UpdatePackageVariable(variableInfo, versionRange);
                     return new RunStatus(string.Empty, string.Empty, 0);
                 }
 
@@ -141,7 +141,7 @@ namespace DotNetOutdated.Core.Services
             // If the package originally used a variable reference, restore it after the update
             if (result.IsSuccess && variableInfo != null)
             {
-                _variableTrackingService.UpdatePackageVariable(variableInfo, version);
+                _variableTrackingService.UpdatePackageVariable(variableInfo, versionRange);
             }
 
             return result;
