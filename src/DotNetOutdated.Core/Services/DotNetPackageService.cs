@@ -36,10 +36,10 @@ namespace DotNetOutdated.Core.Services
 
         public RunStatus RemovePackage(string projectPath, string packageName)
         {
-            var projectName = _fileSystem.Path.GetFileName(projectPath);
-            string[] arguments = ["remove", projectName, "package", packageName];
+           var projectName = _fileSystem.Path.GetFileName(projectPath);
+           string[] arguments = ["remove", projectName, "package", packageName];
 
-            return _dotNetRunner.Run(_fileSystem.Path.GetDirectoryName(projectPath), arguments);
+           return _dotNetRunner.Run(_fileSystem.Path.GetDirectoryName(projectPath), arguments);
         }
     }
 }

@@ -22,11 +22,11 @@ public static class EndToEndTests
         var actual = Program.Main([project.Path]);
         Assert.Equal(0, actual);
     }
-
+    
     [Theory]
-    [InlineData("development-dependencies-lock", "", 0)]
-    [InlineData("development-dependencies-lock", "linux-x64", 0)]
-    [InlineData("development-dependencies-lock", "windows-x64", 1)]
+    [InlineData("development-dependencies-lock",  "", 0)]
+    [InlineData("development-dependencies-lock",  "linux-x64", 0)]
+    [InlineData("development-dependencies-lock",  "windows-x64", 1)]
     public static void Can_Upgrade_Lock_Project(string testProjectName, string runtime, int expectedExitCode)
     {
         using var project = TestSetup(testProjectName);
@@ -37,7 +37,7 @@ public static class EndToEndTests
         {
             list.Add($"--runtime {runtime}");
         }
-
+        
         var actual = Program.Main([.. list]);
         Assert.Equal(expectedExitCode, actual);
     }
