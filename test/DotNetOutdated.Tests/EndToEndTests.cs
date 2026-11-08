@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text.Json;
+using NuGet.Versioning;
 using Xunit;
 
 namespace DotNetOutdated.Tests;
@@ -268,6 +269,48 @@ public static class EndToEndTests
                 }
             }
         }
+    }
+
+    [Fact]
+    public static void Maximum_Version_Never_Widens_Declared_Version_Ranges()
+    {
+        using var directory = TestSetup("max-version-ranges");
+
+        var outputPath = Path.Combine(directory.Path, "output.json");
+
+        var actual = Program.Main([directory.Path, "--maximum-version:8.0", "--output", outputPath, "--output-format:json"]);
+        Assert.Equal(0, actual);
+
+        using var output = JsonDocument.Parse(File.ReadAllText(outputPath));
+
+        var latestVersions = new Dictionary<string, NuGetVersion>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var project in output.RootElement.GetProperty("Projects").EnumerateArray())
+        {
+            foreach (var tfm in project.GetProperty("TargetFrameworks").EnumerateArray())
+            {
+                foreach (var dependency in tfm.GetProperty("Dependencies").EnumerateArray())
+                {
+                    latestVersions[dependency.GetProperty("Name").GetString()] =
+                        NuGetVersion.Parse(dependency.GetProperty("LatestVersion").GetString());
+                }
+            }
+        }
+
+        // Exact pins are never upgraded, whether they are below or above the maximum version
+        Assert.DoesNotContain("System.Text.Encodings.Web", latestVersions.Keys);
+        Assert.DoesNotContain("Microsoft.Bcl.AsyncInterfaces", latestVersions.Keys);
+
+        // A declared upper bound below the maximum version wins: [6.0.0, 7.0.0)
+        Assert.Equal(6, latestVersions["Microsoft.Extensions.Options"].Major);
+
+        // The maximum version wins over a higher declared upper bound: [6.0.0, 10.0.0)
+        Assert.Equal(8, latestVersions["Microsoft.Extensions.Logging"].Major);
+        Assert.Equal(0, latestVersions["Microsoft.Extensions.Logging"].Minor);
+
+        // An open-ended version is capped at the maximum version: 6.0.0
+        Assert.Equal(8, latestVersions["System.Text.Json"].Major);
+        Assert.Equal(0, latestVersions["System.Text.Json"].Minor);
     }
 
     [Fact]
