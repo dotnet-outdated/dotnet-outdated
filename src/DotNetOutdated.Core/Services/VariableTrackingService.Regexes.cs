@@ -13,7 +13,7 @@ public sealed partial class VariableTrackingService
     [GeneratedRegex(@"^[ \t]*#:[ \t]*property[ \t]+([^=\s]+)[ \t]*=[ \t]*(.*?)\s*$")]
     private static partial Regex PropertyDirectiveLineRegex();
 
-    [GeneratedRegex(@"\$\(([^)]+)\)")]
+    [GeneratedRegex(@"\$\(\s*([A-Za-z_][A-Za-z0-9_.-]*)\s*\)")]
     private static partial Regex MsBuildPropertyReferenceRegex();
 
     [GeneratedRegex(@"(^[ \t]*#:[ \t]*package[ \t]+)([^\r\n]*)(\r?\n|$)", RegexOptions.Multiline)]

@@ -1058,5 +1058,139 @@ Information(""Outdated Sdk"");")
             Assert.Contains("#:sdk $(SdkId)@6.2.0", content);
             Assert.DoesNotContain("#:sdk $(SdkId)@6.0.0", content);
         }
+
+        [Theory]
+        [InlineData("MyProject.csproj", "<PropertyGroup>\n    <UseMaui>true</UseMaui>\n  </PropertyGroup>", "PackageReference")]
+        [InlineData("MyProject.csproj", "", "PackageReference")]
+        [InlineData("Directory.Build.props", "<PropertyGroup>\n    <UseMaui>true</UseMaui>\n  </PropertyGroup>", "PackageReference")]
+        [InlineData("Directory.Packages.props", "<PropertyGroup>\n    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>\n  </PropertyGroup>", "PackageVersion")]
+        public void DiscoverAndUpdate_ImplicitSdkVariable_InsertsPropertyAndPreservesReference(string fileName, string propertyGroup, string elementType)
+        {
+            var projectPath = XFS.Path(@"c:\repo\src\MyProject\MyProject.csproj");
+            var targetPath = fileName == "MyProject.csproj" ? projectPath : XFS.Path($@"c:\repo\{fileName}");
+            var targetContent = $"<Project>\n  {propertyGroup}\n  <ItemGroup>\n    <{elementType} Include=\"Microsoft.Maui.Controls\" Version=\"$(MauiVersion)\" />\n  </ItemGroup>\n</Project>";
+
+            var files = new Dictionary<string, MockFileData> { [targetPath] = new(targetContent) };
+            if (targetPath != projectPath)
+            {
+                files[projectPath] = new("<Project Sdk=\"Microsoft.NET.Sdk\"></Project>");
+            }
+
+            var fileSystem = new MockFileSystem(files);
+            var service = new VariableTrackingService(fileSystem);
+
+            var info = Assert.Contains("Microsoft.Maui.Controls", service.DiscoverPackageVariables(projectPath));
+            Assert.Equal("MauiVersion", info.VariableName);
+            Assert.Equal(string.Empty, info.VariableValue);
+            Assert.Equal(targetPath, info.FilePath);
+
+            fileSystem.File.WriteAllText(targetPath, targetContent.Replace("$(MauiVersion)", "8.0.100"));
+            Assert.True(service.TryUpdatePackageVariable(info, new NuGetVersion("8.0.100")));
+
+            var updated = fileSystem.File.ReadAllText(targetPath);
+            Assert.Contains("<MauiVersion>8.0.100</MauiVersion>", updated);
+            Assert.Contains("Version=\"$(MauiVersion)\"", updated);
+            Assert.Equal("8.0.100", service.DiscoverPackageVariables(projectPath)["Microsoft.Maui.Controls"].VariableValue);
+        }
+
+        [Theory]
+        [InlineData(
+            "<!-- <MauiVersion>8.0.3</MauiVersion> -->\n    <MauiVersion Condition=\"'$(MauiVersion)' == ''\" Label=\"Default\">8.0.3</MauiVersion>",
+            "<!-- <MauiVersion>8.0.3</MauiVersion> -->\n    <MauiVersion Condition=\"'$(MauiVersion)' == ''\" Label=\"Default\">8.0.100</MauiVersion>")]
+        [InlineData(
+            "<mauiversion>8.0.3</mauiversion>",
+            "<mauiversion>8.0.100</mauiversion>")]
+        [InlineData(
+            "<MauiVersion>8.0.0</MauiVersion>\n    <MauiVersion Condition=\"'$(UseMaui)' == 'true'\">8.0.3</MauiVersion>",
+            "<MauiVersion>8.0.0</MauiVersion>\n    <MauiVersion Condition=\"'$(UseMaui)' == 'true'\">8.0.100</MauiVersion>")]
+        public void DiscoverAndUpdate_PropertyGroupEdgeCases_UpdatesTargetPropertyAndPreservesMarkup(string beforeProps, string afterProps)
+        {
+            var projectPath = XFS.Path(@"c:\repo\MyProject.csproj");
+            var original = $"<Project>\n  <PropertyGroup>\n    {beforeProps}\n  </PropertyGroup>\n  <ItemGroup>\n    <PackageReference Include=\"Microsoft.Maui.Controls\" Version=\"$(MauiVersion)\" />\n  </ItemGroup>\n</Project>";
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData> { [projectPath] = new(original) });
+            var service = new VariableTrackingService(fileSystem);
+
+            var info = service.DiscoverPackageVariables(projectPath)["Microsoft.Maui.Controls"];
+            Assert.Equal("8.0.3", info.VariableValue);
+
+            fileSystem.File.WriteAllText(projectPath, original.Replace("Version=\"$(MauiVersion)\"", "Version=\"8.0.100\""));
+            Assert.True(service.TryUpdatePackageVariable(info, new NuGetVersion("8.0.100")));
+
+            var updated = fileSystem.File.ReadAllText(projectPath);
+            Assert.Contains(afterProps, updated);
+            Assert.Contains("Version=\"$(MauiVersion)\"", updated);
+        }
+
+        [Fact]
+        public void DiscoverAndUpdate_ChainedVariablesAndImportedProps_UpdatesRootPropertyAndInvalidatesCache()
+        {
+            var buildPropsPath = XFS.Path(@"c:\repo\Directory.Build.props");
+            var versionsPropsPath = XFS.Path(@"c:\repo\eng\Versions.props");
+            var projectPath = XFS.Path(@"c:\repo\src\MyProject\MyProject.csproj");
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                [buildPropsPath] = new("<Project><Import Project=\"$(MSBuildThisFileDirectory)eng/Versions.props\" /></Project>"),
+                [versionsPropsPath] = new("<Project><PropertyGroup><SharedMauiVersion>8.0.3</SharedMauiVersion></PropertyGroup></Project>"),
+                [projectPath] = new("<Project><PropertyGroup><MauiVersion>$(SharedMauiVersion)</MauiVersion></PropertyGroup><ItemGroup><PackageReference Include=\"Microsoft.Maui.Controls\" Version=\"$(MauiVersion)\" /></ItemGroup></Project>")
+            });
+
+            var service = new VariableTrackingService(fileSystem);
+            var info = service.DiscoverPackageVariables(projectPath)["Microsoft.Maui.Controls"];
+            Assert.Equal("SharedMauiVersion", info.VariableName);
+            Assert.Equal("8.0.3", info.VariableValue);
+            Assert.Equal(versionsPropsPath, info.FilePath);
+            Assert.Equal("$(MauiVersion)", info.PackageReferenceVersion);
+
+            fileSystem.File.WriteAllText(projectPath, fileSystem.File.ReadAllText(projectPath).Replace("Version=\"$(MauiVersion)\"", "Version=\"8.0.100\""));
+            Assert.True(service.TryUpdatePackageVariable(info, new NuGetVersion("8.0.100")));
+
+            Assert.Contains("<SharedMauiVersion>8.0.100</SharedMauiVersion>", fileSystem.File.ReadAllText(versionsPropsPath));
+            var updatedProject = fileSystem.File.ReadAllText(projectPath);
+            Assert.Contains("<MauiVersion>$(SharedMauiVersion)</MauiVersion>", updatedProject);
+            Assert.Contains("Version=\"$(MauiVersion)\"", updatedProject);
+            Assert.Equal("8.0.100", service.DiscoverPackageVariables(projectPath)["Microsoft.Maui.Controls"].VariableValue);
+        }
+
+        [Fact]
+        public void Discover_CircularPropertyChainAndPropertyFunctions_HandledSafely()
+        {
+            var projectPath = XFS.Path(@"c:\repo\MyProject.csproj");
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                [projectPath] = new("<Project><PropertyGroup><PropA>$(PropB)</PropA><PropB>$(PropA)</PropB></PropertyGroup>" +
+                                    "<ItemGroup><PackageReference Include=\"Newtonsoft.Json\" Version=\"$(PropA)\" />" +
+                                    "<PackageReference Include=\"Serilog\" Version=\"$([System.String]::Copy('2.10.0'))\" /></ItemGroup></Project>")
+            });
+
+            var discovered = new VariableTrackingService(fileSystem).DiscoverPackageVariables(projectPath);
+            Assert.Contains("Newtonsoft.Json", discovered);
+            Assert.DoesNotContain("Serilog", discovered);
+        }
+
+        [Theory]
+        [InlineData("<PackageReference Include=\"Microsoft.Maui.Controls\"><Version>{0}</Version></PackageReference>", "$(MauiVersion)", "8.0.100", false)]
+        [InlineData("<PackageReference Include=\"Microsoft.Maui.Controls\" VersionOverride=\"{0}\" />", "$(MauiVersion)", "8.0.100", true)]
+        [InlineData("<PackageReference Include=\"Microsoft.Maui.Controls\"><VersionOverride>{0}</VersionOverride></PackageReference>", "$(MauiVersion)", "8.0.100", true)]
+        [InlineData("<PackageReference Include=\"Microsoft.Maui.Controls\" Version=\"{0}\" />", "[$(MauiVersion), 9.0.0)", "[8.0.100, 9.0.0)", false)]
+        public void DiscoverAndUpdate_AlternativeVersionSyntaxAndRanges_UpdatesPropertyAndRestoresExpression(
+            string itemTemplate, string originalExpr, string cliOverwrittenValue, bool expectVersionOverride)
+        {
+            var projectPath = XFS.Path(@"c:\repo\MyProject.csproj");
+            var originalElement = string.Format(itemTemplate, originalExpr);
+            var original = $"<Project><PropertyGroup><MauiVersion>8.0.3</MauiVersion></PropertyGroup><ItemGroup>{originalElement}</ItemGroup></Project>";
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData> { [projectPath] = new(original) });
+            var service = new VariableTrackingService(fileSystem);
+
+            var info = service.DiscoverPackageVariables(projectPath)["Microsoft.Maui.Controls"];
+            Assert.Equal(expectVersionOverride, info.IsVersionOverride);
+            Assert.Equal(originalExpr, info.PackageReferenceVersion);
+
+            fileSystem.File.WriteAllText(projectPath, original.Replace(originalElement, string.Format(itemTemplate, cliOverwrittenValue)));
+            Assert.True(service.TryUpdatePackageVariable(info, VersionRange.Parse(cliOverwrittenValue)));
+
+            var updated = fileSystem.File.ReadAllText(projectPath);
+            Assert.Contains("<MauiVersion>8.0.100</MauiVersion>", updated);
+            Assert.Contains(originalElement, updated);
+        }
     }
 }
