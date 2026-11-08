@@ -73,8 +73,9 @@ internal static partial class ProjectSdkReferenceHelper
     [GeneratedRegex(@"([\w:.-]+)\s*=\s*(""[^""]*""|'[^']*')")]
     private static partial Regex AttributeRegex();
 
-    [GeneratedRegex(@"<!--.*?-->|<!\[CDATA\[.*?\]\]>", RegexOptions.Singleline)]
-    private static partial Regex CommentOrCDataRegex();
+    // Text that cannot hold an SDK declaration: comments, CDATA and the free-form <ProjectExtensions> section.
+    [GeneratedRegex(@"<!--.*?-->|<!\[CDATA\[.*?\]\]>|<ProjectExtensions\b(?:[^>""']|""[^""]*""|'[^']*')*?/>|<ProjectExtensions\b.*?</ProjectExtensions\s*>", RegexOptions.Singleline)]
+    private static partial Regex NonDeclarationTextRegex();
 
     /// <summary>
     /// Gets the dictionary key for storing an SDK reference in <see cref="Models.TargetFramework.Dependencies"/>,
@@ -86,7 +87,7 @@ internal static partial class ProjectSdkReferenceHelper
     /// <summary>
     /// Reads every MSBuild project SDK declared in a project file: the <c>Sdk</c> attribute of the root
     /// <c>&lt;Project&gt;</c>, <c>&lt;Sdk&gt;</c> elements and <c>&lt;Import Sdk="..."&gt;</c> elements, versioned or not.
-    /// The file is parsed as XML, so SDKs inside comments are ignored.
+    /// The file is parsed as XML, so SDKs inside comments are ignored, as is anything inside <c>&lt;ProjectExtensions&gt;</c>.
     /// </summary>
     /// <returns>The declarations in document order, or an empty list when the file is missing, unreadable or not valid XML.</returns>
     public static IReadOnlyList<ProjectSdkDeclaration> GetDeclarations(IFileSystem fileSystem, string projectFilePath)
@@ -126,7 +127,8 @@ internal static partial class ProjectSdkReferenceHelper
             }
         }
 
-        foreach (var element in root.Descendants())
+        // <ProjectExtensions> holds arbitrary XML that MSBuild ignores, so skip anything inside it.
+        foreach (var element in root.Descendants().Where(element => !element.AncestorsAndSelf().Any(ancestor => ancestor.Name.LocalName == "ProjectExtensions")))
         {
             var kind = element.Name.LocalName switch
             {
@@ -168,17 +170,17 @@ internal static partial class ProjectSdkReferenceHelper
     }
 
     /// <summary>
-    /// Updates the version of every declaration of the named SDK in a project file. Declarations inside XML comments
-    /// and CDATA sections are left alone.
+    /// Updates the version of every declaration of the named SDK in a project file. Text inside XML comments, CDATA
+    /// sections and <c>&lt;ProjectExtensions&gt;</c> is left alone, matching what <see cref="GetDeclarations"/> reads.
     /// </summary>
     /// <returns><see langword="true"/> when the project file was changed; otherwise <see langword="false"/>.</returns>
     public static bool TryUpdate(IFileSystem fileSystem, string projectFilePath, string name, NuGetVersion newVersion)
     {
         var content = ReadAllText(fileSystem, projectFilePath, out var encoding);
 
-        // Match against a copy where comments and CDATA are blanked out with spaces. The copy has the same length
-        // as the original, so every match index is also an index into the original content.
-        var searchable = CommentOrCDataRegex().Replace(content, match => new string(' ', match.Length));
+        // Match against a copy where comments, CDATA and <ProjectExtensions> are blanked out with spaces. The copy has
+        // the same length as the original, so every match index is also an index into the original content.
+        var searchable = NonDeclarationTextRegex().Replace(content, match => new string(' ', match.Length));
         var edits = new List<(int Index, int Length, string Value)>();
 
         var seenProject = false;

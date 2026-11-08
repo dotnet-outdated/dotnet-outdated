@@ -290,6 +290,29 @@ namespace DotNetOutdated.Tests
         }
 
         [Fact]
+        public void Discover_And_TryUpdate_IgnoreProjectExtensions()
+        {
+            const string extensions = @"<ProjectExtensions>
+    <VisualStudio>
+      <Sdk Name=""Microsoft.Build.NoTargets"" Version=""1.0.0"" />
+      <Import Project=""Sdk.props"" Sdk=""Microsoft.Build.NoTargets"" Version=""1.0.0"" />
+    </VisualStudio>
+  </ProjectExtensions>";
+            var fileSystem = CreateFileSystem($@"<Project Sdk=""Microsoft.Build.NoTargets/3.7.0"">
+  {extensions}
+</Project>");
+
+            var reference = Assert.Single(ProjectSdkReferenceHelper.Discover(fileSystem, ProjectPath));
+            Assert.Equal(new NuGetVersion("3.7.0"), reference.ResolvedVersion);
+            Assert.Single(ProjectSdkReferenceHelper.GetDeclarations(fileSystem, ProjectPath));
+
+            Assert.True(ProjectSdkReferenceHelper.TryUpdate(fileSystem, ProjectPath, "Microsoft.Build.NoTargets", new NuGetVersion("3.7.134")));
+            Assert.Equal($@"<Project Sdk=""Microsoft.Build.NoTargets/3.7.134"">
+  {extensions}
+</Project>", fileSystem.File.ReadAllText(ProjectPath));
+        }
+
+        [Fact]
         public void TryUpdate_PropertyBackedVersion_IsNotChanged()
         {
             const string content = @"<Project Sdk=""Microsoft.NET.Sdk"">
