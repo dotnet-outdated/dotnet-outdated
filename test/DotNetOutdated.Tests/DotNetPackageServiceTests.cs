@@ -1384,5 +1384,53 @@ Information(""Outdated Sdk"");")
             Assert.Contains("Include=\"Microsoft.Maui.Controls\" Version=\"$(MauiVersion)\"", finalContent);
             Assert.Contains("Include=\"Microsoft.Maui.Controls.Compatibility\" Version=\"$(MauiVersion)\"", finalContent);
         }
+
+        [Fact]
+        public void SharedVariableAcrossProjects_RestoresEachProjectOnce()
+        {
+            var packagesPath = XFS.Path(@"c:\repo\Directory.Packages.props");
+            var projectA = XFS.Path(@"c:\repo\A\A.csproj");
+            var projectB = XFS.Path(@"c:\repo\B\B.csproj");
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                [packagesPath] = new("<Project><PropertyGroup><V>8.0.3</V></PropertyGroup><ItemGroup><GlobalPackageReference Include=\"Analyzers\" Version=\"$(V)\" /></ItemGroup></Project>"),
+                [projectA] = new("<Project Sdk=\"Microsoft.NET.Sdk\"></Project>"),
+                [projectB] = new("<Project Sdk=\"Microsoft.NET.Sdk\"></Project>"),
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
+            var service = new DotNetPackageService(dotNetRunner, fileSystem, new VariableTrackingService(fileSystem));
+
+            foreach (var (project, framework) in new[] { (projectA, "net8.0"), (projectA, "net9.0"), (projectB, "net8.0"), (projectB, "net9.0") })
+            {
+                Assert.True(service.AddPackage(project, "Analyzers", framework, new NuGetVersion("8.0.100"), noRestore: false).IsSuccess);
+            }
+
+            dotNetRunner.Received(1).Run(XFS.Path(@"c:\repo\A"), Arg.Is<string[]>(a => a[0] == "restore"));
+            dotNetRunner.Received(1).Run(XFS.Path(@"c:\repo\B"), Arg.Is<string[]>(a => a[0] == "restore"));
+            Assert.Contains("<V>8.0.100</V>", fileSystem.File.ReadAllText(packagesPath));
+        }
+
+        [Fact]
+        public void UnsupportedVariableThatDotNetAddCannotUpdate_FailsWithoutChangingFiles()
+        {
+            var packagesPath = XFS.Path(@"c:\repo\Directory.Packages.props");
+            var projectPath = XFS.Path(@"c:\repo\A\A.csproj");
+            const string packagesContent = "<Project><PropertyGroup><Major>8</Major></PropertyGroup><ItemGroup><GlobalPackageReference Include=\"Analyzers\" Version=\"$(Major).0.3\" /></ItemGroup></Project>";
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                [packagesPath] = new(packagesContent),
+                [projectPath] = new("<Project Sdk=\"Microsoft.NET.Sdk\"></Project>"),
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            var service = new DotNetPackageService(dotNetRunner, fileSystem, new VariableTrackingService(fileSystem));
+
+            var status = service.AddPackage(projectPath, "Analyzers", "net8.0", new NuGetVersion("9.0.0"), noRestore: false);
+
+            Assert.False(status.IsSuccess);
+            Assert.Contains("Update the version manually", status.Errors);
+            Assert.Equal(packagesContent, fileSystem.File.ReadAllText(packagesPath));
+            dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
+        }
     }
 }

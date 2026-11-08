@@ -42,12 +42,13 @@ namespace DotNetOutdated.Core.Services
 
         /// <summary>
         /// Restores a variable reference in <c>Version</c> or <c>VersionOverride</c> attributes or child elements
-        /// for <paramref name="packageName"/> while leaving any other variable-backed elements untouched.
+        /// for <paramref name="packageName"/>. Values that contain a property reference are left untouched unless they
+        /// equal <paramref name="previousExpression"/> (the expression being rewritten).
         /// </summary>
-        public static string ReplacePackageVersion(string content, string[] elementNames, string packageName, string newValue)
+        public static string ReplacePackageVersion(string content, string[] elementNames, string packageName, string newValue, string previousExpression = null)
         {
             var result = ReplaceVersionAttributes(
-                content, elementNames, packageName, newValue, allowVersionOverride: true, skipExistingVariables: true, out _);
+                content, elementNames, packageName, newValue, allowVersionOverride: true, skipExistingVariables: true, out _, previousExpression);
 
             var elements = string.Join("|", Array.ConvertAll(elementNames, Regex.Escape));
             var childElementPattern =
@@ -72,7 +73,7 @@ namespace DotNetOutdated.Core.Services
                     var newBody = Regex.Replace(
                         m.Groups["body"].Value,
                         childVersionPattern,
-                        vm => !vm.Groups["vopen"].Success || vm.Groups["vval"].Value.Contains("$(", StringComparison.Ordinal)
+                        vm => !vm.Groups["vopen"].Success || IsOtherExpression(vm.Groups["vval"].Value, previousExpression)
                             ? vm.Value
                             : vm.Groups["vopen"].Value + ReplaceTrimmed(vm.Groups["vval"].Value, newValue) + vm.Groups["vclose"].Value,
                         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
@@ -89,7 +90,8 @@ namespace DotNetOutdated.Core.Services
             string newValue,
             bool allowVersionOverride,
             bool skipExistingVariables,
-            out bool matched)
+            out bool matched,
+            string previousExpression = null)
         {
             var elements = string.Join("|", Array.ConvertAll(elementNames, Regex.Escape));
             var pattern =
@@ -106,7 +108,7 @@ namespace DotNetOutdated.Core.Services
                     if (!attributes.Success ||
                         !MatchesPackage(attributes.Value, packageName, allowVersionOverride, out var version) ||
                         version == null ||
-                        (skipExistingVariables && version.Value.Contains("$(", StringComparison.Ordinal)))
+                        (skipExistingVariables && IsOtherExpression(version.Value, previousExpression)))
                     {
                         return m.Value;
                     }
@@ -120,6 +122,10 @@ namespace DotNetOutdated.Core.Services
             matched = found;
             return result;
         }
+
+        private static bool IsOtherExpression(string value, string previousExpression) =>
+            value.Contains("$(", StringComparison.Ordinal) &&
+            !(previousExpression != null && string.Equals(value.Trim(), previousExpression.Trim(), StringComparison.Ordinal));
 
         private static bool MatchesPackage(string attributesText, string packageName, bool allowVersionOverride, out Group version)
         {
@@ -150,16 +156,21 @@ namespace DotNetOutdated.Core.Services
             return isPackage;
         }
 
+        private static Regex PropertyElementPattern(string propertyName) => new(
+            InactiveMarkupPattern +
+            @"|(?<open><(?<tag>" + Regex.Escape(propertyName) + @")(?<attributes>(?:\s+" + AttributePattern + @")*)\s*>)(?<value>[\s\S]*?)(?<close></\k<tag>\s*>)" +
+            @"|(?<empty><(?<etag>" + Regex.Escape(propertyName) + @")(?<eattributes>(?:\s+" + AttributePattern + @")*)\s*/>)",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
         /// <summary>
-        /// Replaces the value of <paramref name="propertyName"/> inside <c>&lt;PropertyGroup&gt;</c> elements,
-        /// preserving any attributes on the property tag, tag casing, and surrounding whitespace.
+        /// Replaces the value of the <paramref name="elementIndex"/>-th (zero-based, document order)
+        /// <paramref name="propertyName"/> element directly inside a <c>&lt;PropertyGroup&gt;</c>, preserving its
+        /// attributes, tag casing and surrounding whitespace. Other definitions of the property are left alone.
         /// </summary>
-        public static string ReplacePropertyValue(string content, string propertyName, string oldValue, string newValue)
+        public static string ReplacePropertyValueAt(string content, string propertyName, int elementIndex, string newValue)
         {
-            var propertyPattern = new Regex(
-                InactiveMarkupPattern + @"|(?<open><(?<tag>" + Regex.Escape(propertyName) + @")(?:\s+" + AttributePattern + @")*\s*>)(?<value>[\s\S]*?)(?<close></\k<tag>\s*>)",
-                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-            var expectedTrimmed = (oldValue ?? string.Empty).Trim();
+            var propertyPattern = PropertyElementPattern(propertyName);
+            var index = 0;
 
             return PropertyGroupPattern.Replace(
                 content,
@@ -172,59 +183,74 @@ namespace DotNetOutdated.Core.Services
 
                     var newBody = propertyPattern.Replace(
                         groupMatch.Groups["body"].Value,
-                        propMatch => !propMatch.Groups["open"].Success ||
-                                     !string.Equals(propMatch.Groups["value"].Value.Trim(), expectedTrimmed, StringComparison.Ordinal)
-                            ? propMatch.Value
-                            : propMatch.Groups["open"].Value +
-                              ReplaceTrimmed(propMatch.Groups["value"].Value, newValue) +
-                              propMatch.Groups["close"].Value);
+                        propMatch =>
+                        {
+                            if (!propMatch.Groups["open"].Success && !propMatch.Groups["empty"].Success)
+                            {
+                                return propMatch.Value;
+                            }
+
+                            if (index++ != elementIndex)
+                            {
+                                return propMatch.Value;
+                            }
+
+                            return propMatch.Groups["open"].Success
+                                ? propMatch.Groups["open"].Value + ReplaceTrimmed(propMatch.Groups["value"].Value, newValue) + propMatch.Groups["close"].Value
+                                : $"<{propMatch.Groups["etag"].Value}{propMatch.Groups["eattributes"].Value}>{newValue}</{propMatch.Groups["etag"].Value}>";
+                        });
 
                     return groupMatch.Groups["open"].Value + newBody + groupMatch.Groups["close"].Value;
                 });
         }
 
         /// <summary>
-        /// Inserts <c>&lt;propertyName&gt;newValue&lt;/propertyName&gt;</c> into the first <c>&lt;PropertyGroup&gt;</c>,
-        /// or creates a <c>&lt;PropertyGroup&gt;</c> under <c>&lt;Project&gt;</c> when none exists.
+        /// Inserts <c>&lt;propertyName&gt;newValue&lt;/propertyName&gt;</c> at the end of the
+        /// <paramref name="propertyGroupIndex"/>-th (zero-based, document order, non-empty) <c>&lt;PropertyGroup&gt;</c>,
+        /// or, when the index is negative, in a new <c>&lt;PropertyGroup&gt;</c> at the start of <c>&lt;Project&gt;</c>.
         /// </summary>
-        public static string InsertProperty(string content, string propertyName, string newValue)
+        public static string InsertProperty(string content, int propertyGroupIndex, string propertyName, string newValue)
         {
             var newline = content.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
             var inserted = false;
 
-            var withPropertyGroup = PropertyGroupPattern.Replace(
-                content,
-                m =>
-                {
-                    if (inserted || !m.Groups["open"].Success)
-                    {
-                        return m.Value;
-                    }
-
-                    inserted = true;
-                    var body = m.Groups["body"].Value;
-                    var lastLf = body.LastIndexOf('\n');
-                    if (lastLf < 0)
-                    {
-                        return $"{m.Groups["open"].Value}{body}<{propertyName}>{newValue}</{propertyName}>{m.Groups["close"].Value}";
-                    }
-
-                    var prefix = body[..(lastLf > 0 && body[lastLf - 1] == '\r' ? lastLf - 1 : lastLf)];
-                    var closingIndent = body[(lastLf + 1)..];
-                    var prevLf = prefix.LastIndexOf('\n');
-                    var prevLine = prevLf >= 0 ? prefix[(prevLf + 1)..] : string.Empty;
-                    var childIndent = prevLine[..(prevLine.Length - prevLine.AsSpan().TrimStart().Length)];
-                    if (childIndent.Length == 0)
-                    {
-                        childIndent = closingIndent + (closingIndent.Contains('\t', StringComparison.Ordinal) ? "\t" : "  ");
-                    }
-
-                    return $"{m.Groups["open"].Value}{prefix}{newline}{childIndent}<{propertyName}>{newValue}</{propertyName}>{newline}{closingIndent}{m.Groups["close"].Value}";
-                });
-
-            if (inserted)
+            if (propertyGroupIndex >= 0)
             {
-                return withPropertyGroup;
+                var index = 0;
+                var withPropertyGroup = PropertyGroupPattern.Replace(
+                    content,
+                    m =>
+                    {
+                        if (!m.Groups["open"].Success || index++ != propertyGroupIndex)
+                        {
+                            return m.Value;
+                        }
+
+                        inserted = true;
+                        var body = m.Groups["body"].Value;
+                        var lastLf = body.LastIndexOf('\n');
+                        if (lastLf < 0)
+                        {
+                            return $"{m.Groups["open"].Value}{body}<{propertyName}>{newValue}</{propertyName}>{m.Groups["close"].Value}";
+                        }
+
+                        var prefix = body[..(lastLf > 0 && body[lastLf - 1] == '\r' ? lastLf - 1 : lastLf)];
+                        var closingIndent = body[(lastLf + 1)..];
+                        var prevLf = prefix.LastIndexOf('\n');
+                        var prevLine = prevLf >= 0 ? prefix[(prevLf + 1)..] : string.Empty;
+                        var childIndent = prevLine[..(prevLine.Length - prevLine.AsSpan().TrimStart().Length)];
+                        if (childIndent.Length == 0)
+                        {
+                            childIndent = closingIndent + (closingIndent.Contains('\t', StringComparison.Ordinal) ? "\t" : "  ");
+                        }
+
+                        return $"{m.Groups["open"].Value}{prefix}{newline}{childIndent}<{propertyName}>{newValue}</{propertyName}>{newline}{closingIndent}{m.Groups["close"].Value}";
+                    });
+
+                if (inserted)
+                {
+                    return withPropertyGroup;
+                }
             }
 
             return ProjectOpenTagPattern.Replace(
@@ -241,6 +267,49 @@ namespace DotNetOutdated.Core.Services
                     return after < content.Length && content[after] is '\r' or '\n'
                         ? $"{m.Value}{newline}  <PropertyGroup>{newline}    <{propertyName}>{newValue}</{propertyName}>{newline}  </PropertyGroup>"
                         : $"{m.Value}<PropertyGroup><{propertyName}>{newValue}</{propertyName}></PropertyGroup>";
+                });
+        }
+
+        /// <summary>
+        /// Inserts <c>&lt;propertyName&gt;newValue&lt;/propertyName&gt;</c> immediately before the
+        /// <paramref name="anchorIndex"/>-th <paramref name="anchorName"/> property element (see
+        /// <see cref="ReplacePropertyValueAt"/>), on its own line with the same indentation when the anchor starts a line.
+        /// Returns <paramref name="content"/> unchanged when the anchor isn't found.
+        /// </summary>
+        public static string InsertPropertyBefore(string content, string anchorName, int anchorIndex, string propertyName, string newValue)
+        {
+            var newline = content.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
+            var anchorPattern = PropertyElementPattern(anchorName);
+            var index = 0;
+
+            return PropertyGroupPattern.Replace(
+                content,
+                groupMatch =>
+                {
+                    if (!groupMatch.Groups["open"].Success)
+                    {
+                        return groupMatch.Value;
+                    }
+
+                    var body = groupMatch.Groups["body"].Value;
+                    var newBody = anchorPattern.Replace(
+                        body,
+                        propMatch =>
+                        {
+                            if ((!propMatch.Groups["open"].Success && !propMatch.Groups["empty"].Success) || index++ != anchorIndex)
+                            {
+                                return propMatch.Value;
+                            }
+
+                            var lineStart = body.LastIndexOf('\n', Math.Max(propMatch.Index - 1, 0)) + 1;
+                            var leading = body[lineStart..propMatch.Index];
+                            var element = $"<{propertyName}>{newValue}</{propertyName}>";
+                            return lineStart > 0 && string.IsNullOrWhiteSpace(leading)
+                                ? $"{element}{newline}{leading}{propMatch.Value}"
+                                : $"{element}{propMatch.Value}";
+                        });
+
+                    return groupMatch.Groups["open"].Value + newBody + groupMatch.Groups["close"].Value;
                 });
         }
 
