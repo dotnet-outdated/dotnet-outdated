@@ -74,9 +74,6 @@ namespace DotNetOutdated.Tests
         [Fact]
         public void CpmProjectWithNoRestore_UpdatesMultilinePackageVersion()
         {
-            // Arrange
-            var propsPath = XFS.Path(@"c:\repo\Directory.Packages.props");
-            var projectPath = XFS.Path(@"c:\repo\src\MyProject\MyProject.csproj");
             const string propsContent = @"<Project>
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
@@ -88,7 +85,73 @@ namespace DotNetOutdated.Tests
     />
   </ItemGroup>
 </Project>";
+            const string expectedContent = @"<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageVersion
+      Include=""Microsoft.AspNetCore.Components.WebAssembly.Authentication""
+      Version=""10.0.0""
+    />
+  </ItemGroup>
+</Project>";
 
+            AssertNoRestoreUpdate(propsContent, "Microsoft.AspNetCore.Components.WebAssembly.Authentication", "10.0.0", expectedContent);
+        }
+
+        [Fact]
+        public void CpmProjectWithNoRestore_UpdatesPackageVersionWithChildElements()
+        {
+            const string propsContent = @"<Project>
+  <ItemGroup>
+    <PackageVersion Include=""SomeGenerator"" Version=""1.0.0"">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageVersion>
+    <PackageVersion Include=""Serilog"" Version=""2.10.0"" />
+  </ItemGroup>
+</Project>";
+            const string expectedContent = @"<Project>
+  <ItemGroup>
+    <PackageVersion Include=""SomeGenerator"" Version=""2.0.0"">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageVersion>
+    <PackageVersion Include=""Serilog"" Version=""2.10.0"" />
+  </ItemGroup>
+</Project>";
+
+            AssertNoRestoreUpdate(propsContent, "SomeGenerator", "2.0.0", expectedContent);
+        }
+
+        [Fact]
+        public void CpmProjectWithNoRestore_UpdatesGlobalPackageReferenceWithChildElements()
+        {
+            const string propsContent = @"<Project>
+  <ItemGroup>
+    <GlobalPackageReference Include=""coverlet.collector"" Version=""6.0.0"">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </GlobalPackageReference>
+  </ItemGroup>
+</Project>";
+            const string expectedContent = @"<Project>
+  <ItemGroup>
+    <GlobalPackageReference Include=""coverlet.collector"" Version=""6.0.2"">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </GlobalPackageReference>
+  </ItemGroup>
+</Project>";
+
+            AssertNoRestoreUpdate(propsContent, "coverlet.collector", "6.0.2", expectedContent);
+        }
+
+        private static void AssertNoRestoreUpdate(string propsContent, string packageName, string version, string expectedContent)
+        {
+            var propsPath = XFS.Path(@"c:\repo\Directory.Packages.props");
+            var projectPath = XFS.Path(@"c:\repo\src\MyProject\MyProject.csproj");
             var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
             {
                 { propsPath, new MockFileData(propsContent) },
@@ -98,21 +161,11 @@ namespace DotNetOutdated.Tests
             var dotNetRunner = Substitute.For<IDotNetRunner>();
             var service = new DotNetPackageService(dotNetRunner, mockFileSystem, EmptyVariableTrackingService());
 
-            // Act
-            var result = service.AddPackage(
-                projectPath,
-                "Microsoft.AspNetCore.Components.WebAssembly.Authentication",
-                "net8.0",
-                new NuGetVersion("10.0.0"),
-                noRestore: true);
+            var result = service.AddPackage(projectPath, packageName, "net8.0", new NuGetVersion(version), noRestore: true);
 
-            // Assert
             Assert.True(result.IsSuccess);
             dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
-
-            var updatedContent = mockFileSystem.File.ReadAllText(propsPath);
-            Assert.Contains("Version=\"10.0.0\"", updatedContent);
-            Assert.DoesNotContain("Version=\"9.0.7\"", updatedContent);
+            Assert.Equal(expectedContent, mockFileSystem.File.ReadAllText(propsPath));
         }
 
         [Fact]
