@@ -249,6 +249,27 @@ namespace DotNetOutdated.Tests
             AssertNoRestoreUpdate(propsContent, "Newtonsoft.Json", "13.0.1", expectedContent);
         }
 
+        [Theory]
+        [InlineData(
+            "<PackageVersion Include=\"Newtonsoft.Json\" Version=\"12.0.3\" Notes=\"Version='legacy'\" />",
+            "<PackageVersion Include=\"Newtonsoft.Json\" Version=\"13.0.1\" Notes=\"Version='legacy'\" />")]
+        [InlineData(
+            "<PackageVersion Include=\"Newtonsoft.Json\" Condition=\"'$(LangVersion)' > '10'\" Version=\"12.0.3\" />",
+            "<PackageVersion Include=\"Newtonsoft.Json\" Condition=\"'$(LangVersion)' > '10'\" Version=\"13.0.1\" />")]
+        [InlineData(
+            "<PackageVersion Include=\"Newtonsoft.Json\" Version=\"$([System.String]::Copy('12.0.3'))\" />",
+            "<PackageVersion Include=\"Newtonsoft.Json\" Version=\"13.0.1\" />")]
+        [InlineData(
+            "<PackageVersion Label=\"Include='Newtonsoft.Json'\" Include=\"Other.Package\" Version=\"12.0.3\" />\n    <PackageVersion Include=\"Newtonsoft.Json\" Version=\"12.0.3\" />",
+            "<PackageVersion Label=\"Include='Newtonsoft.Json'\" Include=\"Other.Package\" Version=\"12.0.3\" />\n    <PackageVersion Include=\"Newtonsoft.Json\" Version=\"13.0.1\" />")]
+        public void CpmProjectWithNoRestore_UpdatesOnlyTheVersionAttributeValue(string packageElement, string expectedElement)
+        {
+            var propsContent = "<Project>\n  <ItemGroup>\n    " + packageElement + "\n  </ItemGroup>\n</Project>\n";
+            var expectedContent = "<Project>\n  <ItemGroup>\n    " + expectedElement + "\n  </ItemGroup>\n</Project>\n";
+
+            AssertNoRestoreUpdate(propsContent, "Newtonsoft.Json", "13.0.1", expectedContent);
+        }
+
         [Fact]
         public void CpmProjectWithNoRestore_DoesNotRewriteCommentedOutEntry()
         {
