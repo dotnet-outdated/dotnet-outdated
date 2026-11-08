@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.IO.Abstractions.TestingHelpers;
 using DotNetOutdated.Core.Services;
 using NSubstitute;
@@ -436,6 +437,25 @@ Information(""Outdated Sdk"");")
             Assert.Equal(@"<Project Sdk=""Aspire.AppHost.Sdk/13.0.2""></Project>", mockFileSystem.File.ReadAllText(projectPath));
             dotNetRunner.Received(1).Run(XFS.Path(@"c:\repo\AppHost"), Arg.Is<string[]>(a => a.Length == 2 && a[0] == "restore" && a[1] == "AppHost.csproj"));
             dotNetRunner.DidNotReceive().Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[0] == "add"));
+        }
+
+        [Fact]
+        public void ProjectSdk_ReadOnlyProjectFile_ReturnsFailureInsteadOfThrowing()
+        {
+            var projectPath = XFS.Path(@"c:\repo\AppHost\AppHost.csproj");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { projectPath, new MockFileData(@"<Project Sdk=""Aspire.AppHost.Sdk/13.0.0""></Project>") }
+            });
+            mockFileSystem.File.SetAttributes(projectPath, FileAttributes.ReadOnly);
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem, EmptyVariableTrackingService());
+
+            var result = service.AddPackage(projectPath, "Aspire.AppHost.Sdk", "net10.0", new NuGetVersion("13.0.2"));
+
+            Assert.False(result.IsSuccess);
+            Assert.Contains("Aspire.AppHost.Sdk", result.Errors);
+            dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
         }
 
         [Fact]

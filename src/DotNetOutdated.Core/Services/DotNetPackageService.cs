@@ -85,8 +85,20 @@ namespace DotNetOutdated.Core.Services
 
                 if (sdkReference != null)
                 {
-                    if (!ProjectSdkReferenceHelper.TryUpdate(_fileSystem, projectPath, packageName, version) &&
-                        sdkReference.ResolvedVersion != version)
+                    bool updated;
+                    try
+                    {
+                        updated = ProjectSdkReferenceHelper.TryUpdate(_fileSystem, projectPath, packageName, version);
+                    }
+                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                    {
+                        return new RunStatus(
+                            string.Empty,
+                            $"Failed to update the version of SDK '{packageName}' in '{projectPath}': {ex.Message}",
+                            1);
+                    }
+
+                    if (!updated && sdkReference.ResolvedVersion != version)
                     {
                         return new RunStatus(
                             string.Empty,
