@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using CsvHelper;
 using System.Linq;
 using DotNetOutdated.Core.Models;
 using DotNetOutdated.Services;
@@ -114,7 +115,8 @@ namespace DotNetOutdated.Models
         }
     }
 
-    public class CsvDependency
+    [CsvRecord]
+    public partial class CsvDependency
     {
         public string ProjectName { get; set; }
         public string TargetFrameworkName { get; set; }
