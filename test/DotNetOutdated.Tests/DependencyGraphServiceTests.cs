@@ -1,8 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO.Abstractions.TestingHelpers;
 using System.Threading.Tasks;
 using DotNetOutdated.Core.Exceptions;
+using DotNetOutdated.Core.Resources;
 using DotNetOutdated.Core.Services;
 using NSubstitute;
 using Xunit;
@@ -102,22 +104,43 @@ namespace DotNetOutdated.Tests
             dotNetRunner.Received().Run(_path, Arg.Is<string[]>(a => a[0] == "msbuild" && a[1] == _solutionPath && a[4] == "/t:Restore,GenerateRestoreGraphFile"));
         }
 
-        [Fact]
-        public async Task SuccessfulRunWithoutGraphFileThrowsFriendlyValidationException()
+        [Theory]
+        [InlineData(@"c:\path\proj.sln")]
+        [InlineData(@"c:\path\proj.slnx")]
+        [InlineData(@"c:\path\proj.slnf")]
+        public async Task SolutionWithoutGraphFileThrowsNoRestorableProjectsMessage(string solutionPath)
         {
-            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>());
+            // MSBuild reports success but never writes the restore graph file, as happens when the
+            // solution or solution filter selects no restorable projects (issue #747).
+            var path = XFS.Path(solutionPath);
+            var graphService = new DependencyGraphService(SucceedingRunnerThatWritesNothing(), new MockFileSystem());
 
-            // Arrange: MSBuild reports success but never writes the restore graph
-            // file, as happens when the solution references no projects (issue #747).
+            var exception = await Assert.ThrowsAsync<CommandValidationException>(() => graphService.GenerateDependencyGraphAsync(path, string.Empty));
+
+            Assert.Equal(string.Format(CultureInfo.InvariantCulture, ValidationErrorMessages.NoRestorableProjectsInSolution, path), exception.Message);
+        }
+
+        [Theory]
+        [InlineData(@"c:\path\proj.csproj")]
+        [InlineData(@"c:\path\proj.fsproj")]
+        [InlineData(@"c:\path\app.cs")]
+        public async Task ProjectWithoutGraphFileThrowsNoDependencyGraphMessage(string projectPath)
+        {
+            // A project or file-based app is never "empty", so the message must not claim it has no projects.
+            var path = XFS.Path(projectPath);
+            var graphService = new DependencyGraphService(SucceedingRunnerThatWritesNothing(), new MockFileSystem());
+
+            var exception = await Assert.ThrowsAsync<CommandValidationException>(() => graphService.GenerateDependencyGraphAsync(path, string.Empty));
+
+            Assert.Equal(string.Format(CultureInfo.InvariantCulture, ValidationErrorMessages.NoDependencyGraphForProject, path), exception.Message);
+        }
+
+        private static IDotNetRunner SucceedingRunnerThatWritesNothing()
+        {
             var dotNetRunner = Substitute.For<IDotNetRunner>();
             dotNetRunner.Run(Arg.Any<string>(), Arg.Any<string[]>())
                 .Returns(new RunStatus(string.Empty, string.Empty, exitCode: 0));
-
-            var graphService = new DependencyGraphService(dotNetRunner, mockFileSystem);
-
-            // Act & Assert
-            var exception = await Assert.ThrowsAsync<CommandValidationException>(() => graphService.GenerateDependencyGraphAsync(_solutionPath, string.Empty));
-            Assert.Contains(_solutionPath, exception.Message, StringComparison.Ordinal);
+            return dotNetRunner;
         }
 
         [Fact]
