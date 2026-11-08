@@ -4,6 +4,6 @@ namespace DotNetOutdated.Core.Services
 {
     public interface IProjectDiscoveryService
     {
-        IList<string> DiscoverProjects(string path, bool recursive = false);
+        IList<string> DiscoverProjects(string path, bool recursive = false, bool includeFileBasedApps = false);
     }
 }

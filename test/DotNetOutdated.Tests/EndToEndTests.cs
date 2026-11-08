@@ -1,19 +1,87 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
+using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Xml.Linq;
 using Xunit;
 
 namespace DotNetOutdated.Tests;
 
+/// <summary>
+/// Skips the test when the installed .NET SDK is older than the minimum required for file-based apps.
+/// Inherits <see cref="FactAttribute"/> so xUnit discovers and runs the test method.
+/// </summary>
+[AttributeUsage(AttributeTargets.Method)]
+public sealed class RequiresFileBasedAppSdkAttribute : FactAttribute
+{
+    private static readonly Version MinimumSdkVersion = new(10, 0, 300);
+
+    public RequiresFileBasedAppSdkAttribute()
+    {
+        if (!DotNetSdkDetector.HasSdkVersionAtLeast(MinimumSdkVersion))
+        {
+            Skip = $"Requires .NET SDK {MinimumSdkVersion} or newer.";
+        }
+    }
+}
+
+internal static class DotNetSdkDetector
+{
+    public static bool HasSdkVersionAtLeast(Version minimumVersion)
+    {
+        try
+        {
+            using var process = Process.Start(new ProcessStartInfo("dotnet", "--list-sdks")
+            {
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                UseShellExecute = false
+            });
+
+            if (process is null)
+            {
+                return false;
+            }
+
+            var output = process.StandardOutput.ReadToEnd();
+
+            if (!process.WaitForExit(milliseconds: 10_000))
+            {
+                process.Kill(entireProcessTree: true);
+                process.WaitForExit(milliseconds: 5_000);
+                return false;
+            }
+
+            if (process.ExitCode != 0)
+            {
+                return false;
+            }
+
+            return output
+                .Split([Environment.NewLine], StringSplitOptions.RemoveEmptyEntries)
+                .Select(line => line.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault())
+                .Where(sdkVersion => !string.IsNullOrWhiteSpace(sdkVersion))
+                .Select(sdkVersion => sdkVersion!.Split('-')[0])
+                .Any(sdkVersion => Version.TryParse(sdkVersion, out var version) && version.CompareTo(minimumVersion) >= 0);
+        }
+        catch (Win32Exception)
+        {
+            return false;
+        }
+    }
+}
+
 public static class EndToEndTests
 {
     [Theory]
     [InlineData("build-props")]
     [InlineData("development-dependencies")]
+    [InlineData("direct-reference-variables")]
     [InlineData("multi-target", Skip = "Fails on Windows in GitHub Actions for some reason.")]
     public static void Can_Upgrade_Project(string testProjectName)
     {
@@ -22,11 +90,11 @@ public static class EndToEndTests
         var actual = Program.Main([project.Path]);
         Assert.Equal(0, actual);
     }
-    
+
     [Theory]
-    [InlineData("development-dependencies-lock",  "", 0)]
-    [InlineData("development-dependencies-lock",  "linux-x64", 0)]
-    [InlineData("development-dependencies-lock",  "windows-x64", 1)]
+    [InlineData("development-dependencies-lock", "", 0)]
+    [InlineData("development-dependencies-lock", "linux-x64", 0)]
+    [InlineData("development-dependencies-lock", "windows-x64", 1)]
     public static void Can_Upgrade_Lock_Project(string testProjectName, string runtime, int expectedExitCode)
     {
         using var project = TestSetup(testProjectName);
@@ -37,7 +105,7 @@ public static class EndToEndTests
         {
             list.Add($"--runtime {runtime}");
         }
-        
+
         var actual = Program.Main([.. list]);
         Assert.Equal(expectedExitCode, actual);
     }
@@ -61,6 +129,118 @@ public static class EndToEndTests
 
         var actual = Program.Main([project.Path, "--output", outputPath, "--output-format", format.ToString()]);
         Assert.Equal(0, actual);
+    }
+
+    [RequiresFileBasedAppSdk]
+    public static void Can_Analyze_File_Based_App()
+    {
+        using var project = TestSetup("file-based-app");
+
+        var appPath = Path.Combine(project.Path, "app.cs");
+        var outputPath = Path.Combine(project.Path, "output.json");
+
+        var actual = Program.Main([appPath, "--output", outputPath, "--output-format:json"]);
+        Assert.Equal(0, actual);
+
+        using var output = JsonDocument.Parse(File.ReadAllText(outputPath));
+        var analyzedProject = Assert.Single(output.RootElement.GetProperty("Projects").EnumerateArray());
+
+        Assert.Equal("app.cs", analyzedProject.GetProperty("Name").GetString());
+        Assert.Equal(Path.GetFullPath(appPath), analyzedProject.GetProperty("FilePath").GetString());
+
+        var analyzedDependency = Assert.Single(
+            analyzedProject
+                .GetProperty("TargetFrameworks")
+                .EnumerateArray()
+                .SelectMany(targetFramework => targetFramework.GetProperty("Dependencies").EnumerateArray()),
+            dependency => dependency.GetProperty("Name").GetString() == "Newtonsoft.Json");
+
+        Assert.Equal("11.0.1", analyzedDependency.GetProperty("ResolvedVersion").GetString());
+        Assert.False(string.IsNullOrWhiteSpace(analyzedDependency.GetProperty("LatestVersion").GetString()));
+    }
+
+    [RequiresFileBasedAppSdk]
+    public static void Can_Upgrade_File_Based_App_With_Variables_Preserves_Variable_References()
+    {
+        using var project = TestSetup("file-based-app");
+
+        var appPath = Path.Combine(project.Path, "app.cs");
+
+        var actual = Program.Main([appPath, "--upgrade", "--no-restore"]);
+        Assert.Equal(0, actual);
+
+        var content = File.ReadAllText(appPath);
+
+        Assert.Contains("#:property NewtonsoftJsonPackageId=Newtonsoft.Json", content);
+        Assert.Contains("#:property NewtonsoftJsonPackageVersion=", content);
+        Assert.Contains("#:package $(NewtonsoftJsonPackageId)@$(NewtonsoftJsonPackageVersion)", content);
+        Assert.DoesNotContain("#:property NewtonsoftJsonPackageVersion=11.0.1", content);
+    }
+
+    [RequiresFileBasedAppSdk]
+    public static void Can_Upgrade_File_Based_App_With_Direct_Package_Directive()
+    {
+        using var project = TestSetup("file-based-app-direct-package");
+
+        var appPath = Path.Combine(project.Path, "app.cs");
+
+        var actual = Program.Main([appPath, "--upgrade", "--no-restore"]);
+        Assert.Equal(0, actual);
+
+        var content = File.ReadAllText(appPath);
+
+        Assert.Contains("#:package Newtonsoft.Json@", content);
+        Assert.DoesNotContain("#:package Newtonsoft.Json@11.0.1", content);
+    }
+
+    [RequiresFileBasedAppSdk]
+    public static void Can_Analyze_File_Based_App_With_Sdk_Directive()
+    {
+        using var project = TestSetup("file-based-app-sdk");
+
+        var appPath = Path.Combine(project.Path, "app.cs");
+        var outputPath = Path.Combine(project.Path, "output.json");
+
+        var actual = Program.Main([appPath, "--output", outputPath, "--output-format:json"]);
+        Assert.Equal(0, actual);
+
+        using var output = JsonDocument.Parse(File.ReadAllText(outputPath));
+        var analyzedProject = Assert.Single(output.RootElement.GetProperty("Projects").EnumerateArray());
+
+        Assert.Equal("app.cs", analyzedProject.GetProperty("Name").GetString());
+        Assert.Equal(Path.GetFullPath(appPath), analyzedProject.GetProperty("FilePath").GetString());
+
+        var dependencies = analyzedProject
+            .GetProperty("TargetFrameworks")
+            .EnumerateArray()
+            .SelectMany(targetFramework => targetFramework.GetProperty("Dependencies").EnumerateArray())
+            .ToList();
+
+        Assert.Contains(dependencies, dependency => dependency.GetProperty("Name").GetString() == "Cake.Sdk");
+        Assert.DoesNotContain(dependencies, dependency => dependency.GetProperty("Name").GetString() == "Cake.Generator");
+
+        var analyzedSdk = Assert.Single(dependencies, dependency => dependency.GetProperty("Name").GetString() == "Cake.Sdk");
+
+        Assert.Equal("6.0.0", analyzedSdk.GetProperty("ResolvedVersion").GetString());
+        Assert.False(string.IsNullOrWhiteSpace(analyzedSdk.GetProperty("LatestVersion").GetString()));
+        Assert.NotEqual("6.0.0", analyzedSdk.GetProperty("LatestVersion").GetString());
+    }
+
+    [RequiresFileBasedAppSdk]
+    public static void Can_Upgrade_File_Based_App_With_Sdk_Directive()
+    {
+        using var project = TestSetup("file-based-app-sdk");
+
+        var appPath = Path.Combine(project.Path, "app.cs");
+
+        var actual = Program.Main([appPath, "--upgrade", "--no-restore"]);
+        Assert.Equal(0, actual);
+
+        var content = File.ReadAllText(appPath);
+
+        Assert.Contains("#:sdk Cake.Sdk@", content);
+        Assert.DoesNotContain("#:sdk Cake.Sdk@6.0.0", content);
+        Assert.DoesNotContain("Cake.Generator", content);
     }
 
     [Fact]
@@ -96,6 +276,69 @@ public static class EndToEndTests
             .ToDictionary(e => (string)e.Attribute("Include"), e => (string)e.Attribute("Version"));
 
         Assert.StartsWith("8.0.", csprojDependencyVersions["System.Text.Json"]);
+    }
+
+    [Fact]
+    public static void Can_Upgrade_Direct_Reference_With_Variables_Preserves_Variable_References()
+    {
+        using var project = TestSetup("direct-reference-variables");
+
+        var actual = Program.Main([project.Path, "--upgrade"]);
+        Assert.Equal(0, actual);
+
+        var projectFilePath = Directory.GetFiles(project.Path, "*.csproj").First();
+        var content = File.ReadAllText(projectFilePath);
+
+        Assert.Contains("Version=\"$(NewtonsoftJsonVersion)\"", content);
+        Assert.Contains("Version=\"$(MicrosoftExtensionsVersion)\"", content);
+
+        Assert.DoesNotContain("<NewtonsoftJsonVersion>11.0.1</NewtonsoftJsonVersion>", content);
+        Assert.DoesNotContain("<MicrosoftExtensionsVersion>2.1.0</MicrosoftExtensionsVersion>", content);
+    }
+
+    [Fact]
+    public static void Can_Upgrade_CPVM_With_Variables_Preserves_Variable_References()
+    {
+        using var project = TestSetup("cpvm-variables");
+
+        var actual = Program.Main([project.Path, "--upgrade"]);
+        Assert.Equal(0, actual);
+
+        var propsFilePath = Path.Combine(project.Path, "Directory.Packages.props");
+        var content = File.ReadAllText(propsFilePath);
+
+        // Verify variable references are preserved in Directory.Packages.props
+        Assert.Contains("Version=\"$(NewtonsoftJsonVersion)\"", content);
+        Assert.Contains("Version=\"$(MicrosoftExtensionsVersion)\"", content);
+
+        // Verify old versions are not present
+        Assert.DoesNotContain("<NewtonsoftJsonVersion>11.0.1</NewtonsoftJsonVersion>", content);
+        Assert.DoesNotContain("<MicrosoftExtensionsVersion>2.1.0</MicrosoftExtensionsVersion>", content);
+    }
+
+    [Fact]
+    public static void Can_Upgrade_Cross_File_Variables_Preserves_Variable_References()
+    {
+        using var project = TestSetup("cross-file-variables");
+
+        var actual = Program.Main([project.Path, "--upgrade"]);
+        Assert.Equal(0, actual);
+
+        // Variables are defined in Directory.Build.props
+        var propsFilePath = Path.Combine(project.Path, "Directory.Build.props");
+        var propsContent = File.ReadAllText(propsFilePath);
+
+        // But used in the project file
+        var projectFilePath = Directory.GetFiles(project.Path, "*.csproj").First();
+        var projectContent = File.ReadAllText(projectFilePath);
+
+        // Verify variable references are preserved in project file
+        Assert.Contains("Version=\"$(NewtonsoftJsonVersion)\"", projectContent);
+        Assert.Contains("Version=\"$(MicrosoftExtensionsVersion)\"", projectContent);
+
+        // Verify old versions are not present in Directory.Build.props
+        Assert.DoesNotContain("<NewtonsoftJsonVersion>11.0.1</NewtonsoftJsonVersion>", propsContent);
+        Assert.DoesNotContain("<MicrosoftExtensionsVersion>2.1.0</MicrosoftExtensionsVersion>", propsContent);
     }
 
     [Fact]

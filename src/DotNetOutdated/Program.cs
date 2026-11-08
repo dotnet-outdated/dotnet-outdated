@@ -50,7 +50,7 @@ namespace DotNetOutdated
           LongName = "include-auto-references")]
       public bool IncludeAutoReferences { get; set; } = false;
 
-      [Argument(0, Description = "The path to a .sln, .slnx, .slnf, .csproj or .fsproj file, or to a directory containing a .NET Core solution/project. " +
+      [Argument(0, Description = "The path to a .sln, .slnx, .slnf, .csproj, .fsproj or .cs file-based app, or to a directory containing a .NET Core solution/project. " +
                                  "If none is specified, the current directory will be used.")]
       public string Path { get; set; }
 
@@ -112,6 +112,10 @@ namespace DotNetOutdated
           ShortName = "r", LongName = "recursive")]
       public bool Recursive { get; set; } = false;
 
+      [Option(CommandOptionType.NoValue, Description = "Include loose file-based apps when recursively searching a directory.",
+          ShortName = "fba", LongName = "include-file-based-apps")]
+      public bool IncludeFileBasedApps { get; set; } = false;
+
       [Option(CommandOptionType.NoValue, Description = "Treat package source failures as warnings.", ShortName = "ifs", LongName = "ignore-failed-sources")]
       public bool IgnoreFailedSources { get; set; } = false;
 
@@ -150,12 +154,17 @@ namespace DotNetOutdated
                  .AddSingleton(PhysicalConsole.Singleton)
                  .AddSingleton<IReporter>(provider => new ConsoleReporter(provider.GetService<IConsole>()))
                  .AddSingleton<IFileSystem, FileSystem>()
+                 .AddSingleton<ILogger>(provider => new ConsoleLogger(provider.GetService<IConsole>(), LogLevel.Warning))
                  .AddSingleton<IProjectDiscoveryService, ProjectDiscoveryService>()
                  .AddSingleton<IProjectAnalysisService, ProjectAnalysisService>()
                  .AddSingleton<DotNetRunnerOptions>()
                 .AddSingleton<IDotNetRunner, DotNetRunner>()
                  .AddSingleton<IDependencyGraphService, DependencyGraphService>()
                  .AddSingleton<IDotNetRestoreService, DotNetRestoreService>()
+                 .AddSingleton<IVariableTrackingService>(provider =>
+                     new VariableTrackingService(
+                         provider.GetService<IFileSystem>(),
+                         msg => provider.GetService<IReporter>().Warn(msg)))
                  .AddSingleton<IDotNetPackageService, DotNetPackageService>()
                  .AddSingleton<INuGetPackageInfoService, NuGetPackageInfoService>()
                  .AddSingleton<INuGetPackageResolutionService, NuGetPackageResolutionService>()
@@ -194,7 +203,7 @@ namespace DotNetOutdated
 
             DefaultCredentialServiceUtility.SetupDefaultCredentialService(new ConsoleLogger(console, NuGetCredLogLevel), true);
 
-            var projectPaths = _projectDiscoveryService.DiscoverProjects(Path, Recursive);
+            var projectPaths = _projectDiscoveryService.DiscoverProjects(Path, Recursive, IncludeFileBasedApps);
 
             // Analyze the projects
             console.WriteLine("Analyzing project(s)...");
@@ -308,7 +317,7 @@ namespace DotNetOutdated
                            includeMaxVersion: project.OriginalVersionRange.IsMaxInclusive)
                         : new VersionRange(package.LatestVersion);
 
-                     status = _dotNetPackageService.AddPackage(project.ProjectFilePath, package.Name, project.Framework.ToString(), newVersionRange, NoRestore, IgnoreFailedSources);
+                     status = _dotNetPackageService.AddPackage(project.ProjectFilePath, package.Name, project.Framework.GetShortFolderName(), newVersionRange, NoRestore, IgnoreFailedSources);
                   }
 
                   if (status.IsSuccess)

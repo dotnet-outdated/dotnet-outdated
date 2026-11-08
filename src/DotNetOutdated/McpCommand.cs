@@ -2,6 +2,7 @@ using DotNetOutdated.Core.Services;
 using DotNetOutdated.Services;
 using McMaster.Extensions.CommandLineUtils;
 using Microsoft.Extensions.DependencyInjection;
+using NuGet.Common;
 using System;
 using System.IO.Abstractions;
 using System.Threading.Tasks;
@@ -18,11 +19,16 @@ namespace DotNetOutdated
                  .AddSingleton<IConsole>(McpConsole.Singleton)
                  .AddSingleton<IReporter>(provider => new ConsoleReporter(provider.GetService<IConsole>()))
                  .AddSingleton<IFileSystem, FileSystem>()
+                 .AddSingleton<ILogger>(provider => new ConsoleLogger(provider.GetService<IConsole>(), LogLevel.Warning))
                  .AddSingleton<IProjectDiscoveryService, ProjectDiscoveryService>()
                  .AddSingleton<IProjectAnalysisService, ProjectAnalysisService>()
                  .AddSingleton<IDotNetRunner, DotNetRunner>()
                  .AddSingleton<IDependencyGraphService, DependencyGraphService>()
                  .AddSingleton<IDotNetRestoreService, DotNetRestoreService>()
+                 .AddSingleton<IVariableTrackingService>(provider =>
+                     new VariableTrackingService(
+                         provider.GetService<IFileSystem>(),
+                         msg => provider.GetService<IReporter>().Warn(msg)))
                  .AddSingleton<IDotNetPackageService, DotNetPackageService>()
                  .AddSingleton<INuGetPackageInfoService, NuGetPackageInfoService>()
                  .AddSingleton<INuGetPackageResolutionService, NuGetPackageResolutionService>()
