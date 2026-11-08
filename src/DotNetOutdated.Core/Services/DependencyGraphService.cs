@@ -30,10 +30,16 @@ namespace DotNetOutdated.Core.Services
 
             if (runStatus.IsSuccess)
             {
-                // A solution or project with no restorable projects (e.g. an empty solution) makes
-                // MSBuild report success without ever writing the restore graph file.
+                // MSBuild reports success without writing the restore graph file when there is nothing to
+                // restore: an empty solution, a solution filter that selects no projects, or a solution whose
+                // projects are all excluded from the build configuration or are not restorable (issue #747).
                 if (!_fileSystem.File.Exists(dgOutput))
-                    throw new CommandValidationException(string.Format(CultureInfo.InvariantCulture, Resources.ValidationErrorMessages.NoRestorableProjectsFound, projectPath));
+                {
+                    var message = projectPath.IsSolutionFile()
+                        ? Resources.ValidationErrorMessages.NoRestorableProjectsInSolution
+                        : Resources.ValidationErrorMessages.NoDependencyGraphForProject;
+                    throw new CommandValidationException(string.Format(CultureInfo.InvariantCulture, message, projectPath));
+                }
 
                 var dependencyGraphText = await _fileSystem.File.ReadAllTextAsync(dgOutput).ConfigureAwait(false);
                 return new ExtendedDependencyGraphSpec(dependencyGraphText);
