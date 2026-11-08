@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.IO.Abstractions.TestingHelpers;
+using System.Text;
 using DotNetOutdated.Core.Services;
 using NSubstitute;
 using NuGet.Versioning;
@@ -153,10 +154,12 @@ namespace DotNetOutdated.Tests
         [Fact]
         public void CpmProjectWithNoRestore_UnmatchedEntry_ReportsFailureAndLeavesFileUnchanged()
         {
-            // Version before Include is valid MSBuild, but the regex does not recognise it.
+            // Version as child metadata is valid MSBuild, but it can't be updated in place.
             const string propsContent = @"<Project>
   <ItemGroup>
-    <PackageVersion Version=""1.0.0"" Include=""SomePackage"" />
+    <PackageVersion Include=""SomePackage"">
+      <Version>1.0.0</Version>
+    </PackageVersion>
   </ItemGroup>
 </Project>";
             var propsPath = XFS.Path(@"c:\repo\Directory.Packages.props");
@@ -233,6 +236,50 @@ namespace DotNetOutdated.Tests
             }
         }
 
+        [Theory]
+        [InlineData("<PackageVersion Version=\"{0}\" Include=\"Newtonsoft.Json\" />")]
+        [InlineData("<PackageVersion Include=\"Newtonsoft.Json\" Condition=\"'$(CI)' == 'true'\" Version=\"{0}\" />")]
+        [InlineData("<PackageVersion Include='Newtonsoft.Json' Version='{0}' />")]
+        [InlineData("<PackageVersion Include = \"Newtonsoft.Json\" Version = \"{0}\" />")]
+        [InlineData("<GlobalPackageReference Version=\"{0}\" Include=\"Newtonsoft.Json\" PrivateAssets=\"all\" />")]
+        public void CpmProjectWithNoRestore_UpdatesAnyAttributeLayout(string packageElement)
+        {
+            var propsContent = "<Project>\n  <ItemGroup>\n    " + string.Format(packageElement, "12.0.3") + "\n  </ItemGroup>\n</Project>\n";
+            var expectedContent = "<Project>\n  <ItemGroup>\n    " + string.Format(packageElement, "13.0.1") + "\n  </ItemGroup>\n</Project>\n";
+
+            AssertNoRestoreUpdate(propsContent, "Newtonsoft.Json", "13.0.1", expectedContent);
+        }
+
+        [Theory]
+        [InlineData(
+            "<PackageVersion Include=\"Newtonsoft.Json\" Version=\"12.0.3\" Notes=\"Version='legacy'\" />",
+            "<PackageVersion Include=\"Newtonsoft.Json\" Version=\"13.0.1\" Notes=\"Version='legacy'\" />")]
+        [InlineData(
+            "<PackageVersion Include=\"Newtonsoft.Json\" Condition=\"'$(LangVersion)' > '10'\" Version=\"12.0.3\" />",
+            "<PackageVersion Include=\"Newtonsoft.Json\" Condition=\"'$(LangVersion)' > '10'\" Version=\"13.0.1\" />")]
+        [InlineData(
+            "<PackageVersion Include=\"Newtonsoft.Json\" Version=\"$([System.String]::Copy('12.0.3'))\" />",
+            "<PackageVersion Include=\"Newtonsoft.Json\" Version=\"13.0.1\" />")]
+        [InlineData(
+            "<PackageVersion Label=\"Include='Newtonsoft.Json'\" Include=\"Other.Package\" Version=\"12.0.3\" />\n    <PackageVersion Include=\"Newtonsoft.Json\" Version=\"12.0.3\" />",
+            "<PackageVersion Label=\"Include='Newtonsoft.Json'\" Include=\"Other.Package\" Version=\"12.0.3\" />\n    <PackageVersion Include=\"Newtonsoft.Json\" Version=\"13.0.1\" />")]
+        public void CpmProjectWithNoRestore_UpdatesOnlyTheVersionAttributeValue(string packageElement, string expectedElement)
+        {
+            var propsContent = "<Project>\n  <ItemGroup>\n    " + packageElement + "\n  </ItemGroup>\n</Project>\n";
+            var expectedContent = "<Project>\n  <ItemGroup>\n    " + expectedElement + "\n  </ItemGroup>\n</Project>\n";
+
+            AssertNoRestoreUpdate(propsContent, "Newtonsoft.Json", "13.0.1", expectedContent);
+        }
+
+        [Fact]
+        public void CpmProjectWithNoRestore_DoesNotRewriteCommentedOutEntry()
+        {
+            const string propsContent = "<Project>\n  <!-- <PackageVersion Include=\"Newtonsoft.Json\" Version=\"11.0.1\" /> old pin -->\n" +
+                "  <ItemGroup>\n    <PackageVersion Include=\"Newtonsoft.Json\" Version=\"12.0.3\" />\n  </ItemGroup>\n</Project>\n";
+
+            AssertNoRestoreUpdate(propsContent, "Newtonsoft.Json", "13.0.1", propsContent.Replace("12.0.3", "13.0.1"));
+        }
+
         private static void AssertNoRestoreUpdate(string propsContent, string packageName, string version, string expectedContent)
         {
             var propsPath = XFS.Path(@"c:\repo\Directory.Packages.props");
@@ -305,6 +352,410 @@ namespace DotNetOutdated.Tests
             dotNetRunner.ReceivedWithAnyArgs(1).Run(default, default);
         }
 
+        [Theory]
+        [InlineData("\n", "", false)]
+        [InlineData("\n", "\n", false)]
+        [InlineData("\n", "\n\n", false)]
+        [InlineData("\r\n", "", false)]
+        [InlineData("\r\n", "\r\n", false)]
+        [InlineData("\r\n", "\r\n\r\n", false)]
+        [InlineData("\n", "\n\n", true)]
+        [InlineData("\r\n", "\r\n\r\n", true)]
+        public void CpmProject_PreservesPropsWhitespace(string newline, string trailingWhitespace, bool noRestore)
+        {
+            var propsPath = XFS.Path(@"c:\repo\Directory.Packages.props");
+            var projectPath = XFS.Path(@"c:\repo\src\MyProject\MyProject.csproj");
+            var original = string.Join(newline,
+                "<Project>",
+                "",
+                "\t<PropertyGroup>",
+                "\t\t<ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>",
+                "\t</PropertyGroup>",
+                "  ",
+                "\t<!-- Keep packages separate from properties. -->",
+                "\t<ItemGroup>",
+                "\t\t<PackageVersion Include=\"Newtonsoft.Json\" Version=\"12.0.3\" />",
+                "",
+                "\t\t<PackageVersion Include=\"Serilog\" Version=\"2.10.0\" />",
+                "\t</ItemGroup>",
+                "",
+                "</Project>") + trailingWhitespace;
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { propsPath, new MockFileData(original) },
+                { projectPath, new MockFileData("<Project></Project>") }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(_ =>
+            {
+                // dotnet add package reformats the props file while upgrading the version.
+                fileSystem.File.WriteAllText(propsPath, DirectoryPackagesPropsContent.Replace("12.0.3", "13.0.1")
+                    .Replace("  <ItemGroup>", "  <!-- Keep packages separate from properties. -->\n  <ItemGroup>"));
+                return new RunStatus("", "", 0);
+            });
+            var service = new DotNetPackageService(dotNetRunner, fileSystem, EmptyVariableTrackingService());
+
+            var result = service.AddPackage(projectPath, "Newtonsoft.Json", "net8.0",
+                new NuGetVersion("13.0.1"), noRestore);
+
+            Assert.True(result.IsSuccess);
+            Assert.Equal(original.Replace("12.0.3", "13.0.1"), fileSystem.File.ReadAllText(propsPath));
+            if (!noRestore)
+            {
+                dotNetRunner.Received(1).Run(fileSystem.Path.GetDirectoryName(projectPath),
+                    Arg.Is<string[]>(args => string.Join(" ", args) == "add MyProject.csproj package Newtonsoft.Json -v 13.0.1 -f net8.0"));
+            }
+        }
+
+        [Fact]
+        public void CpmProjectWithRestore_PreservesWhitespaceAcrossMultipleUpgrades()
+        {
+            var propsPath = XFS.Path(@"c:\repo\Directory.Packages.props");
+            var projectPath = XFS.Path(@"c:\repo\MyProject.csproj");
+            var original = DirectoryPackagesPropsContent.Replace("  <PropertyGroup>", "\n  <PropertyGroup>") + "\n\n";
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { propsPath, new MockFileData(original) },
+                { projectPath, new MockFileData("<Project></Project>") }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(call =>
+            {
+                var arguments = call.ArgAt<string[]>(1);
+                var oldVersion = arguments[3] == "Newtonsoft.Json" ? "12.0.3" : "2.10.0";
+                var content = fileSystem.File.ReadAllText(propsPath).Replace(oldVersion, arguments[5]);
+                fileSystem.File.WriteAllText(propsPath, System.Xml.Linq.XDocument.Parse(content).ToString());
+                return new RunStatus("", "", 0);
+            });
+            var service = new DotNetPackageService(dotNetRunner, fileSystem, EmptyVariableTrackingService());
+
+            var first = service.AddPackage(projectPath, "Newtonsoft.Json", "net8.0", new NuGetVersion("13.0.1"), noRestore: false);
+            var second = service.AddPackage(projectPath, "Serilog", "net8.0", new NuGetVersion("2.11.0"), noRestore: false);
+
+            Assert.True(first.IsSuccess);
+            Assert.True(second.IsSuccess);
+            Assert.Equal(original.Replace("12.0.3", "13.0.1").Replace("2.10.0", "2.11.0"), fileSystem.File.ReadAllText(propsPath));
+        }
+
+        [Fact]
+        public void CpmProjectWithRestore_PreservesAdditionalChangesFromDotNet()
+        {
+            var propsPath = XFS.Path(@"c:\repo\Directory.Packages.props");
+            var projectPath = XFS.Path(@"c:\repo\MyProject.csproj");
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { propsPath, new MockFileData(DirectoryPackagesPropsContent) },
+                { projectPath, new MockFileData("<Project></Project>") }
+            });
+            var updated = DirectoryPackagesPropsContent.Replace("12.0.3", "13.0.1")
+                .Replace("</ItemGroup>", "  <PackageVersion Include=\"Other.Package\" Version=\"1.0.0\" />\n  </ItemGroup>");
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(_ =>
+            {
+                fileSystem.File.WriteAllText(propsPath, updated);
+                return new RunStatus("", "", 0);
+            });
+            var service = new DotNetPackageService(dotNetRunner, fileSystem, EmptyVariableTrackingService());
+
+            var result = service.AddPackage(projectPath, "Newtonsoft.Json", "net8.0",
+                new NuGetVersion("13.0.1"), noRestore: false);
+
+            Assert.True(result.IsSuccess);
+            Assert.Equal(updated, fileSystem.File.ReadAllText(propsPath));
+        }
+
+        [Theory]
+        [InlineData("<PackageVersion Version='12.0.3' Include='Newtonsoft.Json' />")]
+        [InlineData("<PackageVersion\n      Include = \"Newtonsoft.Json\"\n      Version = \"12.0.3\"\n    />")]
+        [InlineData("<GlobalPackageReference Version=\"12.0.3\" Update=\"Newtonsoft.Json\" PrivateAssets=\"all\" />")]
+        [InlineData("<PackageVersion Include=\"newtonsoft.json\" Version=\"12.0.3\"></PackageVersion>")]
+        public void CpmProjectWithRestore_PreservesPackageAttributeFormatting(string packageElement)
+        {
+            var propsPath = XFS.Path(@"c:\repo\Directory.Packages.props");
+            var projectPath = XFS.Path(@"c:\repo\MyProject.csproj");
+            var original = "<Project>\n\n  <ItemGroup>\n    " + packageElement + "\n  </ItemGroup>\n\n</Project>\n";
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { propsPath, new MockFileData(original) },
+                { projectPath, new MockFileData("<Project></Project>") }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(_ =>
+            {
+                fileSystem.File.WriteAllText(propsPath,
+                    System.Xml.Linq.XDocument.Parse(original.Replace("12.0.3", "13.0.1")).ToString());
+                return new RunStatus("", "", 0);
+            });
+            var service = new DotNetPackageService(dotNetRunner, fileSystem, EmptyVariableTrackingService());
+
+            var result = service.AddPackage(projectPath, "Newtonsoft.Json", "net8.0",
+                new NuGetVersion("13.0.1"), noRestore: false);
+
+            Assert.True(result.IsSuccess);
+            Assert.Equal(original.Replace("12.0.3", "13.0.1"), fileSystem.File.ReadAllText(propsPath));
+        }
+
+        [Theory]
+        [InlineData("<!--\n<PackageVersion Include=\"Newtonsoft.Json\" Version=\"12.0.3\" />\n-->")]
+        [InlineData("<PropertyGroup><Notes><![CDATA[<PackageVersion Include=\"Newtonsoft.Json\" Version=\"12.0.3\" />]]></Notes></PropertyGroup>")]
+        [InlineData("<?example <PackageVersion Include=\"Newtonsoft.Json\" Version=\"12.0.3\" /> ?>")]
+        public void CpmProjectWithRestore_PreservesInactivePackageMarkup(string inactiveMarkup)
+        {
+            var propsPath = XFS.Path(@"c:\repo\Directory.Packages.props");
+            var projectPath = XFS.Path(@"c:\repo\MyProject.csproj");
+            const string itemGroup = "  <ItemGroup>\n    <PackageVersion Include=\"Newtonsoft.Json\" Version=\"12.0.3\" />\n  </ItemGroup>";
+            var original = "<Project>\n\n" + inactiveMarkup + "\n\n" + itemGroup + "\n\n</Project>\n\n";
+            var expected = original.Replace(itemGroup, itemGroup.Replace("12.0.3", "13.0.1"));
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { propsPath, new MockFileData(original) },
+                { projectPath, new MockFileData("<Project></Project>") }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(_ =>
+            {
+                fileSystem.File.WriteAllText(propsPath, System.Xml.Linq.XDocument.Parse(expected).ToString());
+                return new RunStatus("", "", 0);
+            });
+            var service = new DotNetPackageService(dotNetRunner, fileSystem, EmptyVariableTrackingService());
+
+            var result = service.AddPackage(projectPath, "Newtonsoft.Json", "net8.0", new NuGetVersion("13.0.1"), noRestore: false);
+
+            Assert.True(result.IsSuccess);
+            Assert.Equal(expected, fileSystem.File.ReadAllText(propsPath));
+        }
+
+        [Theory]
+        [InlineData(false, false)]
+        [InlineData(false, true)]
+        [InlineData(true, false)]
+        [InlineData(true, true)]
+        public void CpmProjectWithRestore_PreservesPropsEncoding(bool utf16, bool trailingWhitespace)
+        {
+            var propsPath = XFS.Path(@"c:\repo\Directory.Packages.props");
+            var projectPath = XFS.Path(@"c:\repo\MyProject.csproj");
+            var original = DirectoryPackagesPropsContent + (trailingWhitespace ? "\r\n\r\n" : "");
+            var encoding = utf16 ? Encoding.Unicode : Encoding.UTF8;
+            byte[] originalBytes = [.. encoding.GetPreamble(), .. encoding.GetBytes(original)];
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { propsPath, new MockFileData(originalBytes) },
+                { projectPath, new MockFileData("<Project></Project>") }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(_ =>
+            {
+                fileSystem.File.WriteAllText(propsPath, DirectoryPackagesPropsContent.Replace("12.0.3", "13.0.1"));
+                return new RunStatus("", "", 0);
+            });
+            var service = new DotNetPackageService(dotNetRunner, fileSystem, EmptyVariableTrackingService());
+
+            var result = service.AddPackage(projectPath, "Newtonsoft.Json", "net8.0",
+                new NuGetVersion("13.0.1"), noRestore: false);
+
+            byte[] expected = [.. encoding.GetPreamble(), .. encoding.GetBytes(original.Replace("12.0.3", "13.0.1"))];
+            Assert.True(result.IsSuccess);
+            Assert.Equal(expected, fileSystem.File.ReadAllBytes(propsPath));
+        }
+
+        [Theory]
+        [InlineData(false, false)]
+        [InlineData(false, true)]
+        [InlineData(true, true)] // UTF-16 is only detectable through its byte order mark.
+        public void CpmProjectWithNoRestore_PreservesPropsEncoding(bool utf16, bool bom)
+        {
+            var propsPath = XFS.Path(@"c:\repo\Directory.Packages.props");
+            var projectPath = XFS.Path(@"c:\repo\MyProject.csproj");
+            var original = DirectoryPackagesPropsContent.Replace("\r\n", "\n").Replace("\n", "\r\n") + "\r\n";
+            Encoding encoding = utf16 ? new UnicodeEncoding(false, bom) : new UTF8Encoding(bom);
+            byte[] originalBytes = [.. encoding.GetPreamble(), .. encoding.GetBytes(original)];
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { propsPath, new MockFileData(originalBytes) },
+                { projectPath, new MockFileData("<Project></Project>") }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            var service = new DotNetPackageService(dotNetRunner, fileSystem, EmptyVariableTrackingService());
+
+            var result = service.AddPackage(projectPath, "Newtonsoft.Json", "net8.0",
+                new NuGetVersion("13.0.1"), noRestore: true);
+
+            byte[] expected = [.. encoding.GetPreamble(), .. encoding.GetBytes(original.Replace("12.0.3", "13.0.1"))];
+            Assert.True(result.IsSuccess);
+            Assert.Equal(expected, fileSystem.File.ReadAllBytes(propsPath));
+            dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void CpmProjectWithRestore_DoesNotRewriteUnsupportedEncoding(bool cliUpdatesFile)
+        {
+            var propsPath = XFS.Path(@"c:\repo\Directory.Packages.props");
+            var projectPath = XFS.Path(@"c:\repo\MyProject.csproj");
+            var original = "<?xml version=\"1.0\" encoding=\"iso-8859-1\"?>\n<!-- caf\u00e9 -->\n" + DirectoryPackagesPropsContent;
+            var originalBytes = Encoding.Latin1.GetBytes(original);
+            var updatedBytes = Encoding.Latin1.GetBytes(original.Replace("12.0.3", "13.0.1"));
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { propsPath, new MockFileData(originalBytes) },
+                { projectPath, new MockFileData("<Project></Project>") }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(_ =>
+            {
+                if (cliUpdatesFile)
+                {
+                    fileSystem.File.WriteAllBytes(propsPath, updatedBytes);
+                }
+                return new RunStatus("", "", 0);
+            });
+            var service = new DotNetPackageService(dotNetRunner, fileSystem, EmptyVariableTrackingService());
+
+            var result = service.AddPackage(projectPath, "Newtonsoft.Json", "net8.0",
+                new NuGetVersion("13.0.1"), noRestore: false);
+
+            Assert.True(result.IsSuccess);
+            Assert.Equal(cliUpdatesFile ? updatedBytes : originalBytes, fileSystem.File.ReadAllBytes(propsPath));
+        }
+
+        [Theory]
+        [InlineData("Directory.Packages.props")]
+        [InlineData("Directory.Build.props")]
+        public void CpmProjectWithRestore_PreservesWhitespaceAndVariableReferences(string propertyFileName)
+        {
+            var propsPath = XFS.Path(@"c:\repo\Directory.Packages.props");
+            var propertyPath = XFS.Path($@"c:\repo\{propertyFileName}");
+            var projectPath = XFS.Path(@"c:\repo\MyProject.csproj");
+            const string propertyContent = "<Project>\n\n  <PropertyGroup>\n    <JsonVersion>12.0.3</JsonVersion>\n  </PropertyGroup>\n\n</Project>\n\n";
+            var original = DirectoryPackagesPropsContent.Replace("12.0.3", "$(JsonVersion)") + "\n\n";
+            if (propertyPath == propsPath)
+            {
+                original = original.Replace("  <PropertyGroup>", "\n  <PropertyGroup>\n    <JsonVersion>12.0.3</JsonVersion>");
+            }
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { propsPath, new MockFileData(original) },
+                { projectPath, new MockFileData("<Project></Project>") }
+            });
+            if (propertyPath != propsPath)
+            {
+                fileSystem.AddFile(propertyPath, new MockFileData(propertyContent));
+            }
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(_ =>
+            {
+                var rewritten = System.Xml.Linq.XDocument.Parse(original.Replace("$(JsonVersion)", "13.0.1")).ToString();
+                fileSystem.File.WriteAllText(propsPath, rewritten);
+                return new RunStatus("", "", 0);
+            });
+            var service = new DotNetPackageService(dotNetRunner, fileSystem, new VariableTrackingService(fileSystem));
+
+            var result = service.AddPackage(projectPath, "Newtonsoft.Json", "net8.0",
+                new NuGetVersion("13.0.1"), noRestore: false);
+
+            Assert.True(result.IsSuccess);
+            Assert.Equal(original.Replace("12.0.3", "13.0.1"), fileSystem.File.ReadAllText(propsPath));
+            if (propertyPath != propsPath)
+            {
+                Assert.Equal(propertyContent.Replace("12.0.3", "13.0.1"), fileSystem.File.ReadAllText(propertyPath));
+            }
+        }
+
+        [Theory]
+        [InlineData("<PackageVersion Include='Newtonsoft.Json' Version='$(JsonVersion)' />")]
+        [InlineData("<PackageVersion Include = \"Newtonsoft.Json\" Version = \"$(JsonVersion)\" />")]
+        [InlineData("<PackageVersion Version=\"$(JsonVersion)\" Include=\"Newtonsoft.Json\" />")]
+        [InlineData("<PackageVersion\n      Include=\"Newtonsoft.Json\"\n      Version=\"$(JsonVersion)\" />")]
+        public void CpmProjectWithRestore_RestoresVariableReferenceInOriginalAttributeFormatting(string packageElement)
+        {
+            var propsPath = XFS.Path(@"c:\repo\Directory.Packages.props");
+            var projectPath = XFS.Path(@"c:\repo\MyProject.csproj");
+            var original = "<Project>\n\n  <PropertyGroup>\n    <JsonVersion>12.0.3</JsonVersion>\n  </PropertyGroup>\n\n" +
+                "  <ItemGroup>\n    " + packageElement + "\n  </ItemGroup>\n\n</Project>\n";
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { propsPath, new MockFileData(original) },
+                { projectPath, new MockFileData("<Project></Project>") }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(_ =>
+            {
+                // dotnet add package writes a literal version and normalizes the layout.
+                fileSystem.File.WriteAllText(propsPath,
+                    System.Xml.Linq.XDocument.Parse(original.Replace("$(JsonVersion)", "13.0.1")).ToString());
+                return new RunStatus("", "", 0);
+            });
+            var service = new DotNetPackageService(dotNetRunner, fileSystem, new VariableTrackingService(fileSystem));
+
+            var result = service.AddPackage(projectPath, "Newtonsoft.Json", "net8.0",
+                new NuGetVersion("13.0.1"), noRestore: false);
+
+            Assert.True(result.IsSuccess);
+            Assert.Equal(original.Replace("12.0.3", "13.0.1"), fileSystem.File.ReadAllText(propsPath));
+        }
+
+        [Theory]
+        [InlineData(false, false)]
+        [InlineData(false, true)]
+        [InlineData(true, false)]
+        [InlineData(true, true)]
+        public void CpmProject_VariableReferenceUpdateKeepsPropsEncoding(bool utf16, bool noRestore)
+        {
+            var propsPath = XFS.Path(@"c:\repo\Directory.Packages.props");
+            var projectPath = XFS.Path(@"c:\repo\MyProject.csproj");
+            var encoding = utf16 ? Encoding.Unicode : Encoding.UTF8;
+            var declaration = $"<?xml version=\"1.0\" encoding=\"{(utf16 ? "utf-16" : "utf-8")}\"?>\r\n";
+            var original = declaration + "<Project>\r\n\r\n  <PropertyGroup>\r\n    <JsonVersion>12.0.3</JsonVersion>\r\n  </PropertyGroup>\r\n\r\n" +
+                "  <ItemGroup>\r\n    <PackageVersion Include=\"Newtonsoft.Json\" Version=\"$(JsonVersion)\" />\r\n  </ItemGroup>\r\n</Project>\r\n";
+            byte[] originalBytes = [.. encoding.GetPreamble(), .. encoding.GetBytes(original)];
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { propsPath, new MockFileData(originalBytes) },
+                { projectPath, new MockFileData("<Project></Project>") }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(_ =>
+            {
+                fileSystem.File.WriteAllText(propsPath, original.Replace("$(JsonVersion)", "13.0.1"));
+                return new RunStatus("", "", 0);
+            });
+            var service = new DotNetPackageService(dotNetRunner, fileSystem, new VariableTrackingService(fileSystem));
+
+            var result = service.AddPackage(projectPath, "Newtonsoft.Json", "net8.0",
+                new NuGetVersion("13.0.1"), noRestore);
+
+            byte[] expected = [.. encoding.GetPreamble(), .. encoding.GetBytes(original.Replace("12.0.3", "13.0.1"))];
+            Assert.True(result.IsSuccess);
+            Assert.Equal(expected, fileSystem.File.ReadAllBytes(propsPath));
+        }
+
+        [Fact]
+        public void CpmProjectWithRestore_FailedUpgradeDoesNotRestoreProps()
+        {
+            var propsPath = XFS.Path(@"c:\repo\Directory.Packages.props");
+            var projectPath = XFS.Path(@"c:\repo\MyProject.csproj");
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { propsPath, new MockFileData(DirectoryPackagesPropsContent + "\n\n") },
+                { projectPath, new MockFileData("<Project></Project>") }
+            });
+            var updated = DirectoryPackagesPropsContent.Replace("12.0.3", "13.0.1");
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(_ =>
+            {
+                fileSystem.File.WriteAllText(propsPath, updated);
+                return new RunStatus("", "Package is incompatible", 1);
+            });
+            var service = new DotNetPackageService(dotNetRunner, fileSystem, EmptyVariableTrackingService());
+
+            var result = service.AddPackage(projectPath, "Newtonsoft.Json", "net8.0",
+                new NuGetVersion("13.0.1"), noRestore: false);
+
+            Assert.False(result.IsSuccess);
+            Assert.Equal(updated, fileSystem.File.ReadAllText(propsPath));
+        }
+
         [Fact]
         public void CpmProjectWithNoRestore_WalksUpDirectoryTree()
         {
@@ -331,6 +782,41 @@ namespace DotNetOutdated.Tests
 
             var updatedContent = mockFileSystem.File.ReadAllText(propsPath);
             Assert.Contains("Version=\"13.0.1\"", updatedContent);
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void CpmProject_PreservesImportedParentPropsWhitespace(bool noRestore)
+        {
+            var propsPath = XFS.Path(@"c:\repo\Directory.Packages.props");
+            var nestedPropsPath = XFS.Path(@"c:\repo\src\Directory.Packages.props");
+            var projectPath = XFS.Path(@"c:\repo\src\MyProject\MyProject.csproj");
+            var original = DirectoryPackagesPropsContent.Replace("  <PropertyGroup>", "\n  <PropertyGroup>") + "\n\n";
+            const string nestedContent = "<Project>\n  <Import Project=\"../Directory.Packages.props\" />\n</Project>\n";
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { propsPath, new MockFileData(original) },
+                { nestedPropsPath, new MockFileData(nestedContent) },
+                { projectPath, new MockFileData("<Project></Project>") }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(_ =>
+            {
+                fileSystem.File.WriteAllText(propsPath, DirectoryPackagesPropsContent.Replace("12.0.3", "13.0.1"));
+                return new RunStatus("", "", 0);
+            });
+            var service = new DotNetPackageService(dotNetRunner, fileSystem, EmptyVariableTrackingService());
+
+            var result = service.AddPackage(projectPath, "Newtonsoft.Json", "net8.0", new NuGetVersion("13.0.1"), noRestore);
+
+            Assert.True(result.IsSuccess);
+            Assert.Equal(original.Replace("12.0.3", "13.0.1"), fileSystem.File.ReadAllText(propsPath));
+            Assert.Equal(nestedContent, fileSystem.File.ReadAllText(nestedPropsPath));
+            if (noRestore)
+            {
+                dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
+            }
         }
 
         [Fact]

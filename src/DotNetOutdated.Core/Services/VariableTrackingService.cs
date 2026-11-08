@@ -111,7 +111,8 @@ public sealed partial class VariableTrackingService : IVariableTrackingService
             string propertyFilePath = variableInfo.FilePath;
             if (_fileSystem.File.Exists(propertyFilePath))
             {
-                string propertyContent = _fileSystem.File.ReadAllText(propertyFilePath);
+                var propertyFile = EncodedText.Read(_fileSystem, propertyFilePath);
+                string propertyContent = propertyFile.Content;
                 var propertyDoc = XDocument.Parse(propertyContent);
 
                 var propertyElement = propertyDoc.Descendants()
@@ -127,7 +128,7 @@ public sealed partial class VariableTrackingService : IVariableTrackingService
                     var newPropertyContent = Regex.Replace(propertyContent, pattern, replacement);
                     if (!string.Equals(propertyContent, newPropertyContent, StringComparison.Ordinal))
                     {
-                        _fileSystem.File.WriteAllText(propertyFilePath, newPropertyContent);
+                        propertyFile.Write(_fileSystem, propertyFilePath, newPropertyContent);
                         msbuildUpdated = true;
                     }
                 }
@@ -137,7 +138,8 @@ public sealed partial class VariableTrackingService : IVariableTrackingService
             string packageRefFilePath = variableInfo.PackageReferenceFilePath;
             if (_fileSystem.File.Exists(packageRefFilePath))
             {
-                string packageRefContent = _fileSystem.File.ReadAllText(packageRefFilePath);
+                var packageRefFile = EncodedText.Read(_fileSystem, packageRefFilePath);
+                string packageRefContent = packageRefFile.Content;
                 var packageRefDoc = XDocument.Parse(packageRefContent);
 
                 var packageElements = packageRefDoc.Descendants()
@@ -147,24 +149,20 @@ public sealed partial class VariableTrackingService : IVariableTrackingService
                     .ToList();
 
                 var newPackageRefContent = packageRefContent;
-                foreach (var packageElement in packageElements)
+                if (packageElements.Any(packageElement => packageElement.Attribute("Version") != null))
                 {
-                    var versionAttr = packageElement.Attribute("Version");
-                    if (versionAttr != null)
-                    {
-                        // Replace the literal version with the variable reference using regex
-                        string variableReference = $"$({variableInfo.VariableName})";
-
-                        // Use regex to replace only the Version attribute value for this specific package
-                        string packagePattern = $@"(<{Regex.Escape(variableInfo.ElementType)}\s+(?:Include|Update)=""{Regex.Escape(variableInfo.PackageName)}""\s+Version="")[^""]*("")";
-                        string packageReplacement = $"$1{variableReference}$2";
-                        newPackageRefContent = Regex.Replace(newPackageRefContent, packagePattern, packageReplacement, RegexOptions.IgnoreCase);
-                    }
+                    // Replace the literal version with the variable reference, keeping the attribute layout
+                    // (quote style, spacing, attribute order) that the formatting replay may have restored.
+                    newPackageRefContent = PackageVersionMarkup.ReplaceVersion(
+                        packageRefContent,
+                        [variableInfo.ElementType],
+                        variableInfo.PackageName,
+                        $"$({variableInfo.VariableName})");
                 }
 
                 if (!string.Equals(packageRefContent, newPackageRefContent, StringComparison.Ordinal))
                 {
-                    _fileSystem.File.WriteAllText(packageRefFilePath, newPackageRefContent);
+                    packageRefFile.Write(_fileSystem, packageRefFilePath, newPackageRefContent);
                     msbuildUpdated = true;
                 }
             }

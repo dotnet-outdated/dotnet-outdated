@@ -248,6 +248,8 @@ Add the following to your `.vscode/mcp.json`:
 
 `dotnet-outdated` does not make changes to .csproj files directly, except for versioned MSBuild project SDKs, which `dotnet add package` cannot update. Instead, it runs `dotnet add package` to update packages, so that command is responsible for those changes. For file-based apps that use variable-backed `#:package` or `#:sdk` directives, `dotnet-outdated` updates the referenced `#:property` value directly so the variable reference is preserved. Literal `#:package` and `#:sdk` directives are updated in the `.cs` source file. To track issues related to the .NET CLI command, head over to the [.NET SDK repo](https://github.com/dotnet/sdk)
 
+For version-only updates in `Directory.Packages.props`, `dotnet-outdated` preserves the original blank lines, indentation, line endings, trailing whitespace and UTF-8/UTF-16 byte order mark. If `dotnet add package` makes other XML changes, such as adding an entry, its output is kept as written, including its formatting. This also applies when a package has several `PackageVersion` entries in one file (for example per-target-framework entries under different `Condition`s) and only one of them is updated, so those files still lose their formatting.
+
 ### Why I am getting an error about required library hostfxr.dll/libhostfxr.so/libhostfxr.dylib not found?
 
 If you download the .NET Core CLI as a .zip/.tar.gz and extract it to a non default location, then you may encounter this error after installing and launching **dotnet-outdated**.
