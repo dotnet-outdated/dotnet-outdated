@@ -1,12 +1,14 @@
 ﻿using DotNetOutdated.Core;
 using DotNetOutdated.Core.Models;
 using NuGet.Common;
+using NuGet.Configuration;
 using NuGet.Packaging.Core;
 using NuGet.ProjectModel;
 using NuGet.Protocol;
 using NuGet.Versioning;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.IO.Abstractions;
 using System.Linq;
 using System.Threading.Tasks;
@@ -184,12 +186,28 @@ namespace DotNetOutdated.Core.Services
         /// </summary>
         private void MarkPackageDefinedReferencesAsAutoReferenced(string projectPath, string targetAlias, PackageSpec packageSpec, TargetFramework targetFramework)
         {
-            var packageFolders = new[] { packageSpec.RestoreMetadata.PackagesPath }
+            // The SDK resolver finds SDKs in the global packages folder from the NuGet settings, while restore uses
+            // RestorePackagesPath when it is set, so check both.
+            var packageFolders = new[] { packageSpec.RestoreMetadata.PackagesPath, GetConfiguredGlobalPackagesFolder(projectPath) }
                 .Concat(packageSpec.RestoreMetadata.FallbackFolders ?? []);
 
             var items = _dependencyGraphService.GetPackageReferenceItems(projectPath, targetAlias) ?? [];
             var packageDefinedNames = SdkInjectedPackageReferences.GetPackageDefinedNames(_fileSystem, items, packageFolders);
             SdkInjectedPackageReferences.MarkAsAutoReferenced(targetFramework, packageDefinedNames);
+        }
+
+        private string GetConfiguredGlobalPackagesFolder(string projectPath)
+        {
+            try
+            {
+                var settings = Settings.LoadDefaultSettings(_fileSystem.Path.GetDirectoryName(projectPath));
+                return SettingsUtility.GetGlobalPackagesFolder(settings);
+            }
+            catch (Exception ex) when (ex is NuGetConfigurationException or IOException or UnauthorizedAccessException)
+            {
+                _logger.LogVerbose($"Could not read the NuGet global packages folder for '{projectPath}': {ex.Message}");
+                return null;
+            }
         }
 
         private void AddDependencies(TargetFramework targetFramework, LockFileTargetLibrary parentLibrary, LockFileTarget target, int level, int transitiveDepth)

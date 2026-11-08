@@ -242,11 +242,12 @@ public static class EndToEndTests
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public static void Packages_Injected_By_Custom_Sdk_Are_Auto_Referenced(bool includeAutoReferences)
+    [InlineData("sdk-injected-packages", false)]
+    [InlineData("sdk-injected-packages", true)]
+    [InlineData("sdk-injected-packages-restore-path", false)]
+    public static void Packages_Injected_By_Custom_Sdk_Are_Auto_Referenced(string testProjectName, bool includeAutoReferences)
     {
-        using var project = TestSetup("sdk-injected-packages");
+        using var project = TestSetup(testProjectName);
 
         var outputPath = Path.Combine(project.Path, "output.json");
 
