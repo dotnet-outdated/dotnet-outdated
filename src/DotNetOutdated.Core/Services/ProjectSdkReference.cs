@@ -1,9 +1,12 @@
 using NuGet.Versioning;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.IO.Abstractions;
 using System.Linq;
 using System.Text.RegularExpressions;
+using System.Xml;
+using System.Xml.Linq;
 
 #nullable enable
 
@@ -33,6 +36,27 @@ public sealed class ProjectSdkReference
 }
 
 /// <summary>
+/// Where an MSBuild project SDK is declared in a project file.
+/// </summary>
+public enum ProjectSdkDeclarationKind
+{
+    /// <summary><c>&lt;Project Sdk="Id[/Version]"&gt;</c>. One declaration per SDK in the semicolon-separated list.</summary>
+    ProjectAttribute,
+
+    /// <summary><c>&lt;Sdk Name="Id" Version="Version" /&gt;</c>.</summary>
+    SdkElement,
+
+    /// <summary><c>&lt;Import Project="Sdk.props" Sdk="Id" Version="Version" /&gt;</c>.</summary>
+    ImportElement
+}
+
+/// <summary>
+/// An MSBuild project SDK declared in a project file, as written. <see cref="Version"/> is <see langword="null"/> when
+/// the declaration has no version, and may contain MSBuild property references such as <c>$(AspireVersion)</c>.
+/// </summary>
+public sealed record ProjectSdkDeclaration(string Name, string? Version, ProjectSdkDeclarationKind Kind);
+
+/// <summary>
 /// Discovers and updates versioned MSBuild project SDK references in project files.
 /// Only literal versions in the project file itself are supported; SDK versions pinned via
 /// <c>global.json</c> <c>msbuild-sdks</c>, MSBuild properties or imported files are ignored.
@@ -60,38 +84,83 @@ internal static partial class ProjectSdkReferenceHelper
         FileBasedAppReferenceHelper.GetDependencyDictionaryKey(name, FileBasedAppReferenceKind.Sdk);
 
     /// <summary>
-    /// Discovers the versioned SDK references declared in a project file.
+    /// Reads every MSBuild project SDK declared in a project file: the <c>Sdk</c> attribute of the root
+    /// <c>&lt;Project&gt;</c>, <c>&lt;Sdk&gt;</c> elements and <c>&lt;Import Sdk="..."&gt;</c> elements, versioned or not.
+    /// The file is parsed as XML, so SDKs inside comments are ignored.
     /// </summary>
-    public static IReadOnlyList<ProjectSdkReference> Discover(IFileSystem fileSystem, string projectFilePath)
+    /// <returns>The declarations in document order, or an empty list when the file is missing, unreadable or not valid XML.</returns>
+    public static IReadOnlyList<ProjectSdkDeclaration> GetDeclarations(IFileSystem fileSystem, string projectFilePath)
     {
-        if (!fileSystem.File.Exists(projectFilePath))
+        XElement? root;
+        try
+        {
+            if (!fileSystem.File.Exists(projectFilePath))
+            {
+                return [];
+            }
+
+            root = XDocument.Parse(fileSystem.File.ReadAllText(projectFilePath)).Root;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or XmlException)
         {
             return [];
         }
 
-        var content = fileSystem.File.ReadAllText(projectFilePath);
-        var references = new List<ProjectSdkReference>();
-
-        var projectSdk = ProjectSdkAttributeRegex().Match(content);
-        if (projectSdk.Success)
+        if (root == null || root.Name.LocalName != "Project")
         {
-            foreach (var sdk in Unquote(projectSdk.Groups[2].Value).Split(';'))
+            return [];
+        }
+
+        var declarations = new List<ProjectSdkDeclaration>();
+
+        foreach (var sdk in (root.Attribute("Sdk")?.Value ?? string.Empty).Split(';'))
+        {
+            var separatorIndex = sdk.IndexOf('/');
+            var name = (separatorIndex >= 0 ? sdk[..separatorIndex] : sdk).Trim();
+            if (name.Length > 0)
             {
-                var separatorIndex = sdk.IndexOf('/');
-                if (separatorIndex > 0)
-                {
-                    TryAdd(references, sdk[..separatorIndex], sdk[(separatorIndex + 1)..]);
-                }
+                declarations.Add(new ProjectSdkDeclaration(
+                    name,
+                    separatorIndex >= 0 ? sdk[(separatorIndex + 1)..].Trim() : null,
+                    ProjectSdkDeclarationKind.ProjectAttribute));
             }
         }
 
-        foreach (Match sdkElement in SdkElementRegex().Matches(content))
+        foreach (var element in root.Descendants())
         {
-            var name = NameAttributeRegex().Match(sdkElement.Value);
-            var version = VersionAttributeRegex().Match(sdkElement.Value);
-            if (name.Success && version.Success)
+            var kind = element.Name.LocalName switch
             {
-                TryAdd(references, Unquote(name.Groups[1].Value), Unquote(version.Groups[2].Value));
+                "Sdk" when element.Parent == root => ProjectSdkDeclarationKind.SdkElement,
+                "Import" => ProjectSdkDeclarationKind.ImportElement,
+                _ => (ProjectSdkDeclarationKind?)null
+            };
+
+            var name = kind == ProjectSdkDeclarationKind.SdkElement
+                ? element.Attribute("Name")?.Value.Trim()
+                : element.Attribute("Sdk")?.Value.Trim();
+
+            if (kind != null && !string.IsNullOrEmpty(name))
+            {
+                declarations.Add(new ProjectSdkDeclaration(name, element.Attribute("Version")?.Value.Trim(), kind.Value));
+            }
+        }
+
+        return declarations;
+    }
+
+    /// <summary>
+    /// Discovers the versioned SDK references declared in a project file. Only literal versions are returned;
+    /// unversioned and property-backed declarations are skipped.
+    /// </summary>
+    public static IReadOnlyList<ProjectSdkReference> Discover(IFileSystem fileSystem, string projectFilePath)
+    {
+        var references = new List<ProjectSdkReference>();
+
+        foreach (var declaration in GetDeclarations(fileSystem, projectFilePath))
+        {
+            if (declaration.Kind != ProjectSdkDeclarationKind.ImportElement && declaration.Version != null)
+            {
+                TryAdd(references, declaration.Name, declaration.Version);
             }
         }
 

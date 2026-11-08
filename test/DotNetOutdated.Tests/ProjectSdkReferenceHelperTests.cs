@@ -77,6 +77,69 @@ namespace DotNetOutdated.Tests
         }
 
         [Fact]
+        public void Discover_IgnoresSdksInComments()
+        {
+            var fileSystem = CreateFileSystem(@"<!-- was: <Project Sdk=""Microsoft.Build.NoTargets/1.0.0""> -->
+<Project Sdk=""Microsoft.Build.NoTargets/3.7.0"">
+  <!-- Old setup, kept for reference:
+  <Sdk Name=""Microsoft.Build.Traversal"" Version=""3.0.0"" />
+  -->
+</Project>");
+
+            var reference = Assert.Single(ProjectSdkReferenceHelper.Discover(fileSystem, ProjectPath));
+
+            Assert.Equal("Microsoft.Build.NoTargets", reference.Name);
+            Assert.Equal(new NuGetVersion("3.7.0"), reference.ResolvedVersion);
+        }
+
+        [Fact]
+        public void Discover_MinimumVersionOnly_IsNotReported()
+        {
+            var fileSystem = CreateFileSystem(@"<Project><Sdk Name=""Microsoft.Build.NoTargets"" MinimumVersion=""3.7.0"" /></Project>");
+
+            Assert.Empty(ProjectSdkReferenceHelper.Discover(fileSystem, ProjectPath));
+        }
+
+        [Fact]
+        public void Discover_InvalidXml_ReturnsEmpty()
+        {
+            var fileSystem = CreateFileSystem(@"<Project Sdk=""Microsoft.Build.NoTargets/3.7.0"">");
+
+            Assert.Empty(ProjectSdkReferenceHelper.Discover(fileSystem, ProjectPath));
+        }
+
+        [Fact]
+        public void GetDeclarations_ReturnsEveryFormInDocumentOrder()
+        {
+            var fileSystem = CreateFileSystem(@"<Project Sdk=""Microsoft.NET.Sdk; Microsoft.Build.NoTargets/3.7.0"" xmlns=""http://schemas.microsoft.com/developer/msbuild/2003"">
+  <!-- <Sdk Name=""Commented.Sdk"" Version=""1.0.0"" /> -->
+  <Sdk Name=""Aspire.AppHost.Sdk"" Version=""$(AspireVersion)"" />
+  <ImportGroup>
+    <Import Project=""Sdk.props"" Sdk=""MSTest.Sdk"" Version=""3.6.0"" />
+  </ImportGroup>
+  <Import Project=""Directory.Build.targets"" />
+</Project>");
+
+            var declarations = ProjectSdkReferenceHelper.GetDeclarations(fileSystem, ProjectPath);
+
+            Assert.Equal(
+                [
+                    new ProjectSdkDeclaration("Microsoft.NET.Sdk", null, ProjectSdkDeclarationKind.ProjectAttribute),
+                    new ProjectSdkDeclaration("Microsoft.Build.NoTargets", "3.7.0", ProjectSdkDeclarationKind.ProjectAttribute),
+                    new ProjectSdkDeclaration("Aspire.AppHost.Sdk", "$(AspireVersion)", ProjectSdkDeclarationKind.SdkElement),
+                    new ProjectSdkDeclaration("MSTest.Sdk", "3.6.0", ProjectSdkDeclarationKind.ImportElement)
+                ],
+                declarations);
+        }
+
+        [Fact]
+        public void GetDeclarations_MissingOrInvalidFile_ReturnsEmpty()
+        {
+            Assert.Empty(ProjectSdkReferenceHelper.GetDeclarations(new MockFileSystem(), ProjectPath));
+            Assert.Empty(ProjectSdkReferenceHelper.GetDeclarations(CreateFileSystem("not xml"), ProjectPath));
+        }
+
+        [Fact]
         public void TryUpdate_ProjectSdkAttribute_UpdatesOnlyMatchingSdk()
         {
             var fileSystem = CreateFileSystem(@"<Project Sdk='Microsoft.NET.Sdk;Aspire.AppHost.Sdk/13.0.0'>
