@@ -147,19 +147,15 @@ public sealed partial class VariableTrackingService : IVariableTrackingService
                     .ToList();
 
                 var newPackageRefContent = packageRefContent;
-                foreach (var packageElement in packageElements)
+                if (packageElements.Any(packageElement => packageElement.Attribute("Version") != null))
                 {
-                    var versionAttr = packageElement.Attribute("Version");
-                    if (versionAttr != null)
-                    {
-                        // Replace the literal version with the variable reference using regex
-                        string variableReference = $"$({variableInfo.VariableName})";
-
-                        // Use regex to replace only the Version attribute value for this specific package
-                        string packagePattern = $@"(<{Regex.Escape(variableInfo.ElementType)}\s+(?:Include|Update)=""{Regex.Escape(variableInfo.PackageName)}""\s+Version="")[^""]*("")";
-                        string packageReplacement = $"$1{variableReference}$2";
-                        newPackageRefContent = Regex.Replace(newPackageRefContent, packagePattern, packageReplacement, RegexOptions.IgnoreCase);
-                    }
+                    // Replace the literal version with the variable reference, keeping the attribute layout
+                    // (quote style, spacing, attribute order) that the formatting replay may have restored.
+                    newPackageRefContent = PackageVersionMarkup.ReplaceVersion(
+                        packageRefContent,
+                        [variableInfo.ElementType],
+                        variableInfo.PackageName,
+                        $"$({variableInfo.VariableName})");
                 }
 
                 if (!string.Equals(packageRefContent, newPackageRefContent, StringComparison.Ordinal))

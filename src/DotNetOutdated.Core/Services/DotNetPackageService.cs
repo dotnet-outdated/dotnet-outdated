@@ -253,13 +253,8 @@ namespace DotNetOutdated.Core.Services
                 return;
             }
 
-            var formattedContent = Regex.Replace(
-                originalContent,
-                @"<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>|<\?[\s\S]*?\?>|" +
-                $@"(?<prefix><(?:PackageVersion|GlobalPackageReference)\b(?=[^>]*\b(?:Include|Update)\s*=\s*(?<packageQuote>[""'])(?i:{Regex.Escape(packageName)})\k<packageQuote>)[^>]*\bVersion\s*=\s*(?<versionQuote>[""']))[^""']*(?<suffix>\k<versionQuote>)",
-                m => m.Groups["prefix"].Success
-                    ? $"{m.Groups["prefix"].Value}{versionText}{m.Groups["suffix"].Value}"
-                    : m.Value);
+            var formattedContent = PackageVersionMarkup.ReplaceVersion(
+                originalContent, PackageVersionMarkup.CentralPackageElements, packageName, versionText);
             var updatedContent = _fileSystem.File.ReadAllText(file.FullName);
 
             try

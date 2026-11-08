@@ -434,6 +434,39 @@ namespace DotNetOutdated.Tests
             }
         }
 
+        [Theory]
+        [InlineData("<PackageVersion Include='Newtonsoft.Json' Version='$(JsonVersion)' />")]
+        [InlineData("<PackageVersion Include = \"Newtonsoft.Json\" Version = \"$(JsonVersion)\" />")]
+        [InlineData("<PackageVersion Version=\"$(JsonVersion)\" Include=\"Newtonsoft.Json\" />")]
+        [InlineData("<PackageVersion\n      Include=\"Newtonsoft.Json\"\n      Version=\"$(JsonVersion)\" />")]
+        public void CpmProjectWithRestore_RestoresVariableReferenceInOriginalAttributeFormatting(string packageElement)
+        {
+            var propsPath = XFS.Path(@"c:\repo\Directory.Packages.props");
+            var projectPath = XFS.Path(@"c:\repo\MyProject.csproj");
+            var original = "<Project>\n\n  <PropertyGroup>\n    <JsonVersion>12.0.3</JsonVersion>\n  </PropertyGroup>\n\n" +
+                "  <ItemGroup>\n    " + packageElement + "\n  </ItemGroup>\n\n</Project>\n";
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { propsPath, new MockFileData(original) },
+                { projectPath, new MockFileData("<Project></Project>") }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(_ =>
+            {
+                // dotnet add package writes a literal version and normalizes the layout.
+                fileSystem.File.WriteAllText(propsPath,
+                    System.Xml.Linq.XDocument.Parse(original.Replace("$(JsonVersion)", "13.0.1")).ToString());
+                return new RunStatus("", "", 0);
+            });
+            var service = new DotNetPackageService(dotNetRunner, fileSystem, new VariableTrackingService(fileSystem));
+
+            var result = service.AddPackage(projectPath, "Newtonsoft.Json", "net8.0",
+                new NuGetVersion("13.0.1"), noRestore: false);
+
+            Assert.True(result.IsSuccess);
+            Assert.Equal(original.Replace("12.0.3", "13.0.1"), fileSystem.File.ReadAllText(propsPath));
+        }
+
         [Fact]
         public void CpmProjectWithRestore_FailedUpgradeDoesNotRestoreProps()
         {
