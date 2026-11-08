@@ -22,7 +22,7 @@ namespace DotNetOutdated.Tests
         [InlineData("[6.0.13,7]", "7.0.1", "7.0.1")]
         public void Compute_ReturnsExpectedRange(string original, string latest, string expected)
         {
-            var result = UpgradeVersionRange.Compute(VersionRange.Parse(original), NuGetVersion.Parse(latest));
+            var result = UpgradeVersionRange.Compute(VersionRange.Parse(original), NuGetVersion.Parse(latest), isTransitive: false);
 
             Assert.Equal(expected, result.ToShortString());
         }
@@ -30,9 +30,18 @@ namespace DotNetOutdated.Tests
         [Fact]
         public void Compute_WithoutOriginalRange_ReturnsPlainVersion()
         {
-            var result = UpgradeVersionRange.Compute(null, NuGetVersion.Parse("1.2.3"));
+            var result = UpgradeVersionRange.Compute(null, NuGetVersion.Parse("1.2.3"), isTransitive: false);
 
             Assert.Equal(new VersionRange(NuGetVersion.Parse("1.2.3")), result);
+        }
+
+        [Fact]
+        public void Compute_ForTransitivePackage_DoesNotInheritParentConstraint()
+        {
+            // e.g. AWSSDK.S3 depends on AWSSDK.Core [3.7.0, 3.8.0); promoting AWSSDK.Core must not copy that bound
+            var result = UpgradeVersionRange.Compute(VersionRange.Parse("[3.7.0, 3.8.0)"), NuGetVersion.Parse("3.7.501.1"), isTransitive: true);
+
+            Assert.Equal("3.7.501.1", result.ToShortString());
         }
     }
 }
