@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Abstractions;
 using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml;
 using System.Xml.Linq;
@@ -60,7 +61,7 @@ public sealed record ProjectSdkDeclaration(string Name, string? Version, Project
 /// Discovers and updates versioned MSBuild project SDK references in project files.
 /// Only literal versions in the project file itself are supported; SDK versions pinned via
 /// <c>global.json</c> <c>msbuild-sdks</c>, MSBuild properties or imported files are ignored.
-/// Updates use regular expressions so the rest of the project file keeps its formatting.
+/// Discovery parses the file as XML. Updates edit the text in place so the rest of the file keeps its formatting.
 /// </summary>
 internal static partial class ProjectSdkReferenceHelper
 {
@@ -72,6 +73,9 @@ internal static partial class ProjectSdkReferenceHelper
 
     [GeneratedRegex(@"(\bVersion\s*=\s*)(""[^""]*""|'[^']*')")]
     private static partial Regex VersionAttributeRegex();
+
+    [GeneratedRegex(@"<!--.*?-->|<!\[CDATA\[.*?\]\]>", RegexOptions.Singleline)]
+    private static partial Regex CommentOrCDataRegex();
 
     [GeneratedRegex(@"\bName\s*=\s*(""[^""]*""|'[^']*')")]
     private static partial Regex NameAttributeRegex();
@@ -168,17 +172,24 @@ internal static partial class ProjectSdkReferenceHelper
     }
 
     /// <summary>
-    /// Updates the version of every declaration of the named SDK in a project file.
+    /// Updates the version of every declaration of the named SDK in a project file. Declarations inside XML comments
+    /// and CDATA sections are left alone.
     /// </summary>
     /// <returns><see langword="true"/> when the project file was changed; otherwise <see langword="false"/>.</returns>
     public static bool TryUpdate(IFileSystem fileSystem, string projectFilePath, string name, NuGetVersion newVersion)
     {
         var content = fileSystem.File.ReadAllText(projectFilePath);
 
-        var newContent = ProjectSdkAttributeRegex().Replace(content, match =>
+        // Match against a copy where comments and CDATA are blanked out with spaces. The copy has the same length
+        // as the original, so every match index is also an index into the original content.
+        var searchable = CommentOrCDataRegex().Replace(content, match => new string(' ', match.Length));
+        var edits = new List<(int Index, int Length, string Value)>();
+
+        var projectSdk = ProjectSdkAttributeRegex().Match(searchable);
+        if (projectSdk.Success)
         {
-            var quotedValue = match.Groups[2].Value;
-            var sdks = Unquote(quotedValue).Split(';').Select(sdk =>
+            var quotedValue = projectSdk.Groups[2];
+            var sdks = Unquote(quotedValue.Value).Split(';').Select(sdk =>
             {
                 var separatorIndex = sdk.IndexOf('/');
                 return separatorIndex > 0 && IsLiteralMatch(sdk[..separatorIndex], sdk[(separatorIndex + 1)..], name)
@@ -186,31 +197,33 @@ internal static partial class ProjectSdkReferenceHelper
                     : sdk;
             });
 
-            return $"{match.Groups[1].Value}{quotedValue[0]}{string.Join(';', sdks)}{quotedValue[0]}";
-        }, count: 1);
+            edits.Add((quotedValue.Index, quotedValue.Length, $"{quotedValue.Value[0]}{string.Join(';', sdks)}{quotedValue.Value[0]}"));
+        }
 
-        newContent = SdkElementRegex().Replace(newContent, sdkElement =>
+        foreach (Match sdkElement in SdkElementRegex().Matches(searchable))
         {
             var nameAttribute = NameAttributeRegex().Match(sdkElement.Value);
             var versionAttribute = VersionAttributeRegex().Match(sdkElement.Value);
-            if (!nameAttribute.Success || !versionAttribute.Success ||
-                !IsLiteralMatch(Unquote(nameAttribute.Groups[1].Value), Unquote(versionAttribute.Groups[2].Value), name))
+            if (nameAttribute.Success && versionAttribute.Success &&
+                IsLiteralMatch(Unquote(nameAttribute.Groups[1].Value), Unquote(versionAttribute.Groups[2].Value), name))
             {
-                return sdkElement.Value;
+                var quotedVersion = versionAttribute.Groups[2];
+                edits.Add((sdkElement.Index + quotedVersion.Index, quotedVersion.Length, $"{quotedVersion.Value[0]}{newVersion}{quotedVersion.Value[0]}"));
             }
+        }
 
-            return VersionAttributeRegex().Replace(
-                sdkElement.Value,
-                version => $"{version.Groups[1].Value}{version.Groups[2].Value[0]}{newVersion}{version.Groups[2].Value[0]}",
-                count: 1);
-        });
+        var newContent = new StringBuilder(content);
+        foreach (var (index, length, value) in edits.OrderByDescending(edit => edit.Index))
+        {
+            newContent.Remove(index, length).Insert(index, value);
+        }
 
-        if (string.Equals(content, newContent, StringComparison.Ordinal))
+        if (string.Equals(content, newContent.ToString(), StringComparison.Ordinal))
         {
             return false;
         }
 
-        fileSystem.File.WriteAllText(projectFilePath, newContent);
+        fileSystem.File.WriteAllText(projectFilePath, newContent.ToString());
         return true;
     }
 

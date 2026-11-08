@@ -177,6 +177,48 @@ namespace DotNetOutdated.Tests
         }
 
         [Fact]
+        public void TryUpdate_LeavesSdksInCommentsAndCDataUnchanged()
+        {
+            var fileSystem = CreateFileSystem(@"<!-- was: <Project Sdk=""Microsoft.Build.NoTargets/1.0.0""> -->
+<Project Sdk=""Microsoft.Build.NoTargets/3.7.0"">
+  <!-- <Sdk Name=""Microsoft.Build.NoTargets"" Version=""3.0.0"" /> -->
+  <Sdk Name=""Aspire.AppHost.Sdk"" Version=""9.5.0"" />
+  <ProjectExtensions><![CDATA[ <Sdk Name=""Microsoft.Build.NoTargets"" Version=""2.0.0"" /> ]]></ProjectExtensions>
+</Project>");
+
+            var updated = ProjectSdkReferenceHelper.TryUpdate(fileSystem, ProjectPath, "Microsoft.Build.NoTargets", new NuGetVersion("3.7.134"));
+
+            Assert.True(updated);
+            Assert.Equal(@"<!-- was: <Project Sdk=""Microsoft.Build.NoTargets/1.0.0""> -->
+<Project Sdk=""Microsoft.Build.NoTargets/3.7.134"">
+  <!-- <Sdk Name=""Microsoft.Build.NoTargets"" Version=""3.0.0"" /> -->
+  <Sdk Name=""Aspire.AppHost.Sdk"" Version=""9.5.0"" />
+  <ProjectExtensions><![CDATA[ <Sdk Name=""Microsoft.Build.NoTargets"" Version=""2.0.0"" /> ]]></ProjectExtensions>
+</Project>", fileSystem.File.ReadAllText(ProjectPath));
+        }
+
+        [Fact]
+        public void TryUpdate_CommentedOutSdkOnly_ReturnsFalse()
+        {
+            const string content = @"<Project Sdk=""Microsoft.NET.Sdk"">
+  <!-- <Sdk Name=""Microsoft.Build.Traversal"" Version=""3.0.0"" /> -->
+</Project>";
+            var fileSystem = CreateFileSystem(content);
+
+            Assert.False(ProjectSdkReferenceHelper.TryUpdate(fileSystem, ProjectPath, "Microsoft.Build.Traversal", new NuGetVersion("4.1.82")));
+            Assert.Equal(content, fileSystem.File.ReadAllText(ProjectPath));
+        }
+
+        [Fact]
+        public void TryUpdate_SdkElementWithVersionBeforeName_UpdatesVersion()
+        {
+            var fileSystem = CreateFileSystem(@"<Project><Sdk Version=""1.0.0"" Name=""X.Sdk"" /></Project>");
+
+            Assert.True(ProjectSdkReferenceHelper.TryUpdate(fileSystem, ProjectPath, "X.Sdk", new NuGetVersion("2.0.0")));
+            Assert.Equal(@"<Project><Sdk Version=""2.0.0"" Name=""X.Sdk"" /></Project>", fileSystem.File.ReadAllText(ProjectPath));
+        }
+
+        [Fact]
         public void TryUpdate_PropertyBackedVersion_IsNotChanged()
         {
             const string content = @"<Project Sdk=""Microsoft.NET.Sdk"">
