@@ -245,6 +245,53 @@ public static class EndToEndTests
     }
 
     [Theory]
+    [InlineData("sdk-injected-packages", false)]
+    [InlineData("sdk-injected-packages", true)]
+    [InlineData("sdk-injected-packages-restore-path", false)]
+    public static void Packages_Injected_By_Custom_Sdk_Are_Auto_Referenced(string testProjectName, bool includeAutoReferences)
+    {
+        using var project = TestSetup(testProjectName);
+
+        var outputPath = Path.Combine(project.Path, "output.json");
+
+        List<string> arguments = [project.Path, "--output", outputPath, "--output-format:json"];
+        if (includeAutoReferences)
+        {
+            arguments.Add("--include-auto-references");
+        }
+
+        var actual = Program.Main([.. arguments]);
+        Assert.Equal(0, actual);
+
+        using var output = JsonDocument.Parse(File.ReadAllText(outputPath));
+        var dependencyNames = output.RootElement
+            .GetProperty("Projects").EnumerateArray()
+            .SelectMany(p => p.GetProperty("TargetFrameworks").EnumerateArray())
+            .SelectMany(tfm => tfm.GetProperty("Dependencies").EnumerateArray())
+            .Select(d => d.GetProperty("Name").GetString())
+            .ToList();
+
+        Assert.Contains("Newtonsoft.Json", dependencyNames);
+        Assert.Equal(includeAutoReferences, dependencyNames.Contains("MSTest.TestFramework"));
+        Assert.Equal(includeAutoReferences, dependencyNames.Contains("Microsoft.NET.Test.Sdk"));
+    }
+
+    [Fact]
+    public static void Can_Upgrade_Project_With_Packages_Injected_By_Custom_Sdk()
+    {
+        using var project = TestSetup("sdk-injected-packages");
+
+        var actual = Program.Main([project.Path, "--upgrade"]);
+        Assert.Equal(0, actual);
+
+        var content = File.ReadAllText(Path.Combine(project.Path, "sdk-injected-packages.csproj"));
+
+        Assert.DoesNotContain("<PackageReference Include=\"Newtonsoft.Json\" Version=\"11.0.1\" />", content);
+        Assert.DoesNotContain("MSTest.TestFramework", content);
+        Assert.DoesNotContain("Microsoft.NET.Test.Sdk", content);
+    }
+
+    [Theory]
     [InlineData("project-sdk-attribute", "<Project Sdk=\"Microsoft.Build.NoTargets/3.7.0\">")]
     [InlineData("project-sdk-element", "<Sdk Name=\"Microsoft.Build.NoTargets\" Version=\"3.7.0\" />")]
     [InlineData("project-sdk-import", "Sdk=\"Microsoft.Build.NoTargets\" Version=\"3.7.0\"")]
