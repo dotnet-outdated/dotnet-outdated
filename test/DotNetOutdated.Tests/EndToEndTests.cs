@@ -6,6 +6,8 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text.Json;
+using DotNetOutdated.Core.Services;
+using NuGet.Versioning;
 using Xunit;
 
 namespace DotNetOutdated.Tests;
@@ -255,9 +257,12 @@ public static class EndToEndTests
         var projectFilePath = Path.Combine(project.Path, $"{testProjectName}.csproj");
         var content = File.ReadAllText(projectFilePath);
 
-        Assert.Contains("Microsoft.Build.NoTargets", content);
         Assert.DoesNotContain(originalSdkDeclaration, content);
         Assert.DoesNotContain("PackageReference", content);
+
+        var sdk = Assert.Single(ProjectSdkReferenceHelper.Discover(new System.IO.Abstractions.FileSystem(), projectFilePath));
+        Assert.Equal("Microsoft.Build.NoTargets", sdk.Name);
+        Assert.True(sdk.ResolvedVersion > new NuGetVersion("3.7.0"), $"Expected an upgraded SDK version, got {sdk.ResolvedVersion}");
     }
 
     [Fact]
