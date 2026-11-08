@@ -408,6 +408,51 @@ namespace DotNetOutdated.Tests
             }
         }
 
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void CpmProject_WithVersionRange_PreservesPropsWhitespace(bool noRestore)
+        {
+            var propsPath = XFS.Path(@"c:\repo\Directory.Packages.props");
+            var projectPath = XFS.Path(@"c:\repo\src\MyProject\MyProject.csproj");
+            var original = string.Join("\r\n",
+                "<Project>",
+                "",
+                "\t<PropertyGroup>",
+                "\t\t<ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>",
+                "\t</PropertyGroup>",
+                "\t<ItemGroup>",
+                "\t\t<PackageVersion Include=\"Newtonsoft.Json\" Version=\"[12.0.1,14.0.0)\" />",
+                "",
+                "\t\t<PackageVersion Include=\"Serilog\" Version=\"2.10.0\" />",
+                "\t</ItemGroup>",
+                "</Project>") + "\r\n\r\n";
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { propsPath, new MockFileData(original) },
+                { projectPath, new MockFileData("<Project></Project>") }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(_ =>
+            {
+                // dotnet add package reformats the props file while writing the range it was given.
+                fileSystem.File.WriteAllText(propsPath, DirectoryPackagesPropsContent.Replace("12.0.3", "[13.0.4, 14.0.0)"));
+                return new RunStatus("", "", 0);
+            });
+            var service = new DotNetPackageService(dotNetRunner, fileSystem, EmptyVariableTrackingService());
+
+            var result = service.AddPackage(projectPath, "Newtonsoft.Json", "net8.0",
+                VersionRange.Parse("[13.0.4, 14.0.0)"), noRestore, ignoreFailedSources: false);
+
+            Assert.True(result.IsSuccess);
+            Assert.Equal(original.Replace("[12.0.1,14.0.0)", "[13.0.4, 14.0.0)"), fileSystem.File.ReadAllText(propsPath));
+            if (!noRestore)
+            {
+                dotNetRunner.Received(1).Run(fileSystem.Path.GetDirectoryName(projectPath),
+                    Arg.Is<string[]>(args => string.Join(" ", args) == "add MyProject.csproj package Newtonsoft.Json -v [13.0.4, 14.0.0) -f net8.0"));
+            }
+        }
+
         [Fact]
         public void CpmProjectWithRestore_PreservesWhitespaceAcrossMultipleUpgrades()
         {
