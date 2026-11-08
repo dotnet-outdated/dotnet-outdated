@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.IO.Abstractions.TestingHelpers;
+using System.Threading.Tasks;
 using DotNetOutdated.Core.Services;
 using NuGet.Versioning;
 using Xunit;
@@ -10,6 +11,79 @@ namespace DotNetOutdated.Tests
 {
     public class VariableTrackingServiceTests
     {
+        [Theory]
+        [InlineData("cs", "sdk", false)]
+        [InlineData("cs", "sdk", true)]
+        [InlineData("cs", "package", false)]
+        [InlineData("cs", "package", true)]
+        [InlineData("csproj", "package", true)]
+        public void Discover_InParallel_PreservesCacheEntriesAndAllowsUpdates(string extension, string directive, bool useVariable)
+        {
+            const int projectCount = 256;
+            var paths = new string[projectCount];
+            var files = new Dictionary<string, MockFileData>();
+            var versionExpression = useVariable ? "$(PackageVersion)" : "1.0.0";
+            for (var i = 0; i < projectCount; i++)
+            {
+                paths[i] = XFS.Path($@"c:\repo\app{i}\app.{extension}");
+                files.Add(paths[i], new MockFileData(extension == "cs"
+                    ? $"#:property PackageVersion=1.0.0\n#:{directive} Test.Package@{versionExpression}\n"
+                    : "<Project><PropertyGroup><PackageVersion>1.0.0</PackageVersion></PropertyGroup>" +
+                      "<ItemGroup><PackageReference Include=\"Test.Package\" Version=\"$(PackageVersion)\" /></ItemGroup></Project>"));
+            }
+
+            var fileSystem = new MockFileSystem(files);
+            var warnings = new List<string>();
+            var service = new VariableTrackingService(fileSystem, warnings.Add);
+            var cachedVariables = new Dictionary<string, PackageVariableInfo>[projectCount];
+
+            for (var attempt = 0; attempt < 10; attempt++)
+            {
+                service.ClearCache();
+                Parallel.For(0, projectCount, i =>
+                {
+                    if (extension == "cs")
+                    {
+                        Assert.Single(service.DiscoverFileBasedAppReferences(paths[i]));
+                    }
+
+                    cachedVariables[i] = service.DiscoverPackageVariables(paths[i]);
+                    if (useVariable)
+                    {
+                        Assert.Equal("1.0.0", cachedVariables[i]["Test.Package"].VariableValue);
+                    }
+                    else
+                    {
+                        Assert.Empty(cachedVariables[i]);
+                    }
+                });
+
+                for (var i = 0; i < projectCount; i++)
+                {
+                    Assert.Same(cachedVariables[i], service.DiscoverPackageVariables(paths[i]));
+                }
+            }
+
+            if (useVariable)
+            {
+                Assert.True(service.TryUpdatePackageVariable(cachedVariables[0]["Test.Package"], new NuGetVersion("2.0.0")));
+                Assert.Equal("2.0.0", service.DiscoverPackageVariables(paths[0])["Test.Package"].VariableValue);
+            }
+            else
+            {
+                var kind = directive == "sdk" ? FileBasedAppReferenceKind.Sdk : FileBasedAppReferenceKind.Package;
+                Assert.True(service.UpdateFileBasedAppDirectReference(paths[0], "Test.Package", kind, new NuGetVersion("2.0.0")));
+                Assert.Contains($"#:{directive} Test.Package@2.0.0", fileSystem.File.ReadAllText(paths[0]));
+            }
+
+            Assert.Empty(warnings);
+            Assert.Same(cachedVariables[1], service.DiscoverPackageVariables(paths[1]));
+            if (extension == "cs")
+            {
+                Assert.Equal(new NuGetVersion("2.0.0"), Assert.Single(service.DiscoverFileBasedAppReferences(paths[0])).ResolvedVersion);
+            }
+        }
+
         // ── DiscoverPackageVariables ──────────────────────────────────────────────
 
         [Fact]
