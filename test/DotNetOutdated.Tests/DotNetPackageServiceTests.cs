@@ -186,6 +186,24 @@ namespace DotNetOutdated.Tests
             AssertNoRestoreUpdate(DirectoryPackagesPropsContent, "Newtonsoft.Json", "12.0.3", DirectoryPackagesPropsContent);
         }
 
+        [Fact]
+        public void CpmProjectWithNoRestore_PackageIdCasingDiffers_UpdatesEntryAndKeepsItsCasing()
+        {
+            // NuGet package ids are case-insensitive.
+            const string propsContent = @"<Project>
+  <ItemGroup>
+    <PackageVersion Include=""newtonsoft.json"" Version=""12.0.3"" />
+  </ItemGroup>
+</Project>";
+            const string expectedContent = @"<Project>
+  <ItemGroup>
+    <PackageVersion Include=""newtonsoft.json"" Version=""13.0.1"" />
+  </ItemGroup>
+</Project>";
+
+            AssertNoRestoreUpdate(propsContent, "Newtonsoft.Json", "13.0.1", expectedContent);
+        }
+
         private static void AssertNoRestoreUpdate(string propsContent, string packageName, string version, string expectedContent)
         {
             var propsPath = XFS.Path(@"c:\repo\Directory.Packages.props");

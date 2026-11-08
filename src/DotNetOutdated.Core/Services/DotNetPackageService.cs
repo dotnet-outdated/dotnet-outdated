@@ -202,7 +202,7 @@ namespace DotNetOutdated.Core.Services
                         var matched = false;
                         string newFileContent = Regex.Replace(
                             fileContent,
-                            $"(<(?:PackageVersion|GlobalPackageReference)\\s*(?:Include|Update)=\"{Regex.Escape(packageName)}\"\\s*Version=\")([^\"]*)(\")",
+                            $"(<(?:PackageVersion|GlobalPackageReference)\\s*(?:Include|Update)=\"(?i:{Regex.Escape(packageName)})\"\\s*Version=\")([^\"]*)(\")",
                             m =>
                             {
                                 matched = true;
