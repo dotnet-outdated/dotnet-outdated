@@ -16,6 +16,10 @@ namespace DotNetOutdated.Core.Services
     /// </summary>
     internal static class SdkInjectedPackageReferences
     {
+        // Paths are case-sensitive on Linux, and case-insensitive by default on Windows and macOS.
+        private static readonly StringComparison PathComparison = OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+        private static readonly StringComparer PathComparer = StringComparer.FromComparison(PathComparison);
+
         private static readonly string[] DirectoryBuildFileNames = ["Directory.Build.props", "Directory.Build.targets"];
 
         /// <summary>
@@ -114,7 +118,7 @@ namespace DotNetOutdated.Core.Services
             var folders = packageFolders
                 .Where(folder => !string.IsNullOrEmpty(folder))
                 .Select(folder => fileSystem.Path.TrimEndingDirectorySeparator(fileSystem.Path.GetFullPath(folder)) + fileSystem.Path.DirectorySeparatorChar)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Distinct(PathComparer)
                 .ToList();
 
             return items
@@ -142,6 +146,6 @@ namespace DotNetOutdated.Core.Services
 
         private static bool IsInFolder(IFileSystem fileSystem, string path, List<string> folders) =>
             !string.IsNullOrEmpty(path) &&
-            folders.Any(folder => fileSystem.Path.GetFullPath(path).StartsWith(folder, StringComparison.OrdinalIgnoreCase));
+            folders.Any(folder => fileSystem.Path.GetFullPath(path).StartsWith(folder, PathComparison));
     }
 }

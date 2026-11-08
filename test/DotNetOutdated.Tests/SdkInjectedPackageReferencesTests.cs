@@ -125,6 +125,15 @@ namespace DotNetOutdated.Tests
         }
 
         [Fact]
+        public void PackagesFolderMatchesPathsWithThePlatformCaseSensitivity()
+        {
+            var names = GetPackageDefinedNames(new PackageReferenceItem("Cake.Generator", XFS.Path(@"c:\nuget\Packages\Directory.Build.props")));
+
+            // On Linux, /nuget/Packages is a different directory from /nuget/packages.
+            Assert.Equal(!OperatingSystem.IsLinux(), names.Contains("Cake.Generator"));
+        }
+
+        [Fact]
         public void ItemWithoutDefiningFileIsNotReturned()
         {
             var names = GetPackageDefinedNames(new PackageReferenceItem("Cake.Generator", null));
