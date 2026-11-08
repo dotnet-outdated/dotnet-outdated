@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Abstractions;
@@ -57,15 +58,16 @@ public sealed partial class VariableTrackingService : IVariableTrackingService
 {
     private readonly IFileSystem _fileSystem;
     private readonly Action<string> _onWarning;
-    private readonly Dictionary<string, Dictionary<string, PackageVariableInfo>> _cache;
-    private readonly Dictionary<string, FileBasedAppScanResult> _fileBasedAppScanCache;
+    // Project analysis populates these shared caches in parallel.
+    private readonly ConcurrentDictionary<string, Dictionary<string, PackageVariableInfo>> _cache;
+    private readonly ConcurrentDictionary<string, FileBasedAppScanResult> _fileBasedAppScanCache;
 
     public VariableTrackingService(IFileSystem fileSystem, Action<string> onWarning = null)
     {
         _fileSystem = fileSystem;
         _onWarning = onWarning;
-        _cache = new Dictionary<string, Dictionary<string, PackageVariableInfo>>(StringComparer.OrdinalIgnoreCase);
-        _fileBasedAppScanCache = new Dictionary<string, FileBasedAppScanResult>(StringComparer.OrdinalIgnoreCase);
+        _cache = new ConcurrentDictionary<string, Dictionary<string, PackageVariableInfo>>(StringComparer.OrdinalIgnoreCase);
+        _fileBasedAppScanCache = new ConcurrentDictionary<string, FileBasedAppScanResult>(StringComparer.OrdinalIgnoreCase);
     }
 
     public void ClearCache()
@@ -436,8 +438,8 @@ public sealed partial class VariableTrackingService : IVariableTrackingService
 
         foreach (var key in keysToRemove)
         {
-            _cache.Remove(key);
-            _fileBasedAppScanCache.Remove(key);
+            _cache.TryRemove(key, out _);
+            _fileBasedAppScanCache.TryRemove(key, out _);
         }
     }
 
