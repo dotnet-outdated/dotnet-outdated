@@ -148,6 +148,44 @@ namespace DotNetOutdated.Tests
             AssertNoRestoreUpdate(propsContent, "coverlet.collector", "6.0.2", expectedContent);
         }
 
+        [Fact]
+        public void CpmProjectWithNoRestore_UnmatchedEntry_ReportsFailureAndLeavesFileUnchanged()
+        {
+            // Version before Include is valid MSBuild, but the regex does not recognise it.
+            const string propsContent = @"<Project>
+  <ItemGroup>
+    <PackageVersion Version=""1.0.0"" Include=""SomePackage"" />
+  </ItemGroup>
+</Project>";
+            var propsPath = XFS.Path(@"c:\repo\Directory.Packages.props");
+            var projectPath = XFS.Path(@"c:\repo\src\MyProject\MyProject.csproj");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { propsPath, new MockFileData(propsContent) },
+                { projectPath, new MockFileData("<Project></Project>") }
+            });
+
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem, EmptyVariableTrackingService());
+
+            var result = service.AddPackage(projectPath, "SomePackage", "net8.0", new NuGetVersion("2.0.0"), noRestore: true);
+
+            Assert.False(result.IsSuccess);
+            Assert.Contains("SomePackage", result.Errors);
+            Assert.Contains(propsPath, result.Errors);
+            // Must not fall back to `dotnet add package --no-restore`, which writes the version into the project file.
+            dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
+            Assert.Equal(propsContent, mockFileSystem.File.ReadAllText(propsPath));
+        }
+
+        [Fact]
+        public void CpmProjectWithNoRestore_EntryAlreadyAtVersion_ReportsSuccess()
+        {
+            // A multi-targeted project upgrades the same central entry once per framework;
+            // the second call finds the version already written and must still succeed.
+            AssertNoRestoreUpdate(DirectoryPackagesPropsContent, "Newtonsoft.Json", "12.0.3", DirectoryPackagesPropsContent);
+        }
+
         private static void AssertNoRestoreUpdate(string propsContent, string packageName, string version, string expectedContent)
         {
             var propsPath = XFS.Path(@"c:\repo\Directory.Packages.props");
