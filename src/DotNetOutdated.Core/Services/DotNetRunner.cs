@@ -18,7 +18,7 @@ namespace DotNetOutdated.Core.Services
 
         public RunStatus Run(string workingDirectory, string[] arguments)
         {
-            var psi = new ProcessStartInfo("dotnet", arguments)
+            var psi = new ProcessStartInfo(options.FileName, arguments)
             {
                 WorkingDirectory = workingDirectory,
                 UseShellExecute = false,
@@ -61,7 +61,14 @@ namespace DotNetOutdated.Core.Services
                 {
                     p.Kill();
 
-                    return new RunStatus(output.ToString(), errors.ToString(), exitCode: -1);
+                    // The stream readers may still be appending, so build the message separately rather than
+                    // writing to the shared StringBuilder.
+                    string timeoutMessage =
+                        $"'{options.FileName} {string.Join(' ', arguments)}' produced no output for {options.IdleTimeout.TotalSeconds:0} seconds " +
+                        "and was stopped because it appeared to have hung. If the command is just slow (for example a long " +
+                        "package restore), allow it more time with --idle-timeout.";
+
+                    return new RunStatus(output.ToString(), errors.ToString() + timeoutMessage, exitCode: -1);
                 }
 
                 Task.WaitAll(outputTask, errorTask);

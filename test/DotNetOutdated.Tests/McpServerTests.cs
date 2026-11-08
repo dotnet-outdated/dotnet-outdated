@@ -9,6 +9,7 @@ using DotNetOutdated.Core.Services;
 using DotNetOutdated.Models;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
+using NuGet.Versioning;
 using Xunit;
 
 namespace DotNetOutdated.Tests
@@ -159,6 +160,26 @@ namespace DotNetOutdated.Tests
             // Assert
             Assert.Contains("project1.csproj", output);
             Assert.Contains("\"resultType\":\"complete\"", output);
+        }
+
+        [Fact]
+        public async Task UpdatePackage_WhenAddPackageFails_ReturnsOutputAndErrors()
+        {
+            // Arrange
+            // dotnet add package reports NuGet failures on stdout, so the tool result must include it.
+            var input = "{\"jsonrpc\": \"2.0\", \"method\": \"tools/call\", \"params\": { \"name\": \"update_package\", \"arguments\": { \"projectPath\": \"/test/project1.csproj\", \"packageName\": \"Contoso.Widgets\", \"version\": \"2.0.0\", \"framework\": \"net8.0\" } }, \"id\": 4}\n";
+
+            _dotNetPackageService
+                .AddPackage("/test/project1.csproj", "Contoso.Widgets", "net8.0", new NuGetVersion("2.0.0"))
+                .Returns(new RunStatus("error: Cannot edit items in imported files", "stderr detail", 1));
+
+            // Act
+            var output = await RunServerAsync(input);
+
+            // Assert
+            Assert.Contains("Failed to update package: error: Cannot edit items in imported files", output);
+            Assert.Contains("stderr detail", output);
+            Assert.Contains("\"isError\":true", output);
         }
     }
 }
