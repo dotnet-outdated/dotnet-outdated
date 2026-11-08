@@ -1,4 +1,4 @@
-﻿using DotNetOutdated.Core;
+using DotNetOutdated.Core;
 using NuGet.Versioning;
 using System;
 using System.Collections.Generic;
@@ -6,6 +6,8 @@ using System.IO;
 using System.IO.Abstractions;
 using System.Linq;
 using System.Text.RegularExpressions;
+using System.Xml;
+using System.Xml.Linq;
 
 namespace DotNetOutdated.Core.Services
 {
@@ -159,14 +161,16 @@ namespace DotNetOutdated.Core.Services
                         return new RunStatus(
                             string.Empty,
                             $"Could not update '{packageName}' in '{centralPackagesPath}': no <PackageVersion> or <GlobalPackageReference> " +
-                            "element was found with an Include or Update attribute followed by a Version attribute. Update the version manually.",
+                            "element was found with an Include or Update attribute and a Version attribute. Update the version manually.",
                             1);
                 }
             }
 
             string projectName = _fileSystem.Path.GetFileName(projectPath);
 
-            List<string> arguments = ["add", projectName, "package", packageName, "-v", versionRange.ToVersionString()];
+            // The formatting replay writes back exactly the text passed to `dotnet add package -v`.
+            var versionText = versionRange.ToVersionString();
+            List<string> arguments = ["add", projectName, "package", packageName, "-v", versionText];
             // File-based apps declare TargetFramework via #:property; dotnet add rejects -f on .cs paths with newer SDKs.
             if (!projectPath.IsCSharpFile())
             {
@@ -183,7 +187,19 @@ namespace DotNetOutdated.Core.Services
                 arguments.Add("--ignore-failed-sources");
             }
 
+            var originalCentralPackages = FindCentralPackagesFiles(projectPath)
+                .Select(file => (File: file, Bytes: _fileSystem.File.ReadAllBytes(file.FullName)))
+                .ToList();
+
             var result = _dotNetRunner.Run(_fileSystem.Path.GetDirectoryName(projectPath), [.. arguments]);
+
+            if (result.IsSuccess)
+            {
+                foreach (var original in originalCentralPackages)
+                {
+                    PreserveCentralPackagesFormatting(original.File, original.Bytes, packageName, versionText);
+                }
+            }
 
             // If the package originally used a variable reference, restore it after the update
             if (result.IsSuccess && variableInfo != null)
@@ -229,6 +245,39 @@ namespace DotNetOutdated.Core.Services
         private CentralPackageVersionUpdate TryUpdateCentralPackageVersion(string projectPath, string packageName, VersionRange versionRange, out string centralPackagesPath)
         {
             centralPackagesPath = null;
+            foreach (var cpvmFile in FindCentralPackagesFiles(projectPath))
+            {
+                var file = EncodedText.Read(_fileSystem, cpvmFile.FullName);
+                var fileContent = file.Content;
+                if (!fileContent.Contains($"\"{packageName}\"", StringComparison.OrdinalIgnoreCase) &&
+                    !fileContent.Contains($"'{packageName}'", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                centralPackagesPath = cpvmFile.FullName;
+                var newFileContent = PackageVersionMarkup.ReplaceVersion(
+                    fileContent, PackageVersionMarkup.CentralPackageElements, packageName, versionRange.ToVersionString(), out var matched);
+
+                if (!matched)
+                {
+                    return CentralPackageVersionUpdate.NoMatchingEntry;
+                }
+
+                if (newFileContent != fileContent)
+                {
+                    // Keep the original encoding and byte order mark.
+                    file.Write(_fileSystem, cpvmFile.FullName, newFileContent);
+                }
+
+                return CentralPackageVersionUpdate.Updated;
+            }
+
+            return CentralPackageVersionUpdate.NotFound;
+        }
+
+        private IEnumerable<IFileInfo> FindCentralPackagesFiles(string projectPath)
+        {
             var projectFile = _fileSystem.FileInfo.New(projectPath);
             var directory = projectFile.Directory;
 
@@ -247,44 +296,59 @@ namespace DotNetOutdated.Core.Services
 
                 if (cpvmFile != null)
                 {
-                    string fileContent;
-                    using (var reader = cpvmFile.OpenText())
-                    {
-                        fileContent = reader.ReadToEnd();
-                    }
-
-                    if (fileContent.Contains($"\"{packageName}\"", StringComparison.OrdinalIgnoreCase))
-                    {
-                        centralPackagesPath = cpvmFile.FullName;
-                        var matched = false;
-                        string newFileContent = Regex.Replace(
-                            fileContent,
-                            $"(<(?:PackageVersion|GlobalPackageReference)\\s*(?:Include|Update)=\"(?i:{Regex.Escape(packageName)})\"\\s*Version=\")([^\"]*)(\")",
-                            m =>
-                            {
-                                matched = true;
-                                return $"{m.Groups[1].Captures[0].Value}{versionRange.ToVersionString()}{m.Groups[3].Captures[0].Value}";
-                            },
-                            RegexOptions.CultureInvariant);
-
-                        if (!matched)
-                        {
-                            return CentralPackageVersionUpdate.NoMatchingEntry;
-                        }
-
-                        if (newFileContent != fileContent)
-                        {
-                            _fileSystem.File.WriteAllText(cpvmFile.FullName, newFileContent);
-                        }
-
-                        return CentralPackageVersionUpdate.Updated;
-                    }
+                    yield return cpvmFile;
                 }
 
                 directory = directory.Parent;
             }
+        }
 
-            return CentralPackageVersionUpdate.NotFound;
+        private void PreserveCentralPackagesFormatting(IFileInfo file, byte[] originalBytes, string packageName, string versionText)
+        {
+            if (!_fileSystem.File.Exists(file.FullName))
+            {
+                return;
+            }
+
+            var updatedBytes = _fileSystem.File.ReadAllBytes(file.FullName);
+            if (originalBytes.AsSpan().SequenceEqual(updatedBytes))
+            {
+                return;
+            }
+
+            var original = EncodedText.TryDecode(originalBytes);
+            if (original == null)
+            {
+                // Do not replay content that could not be decoded without losing bytes.
+                return;
+            }
+
+            var originalContent = original.Content;
+
+            var formattedContent = PackageVersionMarkup.ReplaceVersion(
+                originalContent, PackageVersionMarkup.CentralPackageElements, packageName, versionText);
+            var updatedContent = _fileSystem.File.ReadAllText(file.FullName);
+
+            try
+            {
+                // Keep dotnet add's validation and any additional XML changes. Reuse the original
+                // layout only when changing the version produces the same document as the CLI.
+                if (formattedContent != updatedContent &&
+                    !XNode.DeepEquals(XDocument.Parse(formattedContent), XDocument.Parse(updatedContent)))
+                {
+                    return;
+                }
+            }
+            catch (XmlException)
+            {
+                return;
+            }
+
+            var formattedBytes = original.Encode(formattedContent);
+            if (!formattedBytes.AsSpan().SequenceEqual(updatedBytes))
+            {
+                _fileSystem.File.WriteAllBytes(file.FullName, formattedBytes);
+            }
         }
 
         private static RunStatus FileBasedAppUpdateFailed(string projectPath, string packageName, string hint) =>
