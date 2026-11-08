@@ -184,7 +184,7 @@ internal static partial class ProjectSdkReferenceHelper
     /// <returns><see langword="true"/> when the project file was changed; otherwise <see langword="false"/>.</returns>
     public static bool TryUpdate(IFileSystem fileSystem, string projectFilePath, string name, NuGetVersion newVersion)
     {
-        var content = fileSystem.File.ReadAllText(projectFilePath);
+        var content = ReadAllText(fileSystem, projectFilePath, out var encoding);
 
         // Match against a copy where comments and CDATA are blanked out with spaces. The copy has the same length
         // as the original, so every match index is also an index into the original content.
@@ -233,8 +233,24 @@ internal static partial class ProjectSdkReferenceHelper
             return false;
         }
 
-        fileSystem.File.WriteAllText(projectFilePath, newContent.ToString());
+        fileSystem.File.WriteAllText(projectFilePath, newContent.ToString(), encoding);
         return true;
+    }
+
+    /// <summary>
+    /// Reads a text file and reports its encoding, so it can be written back with the same byte order mark.
+    /// Files without a byte order mark are read and written as UTF-8 without one.
+    /// </summary>
+    private static string ReadAllText(IFileSystem fileSystem, string path, out Encoding encoding)
+    {
+        using var reader = new StreamReader(
+            new MemoryStream(fileSystem.File.ReadAllBytes(path)),
+            new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
+            detectEncodingFromByteOrderMarks: true);
+
+        var content = reader.ReadToEnd();
+        encoding = reader.CurrentEncoding;
+        return content;
     }
 
     private static void TryAdd(List<ProjectSdkReference> references, string name, string version)

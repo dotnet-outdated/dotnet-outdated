@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.IO.Abstractions.TestingHelpers;
 using System.Linq;
+using System.Text;
 using DotNetOutdated.Core.Services;
 using NuGet.Versioning;
 using Xunit;
@@ -243,6 +244,21 @@ namespace DotNetOutdated.Tests
   <Import Project=""Sdk.targets"" Sdk=""Microsoft.Build.NoTargets"" Version=""3.7.134"" />
   <Import Project=""Directory.Build.targets"" />
 </Project>", fileSystem.File.ReadAllText(ProjectPath));
+        }
+
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public void TryUpdate_PreservesByteOrderMarkAndLineEndings(bool withBom)
+        {
+            var encoding = new UTF8Encoding(withBom);
+            var original = encoding.GetPreamble().Concat(encoding.GetBytes("<Project Sdk=\"X.Sdk/1.0.0\">\r\n</Project>\r\n")).ToArray();
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData> { { ProjectPath, new MockFileData(original) } });
+
+            Assert.True(ProjectSdkReferenceHelper.TryUpdate(fileSystem, ProjectPath, "X.Sdk", new NuGetVersion("2.0.0")));
+
+            var expected = encoding.GetPreamble().Concat(encoding.GetBytes("<Project Sdk=\"X.Sdk/2.0.0\">\r\n</Project>\r\n")).ToArray();
+            Assert.Equal(expected, fileSystem.File.ReadAllBytes(ProjectPath));
         }
 
         [Fact]
