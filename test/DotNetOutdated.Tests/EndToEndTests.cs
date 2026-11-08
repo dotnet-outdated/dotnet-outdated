@@ -344,6 +344,35 @@ public static class EndToEndTests
     }
 
     [Fact]
+    public static void Can_Upgrade_With_Maximum_Version_Preserving_Declared_Ranges()
+    {
+        using var directory = TestSetup("max-version-ranges");
+
+        var actual = Program.Main([directory.Path, "--upgrade", "--maximum-version:8.0"]);
+        Assert.Equal(0, actual);
+
+        var csproj = XDocument.Load(Path.Combine(directory.Path, "Project.csproj"));
+        var versions = csproj.Descendants("PackageReference")
+            .ToDictionary(e => (string)e.Attribute("Include"), e => (string)e.Attribute("Version"));
+
+        // Exact pins are left alone
+        Assert.Equal("[6.0.0]", versions["System.Text.Encodings.Web"]);
+        Assert.Equal("[9.0.0]", versions["Microsoft.Bcl.AsyncInterfaces"]);
+
+        // Declared upper bounds are kept; --maximum-version only narrows the choice
+        var options = VersionRange.Parse(versions["Microsoft.Extensions.Options"]);
+        Assert.Equal(6, options.MinVersion.Major);
+        Assert.Equal(new NuGetVersion(7, 0, 0), options.MaxVersion);
+
+        var logging = VersionRange.Parse(versions["Microsoft.Extensions.Logging"]);
+        Assert.Equal(new NuGetVersion(8, 0, logging.MinVersion.Patch), logging.MinVersion);
+        Assert.Equal(new NuGetVersion(10, 0, 0), logging.MaxVersion);
+
+        // A plain version stays a plain version
+        Assert.StartsWith("8.0.", versions["System.Text.Json"]);
+    }
+
+    [Fact]
     public static void Can_Upgrade_Direct_Reference_With_Variables_Preserves_Variable_References()
     {
         using var project = TestSetup("direct-reference-variables");
