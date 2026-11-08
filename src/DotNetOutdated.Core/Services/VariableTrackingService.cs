@@ -111,7 +111,8 @@ public sealed partial class VariableTrackingService : IVariableTrackingService
             string propertyFilePath = variableInfo.FilePath;
             if (_fileSystem.File.Exists(propertyFilePath))
             {
-                string propertyContent = _fileSystem.File.ReadAllText(propertyFilePath);
+                var propertyFile = EncodedText.Read(_fileSystem, propertyFilePath);
+                string propertyContent = propertyFile.Content;
                 var propertyDoc = XDocument.Parse(propertyContent);
 
                 var propertyElement = propertyDoc.Descendants()
@@ -127,7 +128,7 @@ public sealed partial class VariableTrackingService : IVariableTrackingService
                     var newPropertyContent = Regex.Replace(propertyContent, pattern, replacement);
                     if (!string.Equals(propertyContent, newPropertyContent, StringComparison.Ordinal))
                     {
-                        _fileSystem.File.WriteAllText(propertyFilePath, newPropertyContent);
+                        propertyFile.Write(_fileSystem, propertyFilePath, newPropertyContent);
                         msbuildUpdated = true;
                     }
                 }
@@ -137,7 +138,8 @@ public sealed partial class VariableTrackingService : IVariableTrackingService
             string packageRefFilePath = variableInfo.PackageReferenceFilePath;
             if (_fileSystem.File.Exists(packageRefFilePath))
             {
-                string packageRefContent = _fileSystem.File.ReadAllText(packageRefFilePath);
+                var packageRefFile = EncodedText.Read(_fileSystem, packageRefFilePath);
+                string packageRefContent = packageRefFile.Content;
                 var packageRefDoc = XDocument.Parse(packageRefContent);
 
                 var packageElements = packageRefDoc.Descendants()
@@ -160,7 +162,7 @@ public sealed partial class VariableTrackingService : IVariableTrackingService
 
                 if (!string.Equals(packageRefContent, newPackageRefContent, StringComparison.Ordinal))
                 {
-                    _fileSystem.File.WriteAllText(packageRefFilePath, newPackageRefContent);
+                    packageRefFile.Write(_fileSystem, packageRefFilePath, newPackageRefContent);
                     msbuildUpdated = true;
                 }
             }

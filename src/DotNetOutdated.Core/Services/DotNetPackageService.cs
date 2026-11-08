@@ -5,7 +5,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Abstractions;
 using System.Linq;
-using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml;
 using System.Xml.Linq;
@@ -169,13 +168,8 @@ namespace DotNetOutdated.Core.Services
         {
             foreach (var cpvmFile in FindCentralPackagesFiles(projectPath))
             {
-                var fileBytes = _fileSystem.File.ReadAllBytes(cpvmFile.FullName);
-                var decoded = TryDecode(fileBytes, out var fileContent, out var encoding, out var preamble);
-                if (!decoded)
-                {
-                    fileContent = _fileSystem.File.ReadAllText(cpvmFile.FullName);
-                }
-
+                var file = EncodedText.Read(_fileSystem, cpvmFile.FullName);
+                var fileContent = file.Content;
                 if (!fileContent.Contains($"\"{packageName}\"", StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
@@ -184,15 +178,8 @@ namespace DotNetOutdated.Core.Services
                 var newFileContent = UpdateCentralPackageVersion(fileContent, packageName, version);
                 if (newFileContent != fileContent)
                 {
-                    if (decoded)
-                    {
-                        // Keep the original encoding and byte order mark.
-                        _fileSystem.File.WriteAllBytes(cpvmFile.FullName, Encode(newFileContent, encoding, preamble));
-                    }
-                    else
-                    {
-                        _fileSystem.File.WriteAllText(cpvmFile.FullName, newFileContent);
-                    }
+                    // Keep the original encoding and byte order mark.
+                    file.Write(_fileSystem, cpvmFile.FullName, newFileContent);
                 }
 
                 return true;
@@ -247,11 +234,14 @@ namespace DotNetOutdated.Core.Services
                 return;
             }
 
-            if (!TryDecode(originalBytes, out var originalContent, out var encoding, out var preamble))
+            var original = EncodedText.TryDecode(originalBytes);
+            if (original == null)
             {
                 // Do not replay content that could not be decoded without losing bytes.
                 return;
             }
+
+            var originalContent = original.Content;
 
             var formattedContent = PackageVersionMarkup.ReplaceVersion(
                 originalContent, PackageVersionMarkup.CentralPackageElements, packageName, versionText);
@@ -272,33 +262,12 @@ namespace DotNetOutdated.Core.Services
                 return;
             }
 
-            var formattedBytes = Encode(formattedContent, encoding, preamble);
+            var formattedBytes = original.Encode(formattedContent);
             if (!formattedBytes.AsSpan().SequenceEqual(updatedBytes))
             {
                 _fileSystem.File.WriteAllBytes(file.FullName, formattedBytes);
             }
         }
-
-        /// <summary>
-        /// Decodes <paramref name="bytes"/> using its byte order mark (UTF-8 when there is none).
-        /// Returns false when re-encoding the text would not reproduce the original bytes.
-        /// </summary>
-        private static bool TryDecode(byte[] bytes, out string content, out Encoding encoding, out byte[] preamble)
-        {
-            using var reader = new StreamReader(new MemoryStream(bytes), Encoding.UTF8);
-            content = reader.ReadToEnd();
-            encoding = reader.CurrentEncoding;
-            preamble = encoding.GetPreamble();
-            if (!bytes.AsSpan().StartsWith(preamble))
-            {
-                preamble = [];
-            }
-
-            return encoding.GetBytes(content).AsSpan().SequenceEqual(bytes.AsSpan(preamble.Length));
-        }
-
-        private static byte[] Encode(string content, Encoding encoding, byte[] preamble) =>
-            [.. preamble, .. encoding.GetBytes(content)];
 
         private static RunStatus FileBasedAppUpdateFailed(string projectPath, string packageName, string hint) =>
             new(

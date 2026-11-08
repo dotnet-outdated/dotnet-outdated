@@ -467,6 +467,41 @@ namespace DotNetOutdated.Tests
             Assert.Equal(original.Replace("12.0.3", "13.0.1"), fileSystem.File.ReadAllText(propsPath));
         }
 
+        [Theory]
+        [InlineData(false, false)]
+        [InlineData(false, true)]
+        [InlineData(true, false)]
+        [InlineData(true, true)]
+        public void CpmProject_VariableReferenceUpdateKeepsPropsEncoding(bool utf16, bool noRestore)
+        {
+            var propsPath = XFS.Path(@"c:\repo\Directory.Packages.props");
+            var projectPath = XFS.Path(@"c:\repo\MyProject.csproj");
+            var encoding = utf16 ? Encoding.Unicode : Encoding.UTF8;
+            var declaration = $"<?xml version=\"1.0\" encoding=\"{(utf16 ? "utf-16" : "utf-8")}\"?>\r\n";
+            var original = declaration + "<Project>\r\n\r\n  <PropertyGroup>\r\n    <JsonVersion>12.0.3</JsonVersion>\r\n  </PropertyGroup>\r\n\r\n" +
+                "  <ItemGroup>\r\n    <PackageVersion Include=\"Newtonsoft.Json\" Version=\"$(JsonVersion)\" />\r\n  </ItemGroup>\r\n</Project>\r\n";
+            byte[] originalBytes = [.. encoding.GetPreamble(), .. encoding.GetBytes(original)];
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { propsPath, new MockFileData(originalBytes) },
+                { projectPath, new MockFileData("<Project></Project>") }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(_ =>
+            {
+                fileSystem.File.WriteAllText(propsPath, original.Replace("$(JsonVersion)", "13.0.1"));
+                return new RunStatus("", "", 0);
+            });
+            var service = new DotNetPackageService(dotNetRunner, fileSystem, new VariableTrackingService(fileSystem));
+
+            var result = service.AddPackage(projectPath, "Newtonsoft.Json", "net8.0",
+                new NuGetVersion("13.0.1"), noRestore);
+
+            byte[] expected = [.. encoding.GetPreamble(), .. encoding.GetBytes(original.Replace("12.0.3", "13.0.1"))];
+            Assert.True(result.IsSuccess);
+            Assert.Equal(expected, fileSystem.File.ReadAllBytes(propsPath));
+        }
+
         [Fact]
         public void CpmProjectWithRestore_FailedUpgradeDoesNotRestoreProps()
         {
