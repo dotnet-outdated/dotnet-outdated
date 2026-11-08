@@ -92,13 +92,15 @@ namespace DotNetOutdated.Core.Services
         }
 
         /// <summary>
-        /// Marks the direct dependencies named in <paramref name="packageDefinedNames"/> as auto-referenced.
+        /// Marks the direct package dependencies named in <paramref name="packageDefinedNames"/> as auto-referenced.
+        /// A declared SDK with the same id as an injected package stays as it is, so its upgrade is still reported.
         /// </summary>
         public static void MarkAsAutoReferenced(TargetFramework targetFramework, ISet<string> packageDefinedNames)
         {
             foreach (var (key, dependency) in targetFramework.Dependencies.ToList())
             {
-                if (!dependency.IsTransitive && !dependency.IsAutoReferenced && packageDefinedNames.Contains(dependency.Name))
+                if (!dependency.IsTransitive && !dependency.IsAutoReferenced && packageDefinedNames.Contains(dependency.Name) &&
+                    key != ProjectSdkReferenceHelper.GetDependencyDictionaryKey(dependency.Name))
                 {
                     targetFramework.Dependencies[key] = new Dependency(dependency.Name, dependency.VersionRange, dependency.ResolvedVersion,
                         isAutoReferenced: true, isTransitive: false, dependency.IsDevelopmentDependency);

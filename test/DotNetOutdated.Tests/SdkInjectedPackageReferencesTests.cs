@@ -175,6 +175,21 @@ namespace DotNetOutdated.Tests
             Assert.False(targetFramework.Dependencies["Microsoft.CodeCoverage"].IsAutoReferenced);
         }
 
+        [Fact]
+        public void DeclaredSdkWithTheSameIdAsAnInjectedPackageIsNotMarked()
+        {
+            var targetFramework = new TargetFramework(NuGetFramework.Parse("net8.0"));
+            targetFramework.Dependencies["Cake.Sdk"] = CreateDependency("Cake.Sdk", isTransitive: false);
+            targetFramework.Dependencies[ProjectSdkReferenceHelper.GetDependencyDictionaryKey("Cake.Sdk")] = CreateDependency("Cake.Sdk", isTransitive: false);
+
+            SdkInjectedPackageReferences.MarkAsAutoReferenced(
+                targetFramework,
+                new HashSet<string>(["Cake.Sdk"], StringComparer.OrdinalIgnoreCase));
+
+            Assert.True(targetFramework.Dependencies["Cake.Sdk"].IsAutoReferenced);
+            Assert.False(targetFramework.Dependencies[ProjectSdkReferenceHelper.GetDependencyDictionaryKey("Cake.Sdk")].IsAutoReferenced);
+        }
+
         private static HashSet<string> GetPackageDefinedNames(params PackageReferenceItem[] items) =>
             SdkInjectedPackageReferences.GetPackageDefinedNames(new MockFileSystem(), items, [PackagesFolder + System.IO.Path.DirectorySeparatorChar, FallbackFolder]);
 
