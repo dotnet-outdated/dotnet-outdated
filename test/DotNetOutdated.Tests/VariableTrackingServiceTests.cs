@@ -395,6 +395,79 @@ namespace DotNetOutdated.Tests
         }
 
         [Fact]
+        public void Update_DirectReference_WithVersionRange_WritesRangeToProperty()
+        {
+            var projectPath = XFS.Path(@"c:\repo\src\MyProject\MyProject.csproj");
+
+            // Post-dotnet-add-package state: property still has the old range, ref has the literal new range
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                {
+                    projectPath, new MockFileData(@"<Project>
+  <PropertyGroup>
+    <NewtonsoftJsonVersion>[12.0.1,14.0.0)</NewtonsoftJsonVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include=""Newtonsoft.Json"" Version=""[13.0.4, 14.0.0)"" />
+  </ItemGroup>
+</Project>")
+                }
+            });
+
+            var service = new VariableTrackingService(mockFileSystem);
+            var variableInfo = new PackageVariableInfo
+            {
+                PackageName = "Newtonsoft.Json",
+                VariableName = "NewtonsoftJsonVersion",
+                VariableValue = "[12.0.1,14.0.0)",
+                FilePath = projectPath,
+                PackageReferenceFilePath = projectPath,
+                ElementType = "PackageReference"
+            };
+
+            Assert.True(service.TryUpdatePackageVariable(variableInfo, VersionRange.Parse("[13.0.4, 14.0.0)")));
+
+            var content = mockFileSystem.File.ReadAllText(projectPath);
+            Assert.Contains("<NewtonsoftJsonVersion>[13.0.4, 14.0.0)</NewtonsoftJsonVersion>", content);
+            Assert.Contains(@"Version=""$(NewtonsoftJsonVersion)""", content);
+            Assert.DoesNotContain("[12.0.1,14.0.0)", content);
+        }
+
+        [Fact]
+        public void Update_WithPlainVersionRange_WritesSameValueAsNuGetVersionOverload()
+        {
+            var projectPath = XFS.Path(@"c:\repo\MyProject.csproj");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                {
+                    projectPath, new MockFileData(@"<Project>
+  <PropertyGroup>
+    <SomeVersion>4.0.0.0</SomeVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include=""Some.Package"" Version=""4.5.0.0"" />
+  </ItemGroup>
+</Project>")
+                }
+            });
+
+            var service = new VariableTrackingService(mockFileSystem);
+            var variableInfo = new PackageVariableInfo
+            {
+                PackageName = "Some.Package",
+                VariableName = "SomeVersion",
+                VariableValue = "4.0.0.0",
+                FilePath = projectPath,
+                PackageReferenceFilePath = projectPath,
+                ElementType = "PackageReference"
+            };
+
+            service.UpdatePackageVariable(variableInfo, new VersionRange(new NuGetVersion("4.5.0.0")));
+
+            Assert.Contains("<SomeVersion>4.5.0.0</SomeVersion>", mockFileSystem.File.ReadAllText(projectPath));
+        }
+
+        [Fact]
         public void Update_CrossFile_UpdatesPropsAndRestoresVariableRefInCsproj()
         {
             var propsPath = XFS.Path(@"c:\repo\Directory.Build.props");

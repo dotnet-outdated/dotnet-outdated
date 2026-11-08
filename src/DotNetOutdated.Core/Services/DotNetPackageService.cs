@@ -26,6 +26,25 @@ namespace DotNetOutdated.Core.Services
         {
             ArgumentNullException.ThrowIfNull(version);
 
+            return AddPackage(projectPath, packageName, frameworkName, new VersionRange(version), noRestore, ignoreFailedSources);
+        }
+
+        public RunStatus AddPackage(string projectPath, string packageName, string frameworkName, VersionRange versionRange)
+        {
+            return AddPackage(projectPath, packageName, frameworkName, versionRange, false);
+        }
+
+        public RunStatus AddPackage(string projectPath, string packageName, string frameworkName, VersionRange versionRange, bool noRestore, bool ignoreFailedSources = false)
+        {
+            ArgumentNullException.ThrowIfNull(versionRange);
+            if (!versionRange.HasLowerBound)
+            {
+                throw new ArgumentException($"Version range '{versionRange}' must have a lower bound.", nameof(versionRange));
+            }
+
+            // Paths that can only express a single version (file-based app variables, #:sdk) use the lower bound.
+            var version = versionRange.MinVersion;
+
             // Check if this package uses a variable reference
             var variables = _variableTrackingService.DiscoverPackageVariables(projectPath);
             variables.TryGetValue(packageName, out PackageVariableInfo variableInfo);
@@ -127,12 +146,23 @@ namespace DotNetOutdated.Core.Services
                 // This avoids the dotnet CPM bug AND preserves the variable reference.
                 if (variableInfo != null && variableInfo.ElementType != "PackageReference")
                 {
-                    _variableTrackingService.UpdatePackageVariable(variableInfo, version);
+                    // No change is fine when the property already holds the requested value
+                    // (e.g. the second target framework of a multi-targeted project).
+                    if (!_variableTrackingService.TryUpdatePackageVariable(variableInfo, versionRange) &&
+                        !IsVariableAtRequestedVersionRange(variableInfo, versionRange))
+                    {
+                        return new RunStatus(
+                            string.Empty,
+                            $"Failed to update '{packageName}': could not write '{versionRange.ToVersionString()}' to the " +
+                            $"$({variableInfo.VariableName}) property in '{variableInfo.FilePath}'.",
+                            1);
+                    }
+
                     return new RunStatus(string.Empty, string.Empty, 0);
                 }
 
                 // For CPM projects without a variable reference, update Directory.Packages.props directly.
-                switch (TryUpdateCentralPackageVersion(projectPath, packageName, version, out var centralPackagesPath))
+                switch (TryUpdateCentralPackageVersion(projectPath, packageName, versionRange, out var centralPackagesPath))
                 {
                     case CentralPackageVersionUpdate.Updated:
                         return new RunStatus(string.Empty, string.Empty, 0);
@@ -150,7 +180,7 @@ namespace DotNetOutdated.Core.Services
             string projectName = _fileSystem.Path.GetFileName(projectPath);
 
             // The formatting replay writes back exactly the text passed to `dotnet add package -v`.
-            var versionText = version.ToString();
+            var versionText = versionRange.ToVersionString();
             List<string> arguments = ["add", projectName, "package", packageName, "-v", versionText];
             // File-based apps declare TargetFramework via #:property; dotnet add rejects -f on .cs paths with newer SDKs.
             if (!projectPath.IsCSharpFile())
@@ -185,7 +215,7 @@ namespace DotNetOutdated.Core.Services
             // If the package originally used a variable reference, restore it after the update
             if (result.IsSuccess && variableInfo != null)
             {
-                _variableTrackingService.UpdatePackageVariable(variableInfo, version);
+                _variableTrackingService.UpdatePackageVariable(variableInfo, versionRange);
             }
 
             return result;
@@ -223,7 +253,7 @@ namespace DotNetOutdated.Core.Services
             NoMatchingEntry,
         }
 
-        private CentralPackageVersionUpdate TryUpdateCentralPackageVersion(string projectPath, string packageName, NuGetVersion version, out string centralPackagesPath)
+        private CentralPackageVersionUpdate TryUpdateCentralPackageVersion(string projectPath, string packageName, VersionRange versionRange, out string centralPackagesPath)
         {
             centralPackagesPath = null;
             foreach (var cpvmFile in FindCentralPackagesFiles(projectPath))
@@ -238,7 +268,7 @@ namespace DotNetOutdated.Core.Services
 
                 centralPackagesPath = cpvmFile.FullName;
                 var newFileContent = PackageVersionMarkup.ReplaceVersion(
-                    fileContent, PackageVersionMarkup.CentralPackageElements, packageName, version.ToString(), out var matched);
+                    fileContent, PackageVersionMarkup.CentralPackageElements, packageName, versionRange.ToVersionString(), out var matched);
 
                 if (!matched)
                 {
@@ -347,6 +377,9 @@ namespace DotNetOutdated.Core.Services
 
             return string.Equals(variableInfo.VariableValue, version.ToString(), StringComparison.OrdinalIgnoreCase);
         }
+
+        private static bool IsVariableAtRequestedVersionRange(PackageVariableInfo variableInfo, VersionRange versionRange) =>
+            VersionRange.TryParse(variableInfo.VariableValue, out var current) && current.Equals(versionRange);
 
         private static bool IsFileBasedAppDirectReferenceAtRequestedVersion(FileBasedAppReference reference, NuGetVersion version) =>
             reference.ResolvedVersion == version;

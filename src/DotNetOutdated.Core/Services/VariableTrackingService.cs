@@ -34,6 +34,26 @@ public interface IVariableTrackingService
     bool TryUpdatePackageVariable(PackageVariableInfo variableInfo, NuGetVersion newVersion);
 
     /// <summary>
+    /// Updates a package's variable value to a version range (e.g. <c>[13.0.4, 14.0.0)</c>) and restores the variable reference.
+    /// File-based app variables only hold single versions, so they receive the range's lower bound.
+    /// </summary>
+    /// <remarks>
+    /// The default implementation keeps existing implementers of this interface working: a plain minimum
+    /// version is passed to the <see cref="NuGetVersion"/> overload, and any other range is not updated.
+    /// </remarks>
+    void UpdatePackageVariable(PackageVariableInfo variableInfo, VersionRange newVersionRange) =>
+        TryUpdatePackageVariable(variableInfo, newVersionRange);
+
+    /// <inheritdoc cref="UpdatePackageVariable(PackageVariableInfo, VersionRange)"/>
+    /// <returns><see langword="true"/> when at least one file was updated; otherwise <see langword="false"/>.</returns>
+    bool TryUpdatePackageVariable(PackageVariableInfo variableInfo, VersionRange newVersionRange)
+    {
+        ArgumentNullException.ThrowIfNull(newVersionRange);
+
+        return newVersionRange.IsPlainVersion() && TryUpdatePackageVariable(variableInfo, newVersionRange.MinVersion);
+    }
+
+    /// <summary>
     /// Updates a literal <c>#:package</c> or <c>#:sdk</c> directive in a file-based app source file.
     /// </summary>
     /// <returns><see langword="true"/> when the directive line was updated; otherwise <see langword="false"/>.</returns>
@@ -81,6 +101,27 @@ public sealed partial class VariableTrackingService : IVariableTrackingService
 
     public bool TryUpdatePackageVariable(PackageVariableInfo variableInfo, NuGetVersion newVersion)
     {
+        ArgumentNullException.ThrowIfNull(newVersion);
+        return TryUpdatePackageVariable(variableInfo, newVersion, newVersion.ToString());
+    }
+
+    public void UpdatePackageVariable(PackageVariableInfo variableInfo, VersionRange newVersionRange) =>
+        TryUpdatePackageVariable(variableInfo, newVersionRange);
+
+    public bool TryUpdatePackageVariable(PackageVariableInfo variableInfo, VersionRange newVersionRange)
+    {
+        ArgumentNullException.ThrowIfNull(newVersionRange);
+        if (!newVersionRange.HasLowerBound)
+        {
+            throw new ArgumentException($"Version range '{newVersionRange}' must have a lower bound.", nameof(newVersionRange));
+        }
+
+        return TryUpdatePackageVariable(variableInfo, newVersionRange.MinVersion, newVersionRange.ToVersionString());
+    }
+
+    // newVersion is used for file-based app variables (single versions only); newMSBuildValue is written to MSBuild properties.
+    private bool TryUpdatePackageVariable(PackageVariableInfo variableInfo, NuGetVersion newVersion, string newMSBuildValue)
+    {
         try
         {
             if (variableInfo.ElementType == PackageVariableInfo.FileBasedPackageDirectiveElementType)
@@ -124,8 +165,8 @@ public sealed partial class VariableTrackingService : IVariableTrackingService
                     // Update property value using regex to preserve formatting
                     string oldValue = propertyElement.Value;
                     string pattern = $@"<{Regex.Escape(variableInfo.VariableName)}>{Regex.Escape(oldValue)}</{Regex.Escape(variableInfo.VariableName)}>";
-                    string replacement = $"<{variableInfo.VariableName}>{newVersion}</{variableInfo.VariableName}>";
-                    var newPropertyContent = Regex.Replace(propertyContent, pattern, replacement);
+                    string replacement = $"<{variableInfo.VariableName}>{newMSBuildValue}</{variableInfo.VariableName}>";
+                    var newPropertyContent = Regex.Replace(propertyContent, pattern, _ => replacement);
                     if (!string.Equals(propertyContent, newPropertyContent, StringComparison.Ordinal))
                     {
                         propertyFile.Write(_fileSystem, propertyFilePath, newPropertyContent);

@@ -38,7 +38,8 @@ namespace DotNetOutdated.Tests
             var mock = Substitute.For<IVariableTrackingService>();
             mock.DiscoverPackageVariables(default).ReturnsForAnyArgs([]);
             mock.DiscoverFileBasedAppReferences(default).ReturnsForAnyArgs([]);
-            mock.TryUpdatePackageVariable(default, default).ReturnsForAnyArgs(true);
+            mock.TryUpdatePackageVariable(default, default(NuGetVersion)).ReturnsForAnyArgs(true);
+            mock.TryUpdatePackageVariable(default, default(VersionRange)).ReturnsForAnyArgs(true);
             mock.UpdateFileBasedAppDirectReference(default, default, default, default).ReturnsForAnyArgs(true);
             return mock;
         }
@@ -405,6 +406,85 @@ namespace DotNetOutdated.Tests
                 dotNetRunner.Received(1).Run(fileSystem.Path.GetDirectoryName(projectPath),
                     Arg.Is<string[]>(args => string.Join(" ", args) == "add MyProject.csproj package Newtonsoft.Json -v 13.0.1 -f net8.0"));
             }
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void CpmProject_WithVersionRange_PreservesPropsWhitespace(bool noRestore)
+        {
+            var propsPath = XFS.Path(@"c:\repo\Directory.Packages.props");
+            var projectPath = XFS.Path(@"c:\repo\src\MyProject\MyProject.csproj");
+            var original = string.Join("\r\n",
+                "<Project>",
+                "",
+                "\t<PropertyGroup>",
+                "\t\t<ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>",
+                "\t</PropertyGroup>",
+                "\t<ItemGroup>",
+                "\t\t<PackageVersion Include=\"Newtonsoft.Json\" Version=\"[12.0.1,14.0.0)\" />",
+                "",
+                "\t\t<PackageVersion Include=\"Serilog\" Version=\"2.10.0\" />",
+                "\t</ItemGroup>",
+                "</Project>") + "\r\n\r\n";
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { propsPath, new MockFileData(original) },
+                { projectPath, new MockFileData("<Project></Project>") }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(_ =>
+            {
+                // dotnet add package reformats the props file while writing the range it was given.
+                fileSystem.File.WriteAllText(propsPath, DirectoryPackagesPropsContent.Replace("12.0.3", "[13.0.4, 14.0.0)"));
+                return new RunStatus("", "", 0);
+            });
+            var service = new DotNetPackageService(dotNetRunner, fileSystem, EmptyVariableTrackingService());
+
+            var result = service.AddPackage(projectPath, "Newtonsoft.Json", "net8.0",
+                VersionRange.Parse("[13.0.4, 14.0.0)"), noRestore, ignoreFailedSources: false);
+
+            Assert.True(result.IsSuccess);
+            Assert.Equal(original.Replace("[12.0.1,14.0.0)", "[13.0.4, 14.0.0)"), fileSystem.File.ReadAllText(propsPath));
+            if (!noRestore)
+            {
+                dotNetRunner.Received(1).Run(fileSystem.Path.GetDirectoryName(projectPath),
+                    Arg.Is<string[]>(args => string.Join(" ", args) == "add MyProject.csproj package Newtonsoft.Json -v [13.0.4, 14.0.0) -f net8.0"));
+            }
+        }
+
+        [Theory]
+        [InlineData(true, "[12.0.1,14.0.0)", true)]
+        [InlineData(false, "[13.0.4,14.0.0)", true)]
+        [InlineData(false, "[12.0.1,14.0.0)", false)]
+        public void CpmVariableWithNoRestore_ReportsFailureWhenRangeCannotBeWritten(bool updated, string currentValue, bool expectSuccess)
+        {
+            var projectPath = XFS.Path(@"c:\repo\src\MyProject\MyProject.csproj");
+            var variableInfo = new PackageVariableInfo
+            {
+                PackageName = "Newtonsoft.Json",
+                VariableName = "NewtonsoftJsonVersion",
+                VariableValue = currentValue,
+                FilePath = XFS.Path(@"c:\repo\Directory.Packages.props"),
+                PackageReferenceFilePath = XFS.Path(@"c:\repo\Directory.Packages.props"),
+                ElementType = "PackageVersion"
+            };
+            var variableTracking = Substitute.For<IVariableTrackingService>();
+            variableTracking.DiscoverPackageVariables(projectPath).Returns(new Dictionary<string, PackageVariableInfo> { ["Newtonsoft.Json"] = variableInfo });
+            variableTracking.DiscoverFileBasedAppReferences(projectPath).Returns([]);
+            variableTracking.TryUpdatePackageVariable(variableInfo, Arg.Any<VersionRange>()).Returns(updated);
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            var service = new DotNetPackageService(dotNetRunner, new MockFileSystem(), variableTracking);
+
+            var result = service.AddPackage(projectPath, "Newtonsoft.Json", "net8.0",
+                VersionRange.Parse("[13.0.4, 14.0.0)"), noRestore: true, ignoreFailedSources: false);
+
+            Assert.Equal(expectSuccess, result.IsSuccess);
+            if (!expectSuccess)
+            {
+                Assert.Contains("$(NewtonsoftJsonVersion)", result.Errors);
+            }
+            dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
         }
 
         [Fact]
@@ -1161,6 +1241,77 @@ Information(""Outdated Sdk"");")
             Assert.True(second.IsSuccess);
             Assert.Equal(@"<Project Sdk=""Microsoft.Build.NoTargets/3.7.134""></Project>", mockFileSystem.File.ReadAllText(projectPath));
             dotNetRunner.Received(1).Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[0] == "restore"));
+        }
+
+        [Theory]
+        [InlineData("[13.0.4, 14.0.0)", "[13.0.4, 14.0.0)")]
+        [InlineData("[7.0.0]", "[7.0.0]")]
+        [InlineData("13.0.4", "13.0.4")]
+        [InlineData("4.5.0.0", "4.5.0.0")]
+        public void AddPackage_WithVersionRange_PassesRangeToDotNetAddPackage(string range, string expectedArgument)
+        {
+            var projectPath = XFS.Path(@"c:\repo\MyProject.csproj");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { projectPath, new MockFileData("<Project></Project>") }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem, EmptyVariableTrackingService());
+
+            var result = service.AddPackage(projectPath, "Newtonsoft.Json", "net8.0", VersionRange.Parse(range));
+
+            Assert.True(result.IsSuccess);
+            dotNetRunner.Received(1).Run(
+                Arg.Any<string>(),
+                Arg.Is<string[]>(a => a[0] == "add" && a[4] == "-v" && a[5] == expectedArgument));
+        }
+
+        [Fact]
+        public void AddPackage_WithNuGetVersion_WritesVersionExactlyAsBefore()
+        {
+            var projectPath = XFS.Path(@"c:\repo\MyProject.csproj");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { projectPath, new MockFileData("<Project></Project>") }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem, EmptyVariableTrackingService());
+
+            service.AddPackage(projectPath, "Some.Package", "net8.0", new NuGetVersion("4.5.0.0"));
+
+            dotNetRunner.Received(1).Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[5] == "4.5.0.0"));
+        }
+
+        [Fact]
+        public void CpmProjectWithNoRestore_WritesVersionRangeToDirectoryPackagesProps()
+        {
+            var propsPath = XFS.Path(@"c:\repo\Directory.Packages.props");
+            var projectPath = XFS.Path(@"c:\repo\src\MyProject\MyProject.csproj");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { propsPath, new MockFileData(DirectoryPackagesPropsContent) },
+                { projectPath, new MockFileData("<Project></Project>") }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem, EmptyVariableTrackingService());
+
+            var result = service.AddPackage(projectPath, "Newtonsoft.Json", "net8.0",
+                VersionRange.Parse("[13.0.4, 14.0.0)"), noRestore: true, ignoreFailedSources: false);
+
+            Assert.True(result.IsSuccess);
+            dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
+            Assert.Contains("Include=\"Newtonsoft.Json\" Version=\"[13.0.4, 14.0.0)\"", mockFileSystem.File.ReadAllText(propsPath));
+        }
+
+        [Fact]
+        public void AddPackage_WithRangeWithoutLowerBound_Throws()
+        {
+            var service = new DotNetPackageService(Substitute.For<IDotNetRunner>(), new MockFileSystem(), EmptyVariableTrackingService());
+
+            Assert.Throws<ArgumentException>(() =>
+                service.AddPackage(XFS.Path(@"c:\repo\MyProject.csproj"), "Newtonsoft.Json", "net8.0", VersionRange.Parse("(, 14.0.0)")));
         }
     }
 }

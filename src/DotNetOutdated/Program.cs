@@ -309,7 +309,11 @@ namespace DotNetOutdated
                   }
 
                   if (status is null || status.IsSuccess)
-                     status = _dotNetPackageService.AddPackage(project.ProjectFilePath, package.Name, project.Framework.GetShortFolderName(), package.LatestVersion, NoRestore, IgnoreFailedSources);
+                  {
+                     var newVersionRange = UpgradeVersionRange.Compute(project.OriginalVersionRange, package.LatestVersion, package.IsTransitive);
+
+                     status = _dotNetPackageService.AddPackage(project.ProjectFilePath, package.Name, project.Framework.GetShortFolderName(), newVersionRange, NoRestore, IgnoreFailedSources);
+                  }
 
                   if (status.IsSuccess)
                   {

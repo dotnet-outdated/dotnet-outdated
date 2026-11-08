@@ -26,7 +26,8 @@ namespace DotNetOutdated
                                LatestVersion = d.LatestVersion,
                                IsAutoReferenced = d.IsAutoReferenced,
                                IsTransitive = d.IsTransitive,
-                               UpgradeSeverity = d.UpgradeSeverity
+                               UpgradeSeverity = d.UpgradeSeverity,
+                               OriginalVersionRange = d.OriginalVersionRange,
                            };
 
             // Now group them by package
@@ -51,7 +52,8 @@ namespace DotNetOutdated
                     {
                         Project = v.Project,
                         ProjectFilePath = v.ProjectFilePath,
-                        Framework = v.TargetFramework
+                        Framework = v.TargetFramework,
+                        OriginalVersionRange = v.OriginalVersionRange,
                     }).ToList()
                 })
                 .ToList();

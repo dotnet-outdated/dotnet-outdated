@@ -1,0 +1,10 @@
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <NewtonsoftJsonVersion>[12.0.1,13.0.0)</NewtonsoftJsonVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageVersion Include="Newtonsoft.Json" Version="$(NewtonsoftJsonVersion)" />
+    <PackageVersion Include="System.Text.Json" Version="[6.0.0,7.0.0)" />
+  </ItemGroup>
+</Project>

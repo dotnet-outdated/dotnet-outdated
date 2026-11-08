@@ -120,6 +120,8 @@ Versioned MSBuild project SDKs declared in a project file, as `<Project Sdk="Asp
 
 **dotnet-outdated** can automatically attempt to upgrade any outdated packages to the latest version by passing the `-u|--upgrade` option. You can let **dotnet-outdated** prompt you for each outdated package by using the `-u:prompt` option.
 
+If a package reference declares a [version range](https://learn.microsoft.com/nuget/concepts/package-versioning#version-ranges) with an upper bound, the latest version within that range is chosen and the upper bound is kept. For example, `[6.0.13,7)` is upgraded to `[6.0.36, 7.0.0)`, and `[6.0.13,7.0.0]` to `[7.0.0]`. This also applies to ranges in `Directory.Packages.props`, `VersionOverride` and MSBuild properties such as `$(MyPackageVersion)`. The range is rewritten in NuGet's normalized form. `--maximum-version` only narrows a declared range, so `[6.0.0, 10.0.0)` with `--maximum-version 8.0` becomes `[8.0.x, 10.0.0)`. Floating versions such as `6.*` are replaced by a plain version, and transitive packages promoted with `--transitive` are always written as a plain version.
+
 ## Working with secure feeds
 
 **dotnet-outdated** supports secure NuGet feeds, such as [MyGet](https://www.myget.org). It is suggested that you add these to your sources using the [source command of the NuGet CLI](https://docs.microsoft.com/en-us/nuget/tools/cli-ref-sources). For secure feeds, you can do one of the following:

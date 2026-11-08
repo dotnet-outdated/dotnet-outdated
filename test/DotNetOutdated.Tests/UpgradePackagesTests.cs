@@ -98,7 +98,7 @@ public class UpgradePackagesTests
 
     private void AddPackageReturns(RunStatus status) =>
         _packageService
-            .AddPackage(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<NuGetVersion>(), Arg.Any<bool>(), Arg.Any<bool>())
+            .AddPackage(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<VersionRange>(), Arg.Any<bool>(), Arg.Any<bool>())
             .Returns(status);
 
     private (bool Success, string Written) RunUpgrade()

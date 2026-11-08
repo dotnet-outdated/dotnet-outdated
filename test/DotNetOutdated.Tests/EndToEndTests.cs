@@ -7,6 +7,8 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Xml.Linq;
 using DotNetOutdated.Core.Services;
 using NuGet.Versioning;
 using Xunit;
@@ -341,18 +343,18 @@ public static class EndToEndTests
 
         var outputPath = Path.Combine(directory.Path, "output.json");
 
-        var actual = Program.Main([directory.Path, "--maximum-version:8.0", "--output", outputPath, "--output-format:json"]);
+        var actual = Program.Main([directory.Path, "--upgrade", "--maximum-version:8.0", "--output", outputPath, "--output-format:json"]);
         Assert.Equal(0, actual);
 
-        using var output = JsonDocument.Parse(File.ReadAllText(outputPath));
+        var output = JsonNode.Parse(File.ReadAllText(outputPath));
 
-        foreach (var project in output.RootElement.GetProperty("Projects").EnumerateArray())
+        foreach (var project in output["Projects"].AsArray())
         {
-            foreach (var tfm in project.GetProperty("TargetFrameworks").EnumerateArray())
+            foreach (var tfm in project["TargetFrameworks"].AsArray())
             {
-                foreach (var dependency in tfm.GetProperty("Dependencies").EnumerateArray())
+                foreach (var dependency in tfm["Dependencies"].AsArray())
                 {
-                    var latestVersionString = dependency.GetProperty("LatestVersion").GetString();
+                    var latestVersionString = (string)dependency["LatestVersion"];
 
                     Assert.True(Version.TryParse(latestVersionString, out var latestVersion));
                     Assert.Equal(8, latestVersion.Major);
@@ -361,6 +363,12 @@ public static class EndToEndTests
                 }
             }
         }
+
+        var csproj = XDocument.Load(Path.Combine(directory.Path, "Project.csproj"));
+        var csprojDependencyVersions = csproj.Descendants("PackageReference")
+            .ToDictionary(e => (string)e.Attribute("Include"), e => (string)e.Attribute("Version"));
+
+        Assert.StartsWith("8.0.", csprojDependencyVersions["System.Text.Json"]);
     }
 
     [Fact]
@@ -403,6 +411,35 @@ public static class EndToEndTests
         // An open-ended version is capped at the maximum version: 6.0.0
         Assert.Equal(8, latestVersions["System.Text.Json"].Major);
         Assert.Equal(0, latestVersions["System.Text.Json"].Minor);
+    }
+
+    [Fact]
+    public static void Can_Upgrade_With_Maximum_Version_Preserving_Declared_Ranges()
+    {
+        using var directory = TestSetup("max-version-ranges");
+
+        var actual = Program.Main([directory.Path, "--upgrade", "--maximum-version:8.0"]);
+        Assert.Equal(0, actual);
+
+        var csproj = XDocument.Load(Path.Combine(directory.Path, "Project.csproj"));
+        var versions = csproj.Descendants("PackageReference")
+            .ToDictionary(e => (string)e.Attribute("Include"), e => (string)e.Attribute("Version"));
+
+        // Exact pins are left alone
+        Assert.Equal("[6.0.0]", versions["System.Text.Encodings.Web"]);
+        Assert.Equal("[9.0.0]", versions["Microsoft.Bcl.AsyncInterfaces"]);
+
+        // Declared upper bounds are kept; --maximum-version only narrows the choice
+        var options = VersionRange.Parse(versions["Microsoft.Extensions.Options"]);
+        Assert.Equal(6, options.MinVersion.Major);
+        Assert.Equal(new NuGetVersion(7, 0, 0), options.MaxVersion);
+
+        var logging = VersionRange.Parse(versions["Microsoft.Extensions.Logging"]);
+        Assert.Equal(new NuGetVersion(8, 0, logging.MinVersion.Patch), logging.MinVersion);
+        Assert.Equal(new NuGetVersion(10, 0, 0), logging.MaxVersion);
+
+        // A plain version stays a plain version
+        Assert.StartsWith("8.0.", versions["System.Text.Json"]);
     }
 
     [Fact]
@@ -487,6 +524,78 @@ public static class EndToEndTests
         // Verify old versions are not present in Directory.Build.props
         Assert.DoesNotContain("<NewtonsoftJsonVersion>11.0.1</NewtonsoftJsonVersion>", propsContent);
         Assert.DoesNotContain("<MicrosoftExtensionsVersion>2.1.0</MicrosoftExtensionsVersion>", propsContent);
+    }
+
+    [Fact]
+    public static void Can_Upgrade_Project_With_Version_Ranges()
+    {
+        using var directory = TestSetup("version-range");
+
+        var outputPath = Path.Combine(directory.Path, "output.json");
+
+        var actual = Program.Main([directory.Path, "--upgrade", "--output", outputPath, "--output-format:json"]);
+        Assert.Equal(0, actual);
+
+        var output = JsonNode.Parse(File.ReadAllText(outputPath));
+
+        var jsonDependencyVersions = output["Projects"][0]["TargetFrameworks"][0]["Dependencies"].AsArray()
+            .ToDictionary(d => (string)d["Name"], d => (string)d["LatestVersion"]);
+
+        Assert.True(Version.TryParse(jsonDependencyVersions["System.Text.Json"], out var systemTextJsonVersion));
+        Assert.True(systemTextJsonVersion > new Version(6, 0, 0));
+        Assert.True(systemTextJsonVersion < new Version(8, 0, 0));
+
+        Assert.True(Version.TryParse(jsonDependencyVersions["Microsoft.Extensions.DependencyInjection"], out var dependencyInjectionVersion));
+        Assert.Equal(new Version(7, 0, 0), dependencyInjectionVersion);
+
+        var csproj = XDocument.Load(Path.Combine(directory.Path, "version-range.csproj"));
+        var csprojDependencyVersions = csproj.Descendants("PackageReference")
+            .ToDictionary(e => (string)e.Attribute("Include"), e => (string)e.Attribute("Version"));
+
+        Assert.Equal($"[{systemTextJsonVersion}, 8.0.0)", csprojDependencyVersions["System.Text.Json"]);
+        Assert.Equal("[7.0.0]", csprojDependencyVersions["Microsoft.Extensions.DependencyInjection"]);
+    }
+
+    [Fact]
+    public static void Can_Upgrade_Version_Range_Held_In_Variable()
+    {
+        using var directory = TestSetup("version-range-variables");
+
+        var actual = Program.Main([directory.Path, "--upgrade"]);
+        Assert.Equal(0, actual);
+
+        var content = File.ReadAllText(Path.Combine(directory.Path, "version-range-variables.csproj"));
+        Assert.Contains("Version=\"$(NewtonsoftJsonVersion)\"", content);
+        Assert.Contains("<NewtonsoftJsonVersion>[12.0.3, 13.0.0)</NewtonsoftJsonVersion>", content);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public static void Can_Upgrade_CPM_Version_Ranges(bool noRestore)
+    {
+        using var directory = TestSetup("version-range-cpm");
+
+        List<string> args = [directory.Path, "--upgrade"];
+        if (noRestore)
+        {
+            args.Add("--no-restore");
+        }
+
+        var actual = Program.Main([.. args]);
+        Assert.Equal(0, actual);
+
+        var props = XDocument.Load(Path.Combine(directory.Path, "Directory.Packages.props"));
+        var packageVersions = props.Descendants("PackageVersion")
+            .ToDictionary(e => (string)e.Attribute("Include"), e => (string)e.Attribute("Version"));
+
+        Assert.Equal("$(NewtonsoftJsonVersion)", packageVersions["Newtonsoft.Json"]);
+        Assert.Equal("[12.0.3, 13.0.0)", (string)props.Descendants("NewtonsoftJsonVersion").Single());
+
+        var systemTextJson = VersionRange.Parse(packageVersions["System.Text.Json"]);
+        Assert.True(systemTextJson.MinVersion > new NuGetVersion(6, 0, 0));
+        Assert.Equal(new NuGetVersion(7, 0, 0), systemTextJson.MaxVersion);
+        Assert.False(systemTextJson.IsMaxInclusive);
     }
 
     private static (int ExitCode, string Output) RunAndCaptureOutput(string path)
