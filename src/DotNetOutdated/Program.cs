@@ -321,14 +321,10 @@ namespace DotNetOutdated
                      success = false;
                      console.Write($"An error occurred while upgrading {project.Project}", Constants.ReportingColors.UpgradeFailure);
                      console.WriteLine();
-                     console.Write(status.Errors, Constants.ReportingColors.UpgradeFailure);
-                     console.WriteLine();
-                     // dotnet add package reports NuGet restore/edit failures (for example when the
-                     // package's version is declared in an imported file it cannot edit) on stdout
-                     // rather than stderr, so surface the output as well to keep the cause visible.
-                     if (!string.IsNullOrWhiteSpace(status.Output))
+                     string failureDetails = status.FailureDetails;
+                     if (failureDetails.Length > 0)
                      {
-                        console.Write(status.Output, Constants.ReportingColors.UpgradeFailure);
+                        console.Write(failureDetails, Constants.ReportingColors.UpgradeFailure);
                         console.WriteLine();
                      }
                   }
