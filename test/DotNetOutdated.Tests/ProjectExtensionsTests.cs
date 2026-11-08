@@ -94,6 +94,31 @@ public static class ProjectExtensionsTests
 
         testCases.Add(
             """
+            <Project>
+              <Sdk Name="Microsoft.Build.NoTargets" Version="3.7.0" />
+            </Project>
+            """,
+            true);
+
+        testCases.Add(
+            """
+            <Project>
+              <Import Project="Sdk.props" Sdk="Microsoft.Build.NoTargets" Version="3.7.0" />
+              <Import Project="Sdk.targets" Sdk="Microsoft.Build.NoTargets" Version="3.7.0" />
+            </Project>
+            """,
+            true);
+
+        testCases.Add(
+            """
+            <Project>
+              <Import Project="Directory.Build.targets" />
+            </Project>
+            """,
+            false);
+
+        testCases.Add(
+            """
             <Foo Sdk="Microsoft.NET.Sdk"></Foo>
             """,
             false);
