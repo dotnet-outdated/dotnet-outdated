@@ -244,6 +244,7 @@ public static class EndToEndTests
     [Theory]
     [InlineData("project-sdk-attribute", "<Project Sdk=\"Microsoft.Build.NoTargets/3.7.0\">")]
     [InlineData("project-sdk-element", "<Sdk Name=\"Microsoft.Build.NoTargets\" Version=\"3.7.0\" />")]
+    [InlineData("project-sdk-import", "Sdk=\"Microsoft.Build.NoTargets\" Version=\"3.7.0\"")]
     public static void Can_Upgrade_Project_With_Versioned_Project_Sdk(string testProjectName, string originalSdkDeclaration)
     {
         using var project = TestSetup(testProjectName);

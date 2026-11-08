@@ -80,8 +80,11 @@ namespace DotNetOutdated
                 // e.g. <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" Sdk="Microsoft.NET.Sdk">
                 XNamespace ns = xml.Root.GetDefaultNamespace();
                 // SDKs can also be declared with child elements, e.g. <Sdk Name="Microsoft.Build.NoTargets" Version="3.7.0" />
+                // or <Import Project="Sdk.props" Sdk="Microsoft.Build.NoTargets" Version="3.7.0" />
                 return xml.Root.Name == (ns + "Project") &&
-                       (!string.IsNullOrEmpty(xml.Root.Attribute("Sdk")?.Value) || xml.Root.Elements(ns + "Sdk").Any());
+                       (!string.IsNullOrEmpty(xml.Root.Attribute("Sdk")?.Value) ||
+                        xml.Root.Elements(ns + "Sdk").Any() ||
+                        xml.Root.Descendants(ns + "Import").Any(import => !string.IsNullOrEmpty(import.Attribute("Sdk")?.Value)));
             }
             catch (Exception ex)
             {

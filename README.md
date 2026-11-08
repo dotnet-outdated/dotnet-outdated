@@ -114,7 +114,7 @@ When `--recursive --include-file-based-apps` is used, **dotnet-outdated** also d
 
 File-based apps can declare NuGet packages with `#:package` and MSBuild SDK packages with `#:sdk` (for example `#:sdk Cake.Sdk@6.0.0`). Variable-backed versions use `#:property` the same way as for packages.
 
-Versioned MSBuild project SDKs declared in a project file, either as `<Project Sdk="Aspire.AppHost.Sdk/13.0.0">` or as `<Sdk Name="Aspire.AppHost.Sdk" Version="13.0.0" />`, are reported and upgraded like packages. SDK versions pinned in `global.json` (`msbuild-sdks`) or through MSBuild properties are not supported.
+Versioned MSBuild project SDKs declared in a project file, as `<Project Sdk="Aspire.AppHost.Sdk/13.0.0">`, as `<Sdk Name="Aspire.AppHost.Sdk" Version="13.0.0" />` or as `<Import Project="Sdk.props" Sdk="Aspire.AppHost.Sdk" Version="13.0.0" />`, are reported and upgraded like packages. SDKs inside XML comments are ignored. SDK versions pinned in `global.json` (`msbuild-sdks`) or through MSBuild properties are not supported.
 
 ## Upgrading packages
 

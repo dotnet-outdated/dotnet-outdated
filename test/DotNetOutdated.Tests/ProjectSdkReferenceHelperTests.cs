@@ -219,6 +219,33 @@ namespace DotNetOutdated.Tests
         }
 
         [Fact]
+        public void Discover_And_TryUpdate_ImportSdkElements()
+        {
+            var fileSystem = CreateFileSystem(@"<Project>
+  <Import Project=""Sdk.props"" Sdk=""Microsoft.Build.NoTargets"" Version=""3.7.0"" />
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+  </PropertyGroup>
+  <Import Project=""Sdk.targets"" Sdk=""Microsoft.Build.NoTargets"" Version=""3.7.0"" />
+  <Import Project=""Directory.Build.targets"" />
+</Project>");
+
+            var reference = Assert.Single(ProjectSdkReferenceHelper.Discover(fileSystem, ProjectPath));
+            Assert.Equal("Microsoft.Build.NoTargets", reference.Name);
+            Assert.Equal(new NuGetVersion("3.7.0"), reference.ResolvedVersion);
+
+            Assert.True(ProjectSdkReferenceHelper.TryUpdate(fileSystem, ProjectPath, "Microsoft.Build.NoTargets", new NuGetVersion("3.7.134")));
+            Assert.Equal(@"<Project>
+  <Import Project=""Sdk.props"" Sdk=""Microsoft.Build.NoTargets"" Version=""3.7.134"" />
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+  </PropertyGroup>
+  <Import Project=""Sdk.targets"" Sdk=""Microsoft.Build.NoTargets"" Version=""3.7.134"" />
+  <Import Project=""Directory.Build.targets"" />
+</Project>", fileSystem.File.ReadAllText(ProjectPath));
+        }
+
+        [Fact]
         public void TryUpdate_PropertyBackedVersion_IsNotChanged()
         {
             const string content = @"<Project Sdk=""Microsoft.NET.Sdk"">

@@ -14,8 +14,8 @@ using System.Xml.Linq;
 namespace DotNetOutdated.Core.Services;
 
 /// <summary>
-/// A versioned MSBuild project SDK declared in a project file, either as <c>&lt;Project Sdk="Id/Version"&gt;</c>
-/// or as <c>&lt;Sdk Name="Id" Version="Version" /&gt;</c>.
+/// A versioned MSBuild project SDK declared in a project file as <c>&lt;Project Sdk="Id/Version"&gt;</c>,
+/// <c>&lt;Sdk Name="Id" Version="Version" /&gt;</c> or <c>&lt;Import Project="..." Sdk="Id" Version="Version" /&gt;</c>.
 /// </summary>
 public sealed class ProjectSdkReference
 {
@@ -73,6 +73,12 @@ internal static partial class ProjectSdkReferenceHelper
 
     [GeneratedRegex(@"(\bVersion\s*=\s*)(""[^""]*""|'[^']*')")]
     private static partial Regex VersionAttributeRegex();
+
+    [GeneratedRegex(@"<Import\b[^>]*>")]
+    private static partial Regex ImportElementRegex();
+
+    [GeneratedRegex(@"\bSdk\s*=\s*(""[^""]*""|'[^']*')")]
+    private static partial Regex SdkAttributeRegex();
 
     [GeneratedRegex(@"<!--.*?-->|<!\[CDATA\[.*?\]\]>", RegexOptions.Singleline)]
     private static partial Regex CommentOrCDataRegex();
@@ -162,7 +168,7 @@ internal static partial class ProjectSdkReferenceHelper
 
         foreach (var declaration in GetDeclarations(fileSystem, projectFilePath))
         {
-            if (declaration.Kind != ProjectSdkDeclarationKind.ImportElement && declaration.Version != null)
+            if (declaration.Version != null)
             {
                 TryAdd(references, declaration.Name, declaration.Version);
             }
@@ -200,15 +206,19 @@ internal static partial class ProjectSdkReferenceHelper
             edits.Add((quotedValue.Index, quotedValue.Length, $"{quotedValue.Value[0]}{string.Join(';', sdks)}{quotedValue.Value[0]}"));
         }
 
-        foreach (Match sdkElement in SdkElementRegex().Matches(searchable))
+        // <Sdk Name="Id" Version="..." /> and <Import Project="Sdk.props" Sdk="Id" Version="..." />
+        var elements = SdkElementRegex().Matches(searchable).Select(match => (Element: match, NameRegex: NameAttributeRegex()))
+            .Concat(ImportElementRegex().Matches(searchable).Select(match => (Element: match, NameRegex: SdkAttributeRegex())));
+
+        foreach (var (element, nameRegex) in elements)
         {
-            var nameAttribute = NameAttributeRegex().Match(sdkElement.Value);
-            var versionAttribute = VersionAttributeRegex().Match(sdkElement.Value);
+            var nameAttribute = nameRegex.Match(element.Value);
+            var versionAttribute = VersionAttributeRegex().Match(element.Value);
             if (nameAttribute.Success && versionAttribute.Success &&
                 IsLiteralMatch(Unquote(nameAttribute.Groups[1].Value), Unquote(versionAttribute.Groups[2].Value), name))
             {
                 var quotedVersion = versionAttribute.Groups[2];
-                edits.Add((sdkElement.Index + quotedVersion.Index, quotedVersion.Length, $"{quotedVersion.Value[0]}{newVersion}{quotedVersion.Value[0]}"));
+                edits.Add((element.Index + quotedVersion.Index, quotedVersion.Length, $"{quotedVersion.Value[0]}{newVersion}{quotedVersion.Value[0]}"));
             }
         }
 
