@@ -1458,6 +1458,27 @@ Information(""Outdated Sdk"");")
         }
 
         [Fact]
+        public void Update_VersionOverrideWithConditionalLiteralPin_LeavesThePinAlone()
+        {
+            var projectPath = XFS.Path(@"c:\repo\MyProject.csproj");
+            var original =
+                "<Project>\n" +
+                "  <PropertyGroup><TargetFramework>net8.0</TargetFramework><MauiVersion>8.0.3</MauiVersion></PropertyGroup>\n" +
+                "  <ItemGroup><PackageReference Include=\"Microsoft.Maui.Controls\" VersionOverride=\"$(MauiVersion)\" /></ItemGroup>\n" +
+                "  <ItemGroup Condition=\"'$(TargetFramework)' == 'net9.0'\"><PackageReference Update=\"Microsoft.Maui.Controls\" VersionOverride=\"9.0.0\" /></ItemGroup>\n" +
+                "</Project>";
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData> { [projectPath] = new(original) });
+            var service = new VariableTrackingService(fileSystem);
+
+            var info = service.DiscoverPackageVariables(projectPath)["Microsoft.Maui.Controls"];
+            Assert.True(info.IsVersionOverride);
+
+            Assert.True(service.TryUpdatePackageVariable(info, new NuGetVersion("8.0.100")));
+
+            Assert.Equal(original.Replace("<MauiVersion>8.0.3</MauiVersion>", "<MauiVersion>8.0.100</MauiVersion>"), fileSystem.File.ReadAllText(projectPath));
+        }
+
+        [Fact]
         public void Update_StaleDefinitionAfterDotnetAdd_KeepsTheLiteralVersion()
         {
             var projectPath = XFS.Path(@"c:\repo\MyProject.csproj");

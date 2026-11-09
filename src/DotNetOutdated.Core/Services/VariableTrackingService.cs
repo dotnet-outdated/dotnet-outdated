@@ -200,7 +200,8 @@ public sealed partial class VariableTrackingService : IVariableTrackingService
                     [variableInfo.ElementType],
                     variableInfo.PackageName,
                     versionExpression,
-                    variableInfo.PackageReferenceVersion);
+                    variableInfo.PackageReferenceVersion,
+                    newRange);
 
                 if (!string.Equals(packageRefContent, newPackageRefContent, StringComparison.Ordinal))
                 {

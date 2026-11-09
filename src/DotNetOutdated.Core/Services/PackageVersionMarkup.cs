@@ -1,5 +1,6 @@
 using System;
 using System.Text.RegularExpressions;
+using NuGet.Versioning;
 
 namespace DotNetOutdated.Core.Services
 {
@@ -43,12 +44,20 @@ namespace DotNetOutdated.Core.Services
         /// <summary>
         /// Restores a variable reference in <c>Version</c> or <c>VersionOverride</c> attributes or child elements
         /// for <paramref name="packageName"/>. Values that contain a property reference are left untouched unless they
-        /// equal <paramref name="previousExpression"/> (the expression being rewritten).
+        /// equal <paramref name="previousExpression"/> (the expression being rewritten). When
+        /// <paramref name="expectedLiteral"/> is given, literal values are only replaced when they equal it (the version
+        /// <c>dotnet add package</c> wrote), so other pins of the package, such as one under another condition, are kept.
         /// </summary>
-        public static string ReplacePackageVersion(string content, string[] elementNames, string packageName, string newValue, string previousExpression = null)
+        public static string ReplacePackageVersion(
+            string content,
+            string[] elementNames,
+            string packageName,
+            string newValue,
+            string previousExpression = null,
+            VersionRange expectedLiteral = null)
         {
             var result = ReplaceVersionAttributes(
-                content, elementNames, packageName, newValue, allowVersionOverride: true, skipExistingVariables: true, out _, previousExpression);
+                content, elementNames, packageName, newValue, allowVersionOverride: true, skipExistingVariables: true, out _, previousExpression, expectedLiteral);
 
             var elements = string.Join("|", Array.ConvertAll(elementNames, Regex.Escape));
             var childElementPattern =
@@ -73,7 +82,7 @@ namespace DotNetOutdated.Core.Services
                     var newBody = Regex.Replace(
                         m.Groups["body"].Value,
                         childVersionPattern,
-                        vm => !vm.Groups["vopen"].Success || IsOtherExpression(vm.Groups["vval"].Value, previousExpression)
+                        vm => !vm.Groups["vopen"].Success || !IsRestorable(vm.Groups["vval"].Value, previousExpression, expectedLiteral)
                             ? vm.Value
                             : vm.Groups["vopen"].Value + ReplaceTrimmed(vm.Groups["vval"].Value, newValue) + vm.Groups["vclose"].Value,
                         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
@@ -91,7 +100,8 @@ namespace DotNetOutdated.Core.Services
             bool allowVersionOverride,
             bool skipExistingVariables,
             out bool matched,
-            string previousExpression = null)
+            string previousExpression = null,
+            VersionRange expectedLiteral = null)
         {
             var elements = string.Join("|", Array.ConvertAll(elementNames, Regex.Escape));
             var pattern =
@@ -108,7 +118,7 @@ namespace DotNetOutdated.Core.Services
                     if (!attributes.Success ||
                         !MatchesPackage(attributes.Value, packageName, allowVersionOverride, out var version) ||
                         version == null ||
-                        (skipExistingVariables && IsOtherExpression(version.Value, previousExpression)))
+                        (skipExistingVariables && !IsRestorable(version.Value, previousExpression, expectedLiteral)))
                     {
                         return m.Value;
                     }
@@ -123,9 +133,22 @@ namespace DotNetOutdated.Core.Services
             return result;
         }
 
-        private static bool IsOtherExpression(string value, string previousExpression) =>
-            value.Contains("$(", StringComparison.Ordinal) &&
-            !(previousExpression != null && string.Equals(value.Trim(), previousExpression.Trim(), StringComparison.Ordinal));
+        private static bool IsRestorable(string value, string previousExpression, VersionRange expectedLiteral)
+        {
+            var trimmed = value.Trim();
+            if (previousExpression != null && string.Equals(trimmed, previousExpression.Trim(), StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            if (trimmed.Contains("$(", StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            return expectedLiteral == null ||
+                   (VersionRange.TryParse(trimmed, out var literal) && literal.Equals(expectedLiteral));
+        }
 
         private static bool MatchesPackage(string attributesText, string packageName, bool allowVersionOverride, out Group version)
         {
