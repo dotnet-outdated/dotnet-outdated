@@ -1,6 +1,5 @@
 using DotNetOutdated.Core.Services;
 using DotNetOutdated.Services;
-using McMaster.Extensions.CommandLineUtils;
 using Microsoft.Extensions.DependencyInjection;
 using NuGet.Common;
 using System;
@@ -9,10 +8,9 @@ using System.Threading.Tasks;
 
 namespace DotNetOutdated
 {
-    [Command(Name = "mcp", Description = "Runs the Model Context Protocol (MCP) server.")]
     internal class McpCommand
     {
-        public async Task<int> OnExecuteAsync(CommandLineApplication app)
+        public async Task<int> OnExecuteAsync()
         {
             // Build a new service provider with McpConsole to redirect output to stderr
             var services = new ServiceCollection()

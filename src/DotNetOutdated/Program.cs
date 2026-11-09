@@ -3,7 +3,6 @@ using DotNetOutdated.Core.Exceptions;
 using DotNetOutdated.Core.Models;
 using DotNetOutdated.Core.Services;
 using DotNetOutdated.Models;
-using McMaster.Extensions.CommandLineUtils;
 using Microsoft.Extensions.DependencyInjection;
 using NuGet.Common;
 using NuGet.Credentials;
@@ -24,11 +23,6 @@ using System.Threading.Tasks;
 
 namespace DotNetOutdated
 {
-    [Command(
-       Name = "dotnet outdated",
-       FullName = "A .NET Core global tool to list outdated Nuget packages.")]
-   [VersionOptionFromMember(MemberName = nameof(GetVersion))]
-   [Subcommand(typeof(McpCommand))]
    internal class Program(
         IFileSystem fileSystem,
         IReporter reporter,
@@ -36,7 +30,7 @@ namespace DotNetOutdated
         IProjectAnalysisService projectAnalysisService,
         IProjectDiscoveryService projectDiscoveryService,
         IDotNetPackageService dotNetPackageService,
-        DotNetRunnerOptions dotNetRunnerOptions) : CommandBase
+        DotNetRunnerOptions dotNetRunnerOptions)
    {
       private readonly IFileSystem _fileSystem = fileSystem;
       private readonly IReporter _reporter = reporter;
@@ -46,106 +40,50 @@ namespace DotNetOutdated
       private readonly IDotNetPackageService _dotNetPackageService = dotNetPackageService;
       private readonly DotNetRunnerOptions _dotNetRunnerOptions = dotNetRunnerOptions;
 
-      [Option(CommandOptionType.NoValue, Description = "Specifies whether to include auto-referenced packages.",
-          LongName = "include-auto-references")]
       public bool IncludeAutoReferences { get; set; } = false;
 
-      [Argument(0, Description = "The path to a .sln, .slnx, .slnf, .csproj, .fsproj or .cs file-based app, or to a directory containing a .NET Core solution/project. " +
-                                 "If none is specified, the current directory will be used.")]
       public string Path { get; set; }
 
-      [Option(CommandOptionType.SingleValue, Description = "Specifies whether to look for pre-release versions of packages. " +
-                                                           "Possible values: Auto (default), Always or Never.",
-          ShortName = "pre", LongName = "pre-release")]
       public PrereleaseReporting Prerelease { get; set; } = PrereleaseReporting.Auto;
 
-      [Option(CommandOptionType.SingleValue, Description = "Specifies whether the package should be locked to the current Major or Minor version. " +
-                                                           "Possible values: None (default), Major or Minor.",
-          ShortName = "vl", LongName = "version-lock")]
       public VersionLock VersionLock { get; set; } = VersionLock.None;
 
-      [Option(CommandOptionType.NoValue, Description = "Specifies whether it should detect transitive dependencies.",
-          ShortName = "t", LongName = "transitive")]
       public bool Transitive { get; set; } = false;
 
-      [Option(CommandOptionType.SingleValue, Description = "Defines how many levels deep transitive dependencies should be analyzed. " +
-                                                           "Integer value (default = 1)",
-          ShortName = "td", LongName = "transitive-depth")]
       public int TransitiveDepth { get; set; } = 1;
 
-      [Option(CommandOptionType.SingleOrNoValue, Description = "Specifies whether outdated packages should be upgraded. " +
-                                                           "Possible values for <TYPE> is Auto (default) or Prompt.",
-          ShortName = "u", LongName = "upgrade", ValueName = "TYPE")]
       public (bool HasValue, UpgradeType UpgradeType) Upgrade { get; set; }
 
-      [Option(CommandOptionType.NoValue, Description = "Specifies whether it should return a non-zero exit code when updates are found.",
-          ShortName = "f", LongName = "fail-on-updates")]
       public bool FailOnUpdates { get; set; } = false;
 
-      [Option(CommandOptionType.MultipleValue, Description = "Specifies to only look at packages where the name contains the provided string. Culture and case insensitive. If provided multiple times, a single match is enough to include a package.",
-          ShortName = "inc", LongName = "include")]
       public List<string> FilterInclude { get; set; } = [];
 
-      [Option(CommandOptionType.MultipleValue, Description = "Specifies to only look at packages where the name does not contain the provided string. Culture and case insensitive. If provided multiple times, a single match is enough to exclude a package.",
-          ShortName = "exc", LongName = "exclude")]
       public List<string> FilterExclude { get; set; } = [];
 
-      [Option(CommandOptionType.SingleValue, Description = "Specifies the filename for a generated report. " +
-                                                           "(Use the -of|--output-format option to specify the format. JSON by default.)",
-          ShortName = "o", LongName = "output")]
       public string OutputFilename { get; set; } = null;
 
-      [Option(CommandOptionType.SingleValue, Description = "Specifies the output format for the generated report. " +
-                                                           "Possible values: json (default), csv, or markdown.",
-          ShortName = "of", LongName = "output-format")]
       public OutputFormat OutputFileFormat { get; set; } = OutputFormat.Json;
 
-      [Option(CommandOptionType.SingleValue, Description = "Only include package versions that are older than the specified number of days.",
-          ShortName = "ot", LongName = "older-than")]
       public int OlderThanDays { get; set; }
 
-      [Option(CommandOptionType.NoValue, Description = "Add the reference without performing restore preview and compatibility check.",
-          ShortName = "n", LongName = "no-restore")]
       public bool NoRestore { get; set; } = false;
 
-      [Option(CommandOptionType.NoValue, Description = "Recursively search for all projects within the provided directory.",
-          ShortName = "r", LongName = "recursive")]
       public bool Recursive { get; set; } = false;
 
-      [Option(CommandOptionType.NoValue, Description = "Include loose file-based apps when recursively searching a directory.",
-          ShortName = "fba", LongName = "include-file-based-apps")]
       public bool IncludeFileBasedApps { get; set; } = false;
 
-      [Option(CommandOptionType.NoValue, Description = "Treat package source failures as warnings.", ShortName = "ifs", LongName = "ignore-failed-sources")]
       public bool IgnoreFailedSources { get; set; } = false;
 
-      [Option(CommandOptionType.NoValue, Description = "Include all dependencies in the report even the ones not outdated.",
-          ShortName = "utd", LongName = "include-up-to-date")]
       public bool IncludeUpToDate { get; set; } = false;
 
-      [Option(CommandOptionType.SingleValue, Description = "Specifies an optional label to restrict matches to when looking for pre-release versions of packages. " +
-                                                           "For example, a label of 'rc.1' would only match pre-release packages with a pre-release label that starts with that prefix.",
-          ShortName = "prl", LongName = "pre-release-label")]
       public string PrereleaseLabel { get; set; } = string.Empty;
 
-      [Option(CommandOptionType.SingleValue, Description = "Specifies the minimum level of logs for NuGet Credential Service. " +
-                                                            "Possible values: debug, verbose, information, warning (default), or error",
-          ShortName = "ncll", LongName = "nuget-cred-log-level")]
       public LogLevel NuGetCredLogLevel { get; set; } = LogLevel.Warning;
       
-      [Option(CommandOptionType.SingleValue, Description = "Specifies an optional runtime identifier to be used during the restore target when projects are analyzed. " +
-                                                           "More information available on https://learn.microsoft.com/dotnet/core/rid-catalog",
-         ShortName = "rt", LongName = "runtime")]
       public string Runtime { get; set; } = string.Empty;
 
-      [Option(CommandOptionType.SingleValue, Description = "The inclusive maximum package version to upgrade to." +
-                                                           "For example, a value of '8.0' would upgrade System.Text.Json 6.0.0 to the latest patch version of 8.0.x",
-         ShortName = "mv", LongName = "maximum-version")]
       public string MaxVersion { get; set; } = string.Empty;
 
-      [Option(CommandOptionType.SingleValue, Description = "Specifies the idle timeout in seconds to wait for output from the dotnet executable before assuming it has hung. " +
-                                                           "Default is 120 seconds.",
-          ShortName = "it", LongName = "idle-timeout")]
       public int IdleTimeout { get; set; } = 120;
       
       public static int Main(string[] args)
@@ -170,12 +108,17 @@ namespace DotNetOutdated
                  .AddSingleton<INuGetPackageResolutionService, NuGetPackageResolutionService>()
                  .BuildServiceProvider();
 
-         using var app = new CommandLineApplication<Program>();
-         app.Conventions
-             .UseDefaultConventions()
-             .UseConstructorInjection(services);
+         ProgramCommandLine commandLine = null;
+         commandLine = new ProgramCommandLine(
+            run: (parseResult, _) =>
+            {
+               var program = ActivatorUtilities.CreateInstance<Program>(services);
+               commandLine.Bind(parseResult, program);
+               return program.OnExecute(services.GetRequiredService<IConsole>());
+            },
+            runMcp: _ => new McpCommand().OnExecuteAsync());
 
-         return app.Execute(args);
+         return commandLine.Parse(args).Invoke();
       }
 
       public static string GetVersion() => typeof(Program)
@@ -183,9 +126,8 @@ namespace DotNetOutdated
           .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
           .InformationalVersion;
 
-      public async Task<int> OnExecute(CommandLineApplication app, IConsole console)
+      public async Task<int> OnExecute(IConsole console)
       {
-         ArgumentNullException.ThrowIfNull(app);
          ArgumentNullException.ThrowIfNull(console);
          
          _dotNetRunnerOptions.IdleTimeout = TimeSpan.FromSeconds(IdleTimeout);
@@ -288,7 +230,7 @@ namespace DotNetOutdated
                   WriteProjectName(project.Description, console);
                }
 
-               upgrade = Prompt.GetYesNo("Do you wish to upgrade this package?", true);
+               upgrade = Prompt.GetYesNo(console, "Do you wish to upgrade this package?", true);
             }
 
             if (upgrade)
