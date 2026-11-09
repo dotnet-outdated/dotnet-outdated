@@ -109,7 +109,10 @@ namespace DotNetOutdated.Core.Services
                 // Get the target frameworks with their dependencies
                 foreach (var targetFrameworkInformation in packageSpec.TargetFrameworks)
                 {
-                    var targetFramework = new TargetFramework(targetFrameworkInformation.FrameworkName);
+                    var targetFramework = new TargetFramework(targetFrameworkInformation.FrameworkName)
+                    {
+                        TargetAlias = targetFrameworkInformation.TargetAlias,
+                    };
                     project.TargetFrameworks.Add(targetFramework);
 
                     var target = lockFile.Targets.FirstOrDefault(t => t.TargetFramework.Equals(targetFrameworkInformation.FrameworkName));

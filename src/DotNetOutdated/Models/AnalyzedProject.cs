@@ -37,6 +37,9 @@ namespace DotNetOutdated.Models
         [JsonConverter(typeof(ToStringJsonConverter))]
         public NuGetFramework Name { get; set; }
 
+        [JsonIgnore]
+        public string TargetAlias { get; set; }
+
         public AnalyzedTargetFramework(NuGetFramework name, IEnumerable<AnalyzedDependency> dependencies)
         {
             Name = name;
