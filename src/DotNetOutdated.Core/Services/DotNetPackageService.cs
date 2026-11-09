@@ -11,11 +11,26 @@ using System.Xml.Linq;
 
 namespace DotNetOutdated.Core.Services
 {
-    public class DotNetPackageService(IDotNetRunner dotNetRunner, IFileSystem fileSystem, IVariableTrackingService variableTrackingService) : IDotNetPackageService
+    public class DotNetPackageService(
+        IDotNetRunner dotNetRunner,
+        IFileSystem fileSystem,
+        IVariableTrackingService variableTrackingService,
+        Action<string> onWarning) : IDotNetPackageService
     {
+        public DotNetPackageService(IDotNetRunner dotNetRunner, IFileSystem fileSystem, IVariableTrackingService variableTrackingService)
+            : this(dotNetRunner, fileSystem, variableTrackingService, null)
+        {
+        }
+
+        private readonly Action<string> _onWarning = onWarning;
         private readonly IDotNetRunner _dotNetRunner = dotNetRunner;
         private readonly IFileSystem _fileSystem = fileSystem;
         private readonly IVariableTrackingService _variableTrackingService = variableTrackingService;
+
+        // Restores already run for a project after a variable reached a value, so a property shared by several
+        // projects (or target frameworks) restores each project once rather than only the first.
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _restoredVariableStates =
+            new(StringComparer.OrdinalIgnoreCase);
 
         public RunStatus AddPackage(string projectPath, string packageName, string frameworkName, NuGetVersion version)
         {
@@ -137,30 +152,75 @@ namespace DotNetOutdated.Core.Services
                 }
             }
 
+            // `dotnet add package` cannot edit these references (GlobalPackageReference, VersionOverride, or a
+            // PackageReference defined in an imported .props file), so their variable must be updated directly.
+            bool dotnetAddCannotUpdate =
+                variableInfo != null &&
+                (variableInfo.ElementType == "GlobalPackageReference" ||
+                 variableInfo.IsVersionOverride ||
+                 (variableInfo.ElementType == "PackageReference" &&
+                  !string.Equals(variableInfo.PackageReferenceFilePath, projectPath, StringComparison.OrdinalIgnoreCase)));
+
+            if (variableInfo?.UnsupportedReason != null)
+            {
+                if (dotnetAddCannotUpdate)
+                {
+                    return new RunStatus(
+                        string.Empty,
+                        $"Could not update '{packageName}' in '{variableInfo.PackageReferenceFilePath}': {variableInfo.UnsupportedReason}. " +
+                        "Update the version manually.",
+                        1);
+                }
+
+                // Treat it like a literal version: the expression is replaced with the new version.
+                _onWarning?.Invoke(
+                    $"'{packageName}' in '{variableInfo.PackageReferenceFilePath}' will be set to a literal version because " +
+                    $"{variableInfo.UnsupportedReason}; its version expression '{variableInfo.PackageReferenceVersion}' is not preserved.");
+                variableInfo = null;
+            }
+
+            // Also update the variable directly when --no-restore is used (avoiding NuGet/Home#12552).
+            if (variableInfo != null && (noRestore || dotnetAddCannotUpdate))
+            {
+                var updated = _variableTrackingService.TryUpdatePackageVariable(variableInfo, versionRange);
+
+                // No change is fine when the property already holds the requested value (e.g. the second target
+                // framework of a multi-targeted project, or another project sharing the same property).
+                if (!updated && !IsVariableAtRequestedVersionRange(variableInfo, versionRange))
+                {
+                    return new RunStatus(
+                        string.Empty,
+                        $"Failed to update '{packageName}': could not write '{versionRange.ToVersionString()}' to the " +
+                        $"$({variableInfo.VariableName}) property in '{variableInfo.FilePath}'.",
+                        1);
+                }
+
+                if (noRestore)
+                {
+                    return new RunStatus(string.Empty, string.Empty, 0);
+                }
+
+                var restoreKey = string.Join(
+                    "|", _fileSystem.Path.GetFullPath(projectPath), variableInfo.FilePath, variableInfo.VariableName, versionRange.ToVersionString());
+                if (!updated && _restoredVariableStates.ContainsKey(restoreKey))
+                {
+                    return new RunStatus(string.Empty, string.Empty, 0);
+                }
+
+                var restoreStatus = RestoreProject(projectPath, ignoreFailedSources);
+                if (restoreStatus.IsSuccess)
+                {
+                    _restoredVariableStates[restoreKey] = true;
+                }
+
+                return restoreStatus;
+            }
+
             // When --no-restore is used, `dotnet add package` has an upstream bug where it writes
             // version info to .csproj instead of Directory.Packages.props for CPM projects.
             // See: https://github.com/NuGet/Home/issues/12552
             if (noRestore)
             {
-                // For CPM projects with a variable reference, update the variable directly.
-                // This avoids the dotnet CPM bug AND preserves the variable reference.
-                if (variableInfo != null && variableInfo.ElementType != "PackageReference")
-                {
-                    // No change is fine when the property already holds the requested value
-                    // (e.g. the second target framework of a multi-targeted project).
-                    if (!_variableTrackingService.TryUpdatePackageVariable(variableInfo, versionRange) &&
-                        !IsVariableAtRequestedVersionRange(variableInfo, versionRange))
-                    {
-                        return new RunStatus(
-                            string.Empty,
-                            $"Failed to update '{packageName}': could not write '{versionRange.ToVersionString()}' to the " +
-                            $"$({variableInfo.VariableName}) property in '{variableInfo.FilePath}'.",
-                            1);
-                    }
-
-                    return new RunStatus(string.Empty, string.Empty, 0);
-                }
-
                 // For CPM projects without a variable reference, update Directory.Packages.props directly.
                 switch (TryUpdateCentralPackageVersion(projectPath, packageName, versionRange, out var centralPackagesPath))
                 {
@@ -378,8 +438,15 @@ namespace DotNetOutdated.Core.Services
             return string.Equals(variableInfo.VariableValue, version.ToString(), StringComparison.OrdinalIgnoreCase);
         }
 
-        private static bool IsVariableAtRequestedVersionRange(PackageVariableInfo variableInfo, VersionRange versionRange) =>
-            VersionRange.TryParse(variableInfo.VariableValue, out var current) && current.Equals(versionRange);
+        private static bool IsVariableAtRequestedVersionRange(PackageVariableInfo variableInfo, VersionRange versionRange)
+        {
+            var expression = string.IsNullOrWhiteSpace(variableInfo.PackageReferenceVersion)
+                ? $"$({variableInfo.VariableName})"
+                : variableInfo.PackageReferenceVersion;
+
+            return VariableTrackingService.TryEvaluateVersionExpression(expression, variableInfo.VariableValue, out var current) &&
+                   current.Equals(versionRange);
+        }
 
         private static bool IsFileBasedAppDirectReferenceAtRequestedVersion(FileBasedAppReference reference, NuGetVersion version) =>
             reference.ResolvedVersion == version;

@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.IO.Abstractions.TestingHelpers;
 using System.Text;
+using System.Text.RegularExpressions;
 using DotNetOutdated.Core.Services;
 using NSubstitute;
 using NuGet.Versioning;
@@ -1312,6 +1313,146 @@ Information(""Outdated Sdk"");")
 
             Assert.Throws<ArgumentException>(() =>
                 service.AddPackage(XFS.Path(@"c:\repo\MyProject.csproj"), "Newtonsoft.Json", "net8.0", VersionRange.Parse("(, 14.0.0)")));
+        }
+
+        [Theory]
+        [InlineData("MyProject.csproj", "PackageReference", "Include", "Version", true)]
+        [InlineData("MyProject.csproj", "PackageReference", "Include", "VersionOverride", false)]
+        [InlineData("Directory.Build.props", "PackageReference", "Include", "Version", false)]
+        [InlineData("Directory.Build.props", "PackageReference", "Update", "Version", false)]
+        [InlineData("Directory.Packages.props", "GlobalPackageReference", "Include", "Version", false)]
+        public void DirectVariableUpdatePaths_UpdatesPropertyAndRestoresOnceWhenNeeded(
+            string targetFile, string elementType, string idAttr, string versionAttr, bool noRestore)
+        {
+            var projectPath = XFS.Path(@"c:\repo\src\MyProject\MyProject.csproj");
+            var targetPath = targetFile == "MyProject.csproj" ? projectPath : XFS.Path($@"c:\repo\{targetFile}");
+            var targetContent = $"<Project><PropertyGroup><MauiVersion>8.0.3</MauiVersion></PropertyGroup>" +
+                                $"<ItemGroup><{elementType} {idAttr}=\"Microsoft.Maui.Controls\" {versionAttr}=\"$(MauiVersion)\" /></ItemGroup></Project>";
+
+            var files = new Dictionary<string, MockFileData> { [targetPath] = new(targetContent) };
+            if (targetPath != projectPath)
+            {
+                files[projectPath] = new("<Project Sdk=\"Microsoft.NET.Sdk\"><ItemGroup><PackageReference Include=\"Microsoft.Maui.Controls\" /></ItemGroup></Project>");
+            }
+
+            var fileSystem = new MockFileSystem(files);
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
+            var service = new DotNetPackageService(dotNetRunner, fileSystem, new VariableTrackingService(fileSystem));
+
+            var first = service.AddPackage(projectPath, "Microsoft.Maui.Controls", "net8.0", new NuGetVersion("8.0.100"), noRestore);
+            var second = service.AddPackage(projectPath, "Microsoft.Maui.Controls", "net9.0", new NuGetVersion("8.0.100"), noRestore);
+
+            Assert.True(first.IsSuccess);
+            Assert.True(second.IsSuccess);
+            dotNetRunner.DidNotReceive().Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[0] == "add"));
+            dotNetRunner.Received(noRestore ? 0 : 1).Run(XFS.Path(@"c:\repo\src\MyProject"), Arg.Is<string[]>(a => a[0] == "restore" && a[1] == "MyProject.csproj"));
+
+            var updated = fileSystem.File.ReadAllText(targetPath);
+            Assert.Contains("<MauiVersion>8.0.100</MauiVersion>", updated);
+            Assert.Contains($"{versionAttr}=\"$(MauiVersion)\"", updated);
+        }
+
+        [Fact]
+        public void ImplicitVariableSharedAcrossMultiplePackages_InsertsPropertyOnceAndPreservesAllReferences()
+        {
+            var projectPath = XFS.Path(@"c:\repo\src\MyProject\MyProject.csproj");
+            const string initialProject = "<Project Sdk=\"Microsoft.NET.Sdk\">\n  <PropertyGroup>\n    <UseMaui>true</UseMaui>\n  </PropertyGroup>\n" +
+                "  <ItemGroup>\n    <PackageReference Include=\"Microsoft.Maui.Controls\" Version=\"$(MauiVersion)\" />\n" +
+                "    <PackageReference Include=\"Microsoft.Maui.Controls.Compatibility\" Version=\"$(MauiVersion)\" />\n  </ItemGroup>\n</Project>";
+
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData> { [projectPath] = new(initialProject) });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(call =>
+            {
+                var args = call.ArgAt<string[]>(1);
+                var updated = Regex.Replace(
+                    fileSystem.File.ReadAllText(projectPath),
+                    $@"(<PackageReference\s+Include=""{Regex.Escape(args[3])}""\s+Version="")[^""]+("")",
+                    $"${{1}}{args[5]}${{2}}");
+                fileSystem.File.WriteAllText(projectPath, updated);
+                return new RunStatus("", "", 0);
+            });
+
+            var service = new DotNetPackageService(dotNetRunner, fileSystem, new VariableTrackingService(fileSystem));
+
+            Assert.True(service.AddPackage(projectPath, "Microsoft.Maui.Controls", "net8.0", new NuGetVersion("8.0.100"), noRestore: false).IsSuccess);
+            Assert.True(service.AddPackage(projectPath, "Microsoft.Maui.Controls.Compatibility", "net8.0", new NuGetVersion("8.0.100"), noRestore: false).IsSuccess);
+
+            var finalContent = fileSystem.File.ReadAllText(projectPath);
+            Assert.Single(Regex.Matches(finalContent, @"<MauiVersion>8\.0\.100</MauiVersion>"));
+            Assert.Contains("Include=\"Microsoft.Maui.Controls\" Version=\"$(MauiVersion)\"", finalContent);
+            Assert.Contains("Include=\"Microsoft.Maui.Controls.Compatibility\" Version=\"$(MauiVersion)\"", finalContent);
+        }
+
+        [Fact]
+        public void SharedVariableAcrossProjects_RestoresEachProjectOnce()
+        {
+            var packagesPath = XFS.Path(@"c:\repo\Directory.Packages.props");
+            var projectA = XFS.Path(@"c:\repo\A\A.csproj");
+            var projectB = XFS.Path(@"c:\repo\B\B.csproj");
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                [packagesPath] = new("<Project><PropertyGroup><V>8.0.3</V></PropertyGroup><ItemGroup><GlobalPackageReference Include=\"Analyzers\" Version=\"$(V)\" /></ItemGroup></Project>"),
+                [projectA] = new("<Project Sdk=\"Microsoft.NET.Sdk\"></Project>"),
+                [projectB] = new("<Project Sdk=\"Microsoft.NET.Sdk\"></Project>"),
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
+            var service = new DotNetPackageService(dotNetRunner, fileSystem, new VariableTrackingService(fileSystem));
+
+            foreach (var (project, framework) in new[] { (projectA, "net8.0"), (projectA, "net9.0"), (projectB, "net8.0"), (projectB, "net9.0") })
+            {
+                Assert.True(service.AddPackage(project, "Analyzers", framework, new NuGetVersion("8.0.100"), noRestore: false).IsSuccess);
+            }
+
+            dotNetRunner.Received(1).Run(XFS.Path(@"c:\repo\A"), Arg.Is<string[]>(a => a[0] == "restore"));
+            dotNetRunner.Received(1).Run(XFS.Path(@"c:\repo\B"), Arg.Is<string[]>(a => a[0] == "restore"));
+            Assert.Contains("<V>8.0.100</V>", fileSystem.File.ReadAllText(packagesPath));
+        }
+
+        [Fact]
+        public void UnsupportedVariableThatDotNetAddCannotUpdate_FailsWithoutChangingFiles()
+        {
+            var packagesPath = XFS.Path(@"c:\repo\Directory.Packages.props");
+            var projectPath = XFS.Path(@"c:\repo\A\A.csproj");
+            const string packagesContent = "<Project><PropertyGroup><Major>8</Major></PropertyGroup><ItemGroup><GlobalPackageReference Include=\"Analyzers\" Version=\"$(Major).0.3\" /></ItemGroup></Project>";
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                [packagesPath] = new(packagesContent),
+                [projectPath] = new("<Project Sdk=\"Microsoft.NET.Sdk\"></Project>"),
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            var service = new DotNetPackageService(dotNetRunner, fileSystem, new VariableTrackingService(fileSystem));
+
+            var status = service.AddPackage(projectPath, "Analyzers", "net8.0", new NuGetVersion("9.0.0"), noRestore: false);
+
+            Assert.False(status.IsSuccess);
+            Assert.Contains("Update the version manually", status.Errors);
+            Assert.Equal(packagesContent, fileSystem.File.ReadAllText(packagesPath));
+            dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
+        }
+
+        [Fact]
+        public void UnsupportedVariableInProjectFile_FallsBackToLiteralWithAWarning()
+        {
+            var projectPath = XFS.Path(@"c:\repo\A\A.csproj");
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                [projectPath] = new("<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><Major>8</Major></PropertyGroup>" +
+                                    "<ItemGroup><PackageReference Include=\"Serilog\" Version=\"$(Major).0.3\" /></ItemGroup></Project>"),
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
+            var warnings = new List<string>();
+            var service = new DotNetPackageService(dotNetRunner, fileSystem, new VariableTrackingService(fileSystem), warnings.Add);
+
+            Assert.True(service.AddPackage(projectPath, "Serilog", "net8.0", new NuGetVersion("9.0.0"), noRestore: false).IsSuccess);
+
+            dotNetRunner.Received(1).Run(XFS.Path(@"c:\repo\A"), Arg.Is<string[]>(a => a[0] == "add" && a[3] == "Serilog"));
+            var warning = Assert.Single(warnings);
+            Assert.Contains("literal version", warning);
+            Assert.Contains("$(Major).0.3", warning);
         }
     }
 }

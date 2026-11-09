@@ -29,7 +29,12 @@ namespace DotNetOutdated
                      new VariableTrackingService(
                          provider.GetService<IFileSystem>(),
                          msg => provider.GetService<IReporter>().Warn(msg)))
-                 .AddSingleton<IDotNetPackageService, DotNetPackageService>()
+                 .AddSingleton<IDotNetPackageService>(provider =>
+                     new DotNetPackageService(
+                         provider.GetService<IDotNetRunner>(),
+                         provider.GetService<IFileSystem>(),
+                         provider.GetService<IVariableTrackingService>(),
+                         msg => provider.GetService<IReporter>().Warn(msg)))
                  .AddSingleton<INuGetPackageInfoService, NuGetPackageInfoService>()
                  .AddSingleton<INuGetPackageResolutionService, NuGetPackageResolutionService>()
                  .BuildServiceProvider();
