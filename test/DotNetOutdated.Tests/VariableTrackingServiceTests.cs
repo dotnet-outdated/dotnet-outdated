@@ -1517,6 +1517,23 @@ Information(""Outdated Sdk"");")
         }
 
         [Fact]
+        public void Discover_ImportUnderUnknownCondition_MarksItsDefinitionsAmbiguous()
+        {
+            var versionsPath = XFS.Path(@"c:\repo\net9.props");
+            var projectPath = XFS.Path(@"c:\repo\MyProject.csproj");
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                [versionsPath] = new("<Project><PropertyGroup><SerilogVersion>4.0.0</SerilogVersion></PropertyGroup></Project>"),
+                [projectPath] = new("<Project><PropertyGroup><SerilogVersion>3.0.0</SerilogVersion></PropertyGroup>" +
+                                    "<Import Project=\"net9.props\" Condition=\"'$(TargetFramework)' == 'net9.0'\" />" +
+                                    "<ItemGroup><PackageReference Include=\"Serilog\" Version=\"$(SerilogVersion)\" /></ItemGroup></Project>")
+            });
+
+            var info = new VariableTrackingService(fileSystem).DiscoverPackageVariables(projectPath)["Serilog"];
+            Assert.NotNull(info.UnsupportedReason);
+        }
+
+        [Fact]
         public void Update_StaleDefinitionAfterDotnetAdd_KeepsTheLiteralVersion()
         {
             var projectPath = XFS.Path(@"c:\repo\MyProject.csproj");

@@ -350,8 +350,13 @@ public sealed partial class VariableTrackingService
 
     private void EvaluateImport(XElement import, string filePath, EvaluationState state, bool uncertain)
     {
-        if (GetAttributeValue(import, "Sdk") != null ||
-            EvaluateCondition(import, filePath, state, null) == false)
+        if (GetAttributeValue(import, "Sdk") != null)
+        {
+            return;
+        }
+
+        var condition = EvaluateCondition(import, filePath, state, null);
+        if (condition == false)
         {
             return;
         }
@@ -379,7 +384,7 @@ public sealed partial class VariableTrackingService
         }
 
         // An import under an unknown condition is still followed, but what it assigns is ambiguous.
-        EvaluateFileIfPresent(resolved, state, uncertain);
+        EvaluateFileIfPresent(resolved, state, uncertain || condition == null);
     }
 
     private bool? EvaluateCondition(XElement element, string filePath, EvaluationState state, IReadOnlyCollection<string> assignedProperties)
