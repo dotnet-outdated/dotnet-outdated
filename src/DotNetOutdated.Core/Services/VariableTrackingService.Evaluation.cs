@@ -147,7 +147,10 @@ public sealed partial class VariableTrackingService
             {
                 case "PropertyGroup":
                 {
-                    var groupCondition = EvaluateCondition(element, filePath, state, null);
+                    // Properties assigned in the group count as empty when undefined, so the group-level default
+                    // idiom <PropertyGroup Condition="'$(X)' == ''"><X>...</X></PropertyGroup> can be evaluated.
+                    var assigned = element.Elements().Select(e => e.Name.LocalName).ToArray();
+                    var groupCondition = EvaluateCondition(element, filePath, state, assigned);
                     if (groupCondition == false)
                     {
                         break;
@@ -241,7 +244,7 @@ public sealed partial class VariableTrackingService
         bool uncertain)
     {
         var name = property.Name.LocalName;
-        var condition = EvaluateCondition(property, filePath, state, name);
+        var condition = EvaluateCondition(property, filePath, state, [name]);
         if (condition == false)
         {
             return;
@@ -351,14 +354,14 @@ public sealed partial class VariableTrackingService
         EvaluateFileIfPresent(resolved, state, uncertain);
     }
 
-    private bool? EvaluateCondition(XElement element, string filePath, EvaluationState state, string assignedProperty)
+    private bool? EvaluateCondition(XElement element, string filePath, EvaluationState state, IReadOnlyCollection<string> assignedProperties)
     {
         var condition = GetAttributeValue(element, "Condition");
         return condition == null
             ? true
             : MSBuildCondition.Evaluate(
                 condition,
-                text => Expand(text, filePath, state, assignedProperty),
+                text => Expand(text, filePath, state, assignedProperties),
                 path => Exists(path, state));
     }
 
@@ -395,10 +398,10 @@ public sealed partial class VariableTrackingService
     /// <summary>
     /// Expands <c>$(Name)</c> references. Returns <see langword="null"/> when any reference is unknown, ambiguous,
     /// a property function (other than <c>GetPathOfFileAbove</c>), or an item/metadata reference.
-    /// An undefined <paramref name="assignedProperty"/> expands to empty, so the common
-    /// <c>Condition="'$(X)' == ''"</c> default pattern can be evaluated.
+    /// An undefined property in <paramref name="assignedProperties"/> (those the condition's element assigns)
+    /// expands to empty, so the common <c>Condition="'$(X)' == ''"</c> default pattern can be evaluated.
     /// </summary>
-    private string Expand(string text, string filePath, EvaluationState state, string assignedProperty)
+    private string Expand(string text, string filePath, EvaluationState state, IReadOnlyCollection<string> assignedProperties)
     {
         if (string.IsNullOrEmpty(text))
         {
@@ -436,7 +439,7 @@ public sealed partial class VariableTrackingService
                 return definition.Value;
             }
 
-            if (assignedProperty != null && name.Equals(assignedProperty, StringComparison.OrdinalIgnoreCase))
+            if (assignedProperties != null && assignedProperties.Contains(name, StringComparer.OrdinalIgnoreCase))
             {
                 return string.Empty;
             }

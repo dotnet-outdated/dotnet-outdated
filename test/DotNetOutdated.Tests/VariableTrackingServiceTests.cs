@@ -1122,6 +1122,42 @@ Information(""Outdated Sdk"");")
         }
 
         [Fact]
+        public void DiscoverAndUpdate_GroupLevelDefaultCondition_UpdatesPropertyAndPreservesVariable()
+        {
+            var buildPropsPath = XFS.Path(@"c:\repo\Directory.Build.props");
+            var projectPath = XFS.Path(@"c:\repo\src\MyProject\MyProject.csproj");
+            var props = "<Project>\n  <PropertyGroup Condition=\"'$(MauiVersion)' == ''\">\n    <MauiVersion>8.0.3</MauiVersion>\n  </PropertyGroup>\n</Project>";
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                [buildPropsPath] = new(props),
+                [projectPath] = new("<Project><ItemGroup><PackageReference Include=\"Microsoft.Maui.Controls\" Version=\"$(MauiVersion)\" /></ItemGroup></Project>")
+            });
+
+            var service = new VariableTrackingService(fileSystem);
+            var info = service.DiscoverPackageVariables(projectPath)["Microsoft.Maui.Controls"];
+            Assert.Null(info.UnsupportedReason);
+            Assert.Equal("8.0.3", info.VariableValue);
+            Assert.Equal(buildPropsPath, info.FilePath);
+
+            Assert.True(service.TryUpdatePackageVariable(info, new NuGetVersion("8.0.100")));
+            Assert.Equal(props.Replace("8.0.3", "8.0.100"), fileSystem.File.ReadAllText(buildPropsPath));
+        }
+
+        [Fact]
+        public void Discover_GroupConditionOnUnrelatedUndefinedProperty_RemainsAmbiguous()
+        {
+            var projectPath = XFS.Path(@"c:\repo\MyProject.csproj");
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                [projectPath] = new("<Project><PropertyGroup Condition=\"'$(Configuration)' == 'Debug'\"><MauiVersion>8.0.3</MauiVersion></PropertyGroup>" +
+                                    "<ItemGroup><PackageReference Include=\"Microsoft.Maui.Controls\" Version=\"$(MauiVersion)\" /></ItemGroup></Project>")
+            });
+
+            var info = new VariableTrackingService(fileSystem).DiscoverPackageVariables(projectPath)["Microsoft.Maui.Controls"];
+            Assert.NotNull(info.UnsupportedReason);
+        }
+
+        [Fact]
         public void DiscoverAndUpdate_ChainedVariablesAndImportedProps_UpdatesRootPropertyAndInvalidatesCache()
         {
             var buildPropsPath = XFS.Path(@"c:\repo\Directory.Build.props");
