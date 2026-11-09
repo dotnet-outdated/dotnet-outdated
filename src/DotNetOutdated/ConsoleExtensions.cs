@@ -1,10 +1,39 @@
-﻿using McMaster.Extensions.CommandLineUtils;
-using System;
+﻿using System;
 
 namespace DotNetOutdated
 {
     public static class ConsoleExtensions
     {
+        public static void Write(this IConsole console, string value)
+        {
+            ArgumentNullException.ThrowIfNull(console);
+            console.Out.Write(value);
+        }
+
+        public static void Write(this IConsole console, object value)
+        {
+            ArgumentNullException.ThrowIfNull(console);
+            console.Out.Write(value);
+        }
+
+        public static void WriteLine(this IConsole console)
+        {
+            ArgumentNullException.ThrowIfNull(console);
+            console.Out.WriteLine();
+        }
+
+        public static void WriteLine(this IConsole console, string value)
+        {
+            ArgumentNullException.ThrowIfNull(console);
+            console.Out.WriteLine(value);
+        }
+
+        public static void WriteLine(this IConsole console, object value)
+        {
+            ArgumentNullException.ThrowIfNull(console);
+            console.Out.WriteLine(value);
+        }
+
         public static void Write(this IConsole console, object value, ConsoleColor color)
         {
             ArgumentNullException.ThrowIfNull(console);

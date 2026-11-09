@@ -1,5 +1,4 @@
-﻿using McMaster.Extensions.CommandLineUtils;
-using NuGet.Common;
+﻿using NuGet.Common;
 using System;
 using System.Threading.Tasks;
 
@@ -84,7 +83,7 @@ namespace DotNetOutdated.Core.Services
                     break;
             }
 
-            _console.WriteLine("[{0}] {1}", message.Level.ToString().ToUpper(), message.Message);
+            _console.WriteLine($"[{message.Level.ToString().ToUpper()}] {message.Message}");
             _console.ForegroundColor = color;
         }
 

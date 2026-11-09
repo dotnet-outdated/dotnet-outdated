@@ -4,7 +4,6 @@ using System.Text.RegularExpressions;
 using DotNetOutdated.Core.Models;
 using DotNetOutdated.Core.Services;
 using DotNetOutdated.Models;
-using McMaster.Extensions.CommandLineUtils;
 using NSubstitute;
 using NuGet.Frameworks;
 using NuGet.Versioning;

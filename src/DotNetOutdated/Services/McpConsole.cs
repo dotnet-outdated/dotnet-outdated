@@ -1,4 +1,3 @@
-using McMaster.Extensions.CommandLineUtils;
 using System;
 using System.IO;
 
@@ -6,6 +5,10 @@ using System.IO;
 
 namespace DotNetOutdated.Services
 {
+    /// <summary>
+    /// The console for the mcp subcommand, where standard output carries the protocol: everything the tool would print
+    /// goes to standard error instead, without colours.
+    /// </summary>
     public class McpConsole : IConsole
     {
         public static McpConsole Singleton { get; } = new McpConsole();
@@ -15,12 +18,6 @@ namespace DotNetOutdated.Services
         public TextWriter Error => Console.Error;
 
         public TextReader In => Console.In;
-
-        public bool IsInputRedirected => Console.IsInputRedirected;
-
-        public bool IsOutputRedirected => Console.IsOutputRedirected;
-
-        public bool IsErrorRedirected => Console.IsErrorRedirected;
 
         public ConsoleColor ForegroundColor
         {
@@ -32,12 +29,6 @@ namespace DotNetOutdated.Services
         {
             get => Console.BackgroundColor;
             set { }
-        }
-
-        public event ConsoleCancelEventHandler? CancelKeyPress
-        {
-            add => Console.CancelKeyPress += value;
-            remove => Console.CancelKeyPress -= value;
         }
 
         public void ResetColor() { }
