@@ -60,6 +60,9 @@ public sealed partial class VariableTrackingService
         public Dictionary<string, PackageItem> PackageReferences { get; } = new(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, PackageItem> GlobalPackageReferences { get; } = new(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, PackageItem> PackageVersions { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        // Items in document order, evaluated once all properties are known (MSBuild's item pass follows its property pass).
+        public List<(XElement Item, XElement Group, string FilePath)> PendingItems { get; } = [];
     }
 
     private EvaluationState EvaluateProject(string projectFilePath, bool includeProjectFile)
@@ -76,6 +79,21 @@ public sealed partial class VariableTrackingService
         }
 
         EvaluateFileIfPresent(FindFileAbove(projectDirectory, "Directory.Build.targets"), state);
+
+        var groupConditions = new Dictionary<XElement, bool?>();
+        foreach (var (item, group, filePath) in state.PendingItems)
+        {
+            if (!groupConditions.TryGetValue(group, out var groupCondition))
+            {
+                groupCondition = groupConditions[group] = EvaluateCondition(group, filePath, state, null);
+            }
+
+            if (groupCondition != false)
+            {
+                EvaluateItem(item, filePath, state);
+            }
+        }
+
         return state;
     }
 
@@ -166,14 +184,9 @@ public sealed partial class VariableTrackingService
 
                 case "ItemGroup":
                 {
-                    if (EvaluateCondition(element, filePath, state, null) == false)
-                    {
-                        break;
-                    }
-
                     foreach (var item in element.Elements())
                     {
-                        EvaluateItem(item, filePath, state);
+                        state.PendingItems.Add((item, element, filePath));
                     }
 
                     break;

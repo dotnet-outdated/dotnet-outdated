@@ -1479,6 +1479,23 @@ Information(""Outdated Sdk"");")
         }
 
         [Fact]
+        public void Discover_ItemConditionUsesPropertySetLaterByTheProject_UsesFinalPropertyValue()
+        {
+            var buildPropsPath = XFS.Path(@"c:\repo\Directory.Build.props");
+            var projectPath = XFS.Path(@"c:\repo\src\MyProject\MyProject.csproj");
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                [buildPropsPath] = new("<Project><PropertyGroup><UseSerilog>false</UseSerilog><SerilogVersion>3.0.0</SerilogVersion></PropertyGroup>" +
+                                       "<ItemGroup Condition=\"'$(UseSerilog)' == 'true'\"><PackageReference Include=\"Serilog\" Version=\"$(SerilogVersion)\" /></ItemGroup></Project>"),
+                [projectPath] = new("<Project><PropertyGroup><UseSerilog>true</UseSerilog></PropertyGroup></Project>")
+            });
+
+            var info = new VariableTrackingService(fileSystem).DiscoverPackageVariables(projectPath)["Serilog"];
+            Assert.Equal("SerilogVersion", info.VariableName);
+            Assert.Equal(buildPropsPath, info.PackageReferenceFilePath);
+        }
+
+        [Fact]
         public void Update_StaleDefinitionAfterDotnetAdd_KeepsTheLiteralVersion()
         {
             var projectPath = XFS.Path(@"c:\repo\MyProject.csproj");
