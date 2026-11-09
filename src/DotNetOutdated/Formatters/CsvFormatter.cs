@@ -12,7 +12,16 @@ internal class CsvFormatter : IOutputFormatter
 {
     public async Task FormatAsync(IReadOnlyList<AnalyzedProject> projects, TextWriter writer)
     {
-        var csv = new CsvWriter(writer, CultureInfo.CurrentCulture);
+        // CsvHelper 34 no longer derives the separator from the culture; keep the
+        // culture's list separator (e.g. ';' for de-DE) as earlier versions did.
+        var listSeparator = CultureInfo.CurrentCulture.TextInfo.ListSeparator;
+        var options = CsvWriterOptions.Default with
+        {
+            FormatProvider = CultureInfo.CurrentCulture,
+            Separator = listSeparator.Length == 1 && char.IsAscii(listSeparator[0]) ? listSeparator[0] : ',',
+        };
+
+        var csv = CsvWriter.Create(writer, options);
         await using (csv.ConfigureAwait(false))
         {
             List<CsvDependency> records = [];
