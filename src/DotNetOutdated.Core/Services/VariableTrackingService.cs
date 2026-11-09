@@ -338,7 +338,8 @@ public sealed partial class VariableTrackingService : IVariableTrackingService
         return false;
     }
 
-    private bool TryUpdateXmlPropertyFile(string propertyFilePath, string variableName, string newMSBuildValue)
+    // Updates the definition of variableName that is in effect for the file-based app at projectFilePath.
+    private bool TryUpdateXmlPropertyFile(string projectFilePath, string propertyFilePath, string variableName, string newMSBuildValue)
     {
         if (string.IsNullOrEmpty(propertyFilePath) ||
             string.IsNullOrEmpty(variableName) ||
@@ -347,15 +348,20 @@ public sealed partial class VariableTrackingService : IVariableTrackingService
             return false;
         }
 
-        var propertyFile = EncodedText.Read(_fileSystem, propertyFilePath);
-        string propertyContent = propertyFile.Content;
-        var elements = PropertyElements(XDocument.Parse(propertyContent), variableName);
-        if (elements.Count == 0)
+        var properties = EvaluateProject(projectFilePath, includeProjectFile: false).Properties;
+        if (!properties.TryGetValue(variableName, out var definition) ||
+            definition.Ambiguous ||
+            definition.ElementIndex < 0 ||
+            !string.Equals(definition.FilePath, _fileSystem.Path.GetFullPath(propertyFilePath), StringComparison.OrdinalIgnoreCase))
         {
+            _onWarning?.Invoke(
+                $"Not updating $({variableName}) in '{propertyFilePath}': the definition in effect could not be determined.");
             return false;
         }
 
-        var newPropertyContent = PackageVersionMarkup.ReplacePropertyValueAt(propertyContent, variableName, elements.Count - 1, newMSBuildValue);
+        var propertyFile = EncodedText.Read(_fileSystem, propertyFilePath);
+        string propertyContent = propertyFile.Content;
+        var newPropertyContent = PackageVersionMarkup.ReplacePropertyValueAt(propertyContent, variableName, definition.ElementIndex, newMSBuildValue);
         if (string.Equals(propertyContent, newPropertyContent, StringComparison.Ordinal))
         {
             return false;
@@ -473,7 +479,7 @@ public sealed partial class VariableTrackingService : IVariableTrackingService
                     updated = true;
                 }
             }
-            else if (TryUpdateXmlPropertyFile(variableInfo.FilePath, variableInfo.VariableName, newVersion.ToString()))
+            else if (TryUpdateXmlPropertyFile(variableInfo.PackageReferenceFilePath, variableInfo.FilePath, variableInfo.VariableName, newVersion.ToString()))
             {
                 updated = true;
             }

@@ -719,6 +719,26 @@ Console.WriteLine();")
         }
 
         [Fact]
+        public void Update_FileBasedApp_PropsVariableWithInactiveLaterDefinition_UpdatesTheEffectiveOne()
+        {
+            var propsPath = XFS.Path(@"c:\repo\Directory.Build.props");
+            var appPath = XFS.Path(@"c:\repo\app.cs");
+            var props = "<Project>\n  <PropertyGroup><V>1.0.0</V></PropertyGroup>\n  <PropertyGroup Condition=\"'false' == 'true'\"><V>2.0.0</V></PropertyGroup>\n</Project>";
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                [propsPath] = new(props),
+                [appPath] = new("#:package Serilog@$(V)\nConsole.WriteLine();\n")
+            });
+
+            var service = new VariableTrackingService(fileSystem);
+            var info = service.DiscoverPackageVariables(appPath)["Serilog"];
+            Assert.Equal("1.0.0", info.VariableValue);
+
+            Assert.True(service.TryUpdatePackageVariable(info, new NuGetVersion("1.5.0")));
+            Assert.Equal(props.Replace("<V>1.0.0</V>", "<V>1.5.0</V>"), fileSystem.File.ReadAllText(propsPath));
+        }
+
+        [Fact]
         public void Discover_FileBasedApp_PackageVersionVariableCanComeFromPropsFile()
         {
             var propsPath = XFS.Path(@"c:\repo\Directory.Build.props");
