@@ -1456,5 +1456,25 @@ Information(""Outdated Sdk"");")
             Assert.Equal(edited, fileSystem.File.ReadAllText(projectPath));
             Assert.Contains(warnings, w => w.Contains("changed since it was scanned"));
         }
+
+        [Fact]
+        public void Update_StaleDefinitionAfterDotnetAdd_KeepsTheLiteralVersion()
+        {
+            var projectPath = XFS.Path(@"c:\repo\MyProject.csproj");
+            var original = "<Project><PropertyGroup><V>1.0.0</V></PropertyGroup><ItemGroup><PackageReference Include=\"Serilog\" Version=\"$(V)\" /></ItemGroup></Project>";
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData> { [projectPath] = new(original) });
+            var warnings = new List<string>();
+            var service = new VariableTrackingService(fileSystem, warnings.Add);
+            var info = service.DiscoverPackageVariables(projectPath)["Serilog"];
+
+            // The property changes after discovery, then `dotnet add package` writes the literal version.
+            var edited = original.Replace("<V>1.0.0</V>", "<V>1.5.0</V>").Replace("Version=\"$(V)\"", "Version=\"2.0.0\"");
+            fileSystem.File.WriteAllText(projectPath, edited);
+
+            // Restoring $(V) would silently revert the package to 1.5.0.
+            Assert.False(service.TryUpdatePackageVariable(info, new NuGetVersion("2.0.0")));
+            Assert.Equal(edited, fileSystem.File.ReadAllText(projectPath));
+            Assert.Contains(warnings, w => w.Contains("changed since it was scanned"));
+        }
     }
 }

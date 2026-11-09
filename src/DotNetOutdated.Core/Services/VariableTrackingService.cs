@@ -172,7 +172,14 @@ public sealed partial class VariableTrackingService : IVariableTrackingService
 
             // Step 1: Update the property value in the file where it's defined (or insert it if implicit/SDK-defined)
             string propertyFilePath = variableInfo.FilePath;
-            var msbuildUpdated = TryWriteProperty(variableInfo, propertyValueToWrite);
+            var propertyWrite = TryWriteProperty(variableInfo, propertyValueToWrite);
+            if (propertyWrite == PropertyWrite.Failed)
+            {
+                // Restoring the reference now would make the package resolve to the property's old value.
+                return false;
+            }
+
+            var msbuildUpdated = propertyWrite == PropertyWrite.Written;
 
             // Step 2: Restore the variable reference in the PackageReference file (might be different from property file)
             string packageRefFilePath = variableInfo.PackageReferenceFilePath;
@@ -220,13 +227,15 @@ public sealed partial class VariableTrackingService : IVariableTrackingService
     private static string ReferencedVariableName(PackageVariableInfo variableInfo) =>
         TryParseVersionExpression(variableInfo.PackageReferenceVersion, out var name, out _) ? name : variableInfo.VariableName;
 
-    private bool TryWriteProperty(PackageVariableInfo variableInfo, string newValue)
+    private enum PropertyWrite { Written, AlreadyCurrent, Failed }
+
+    private PropertyWrite TryWriteProperty(PackageVariableInfo variableInfo, string newValue)
     {
         if (string.IsNullOrEmpty(variableInfo.FilePath) ||
             string.IsNullOrEmpty(variableInfo.VariableName) ||
             !_fileSystem.File.Exists(variableInfo.FilePath))
         {
-            return false;
+            return PropertyWrite.Failed;
         }
 
         var propertyFile = EncodedText.Read(_fileSystem, variableInfo.FilePath);
@@ -254,13 +263,18 @@ public sealed partial class VariableTrackingService : IVariableTrackingService
         {
             var elements = PropertyElements(doc, variableInfo.VariableName);
             var index = variableInfo.PropertyElementIndex;
+            if (index < elements.Count && string.Equals(elements[index].Value.Trim(), newValue, StringComparison.Ordinal))
+            {
+                return PropertyWrite.AlreadyCurrent;
+            }
+
             if (index >= elements.Count ||
                 (!string.IsNullOrEmpty(variableInfo.VariableValue) &&
                  !string.Equals(elements[index].Value.Trim(), variableInfo.VariableValue, StringComparison.Ordinal)))
             {
                 _onWarning?.Invoke(
                     $"Not updating $({variableInfo.VariableName}) in '{variableInfo.FilePath}': the file changed since it was scanned.");
-                return false;
+                return PropertyWrite.Failed;
             }
 
             newContent = PackageVersionMarkup.ReplacePropertyValueAt(content, variableInfo.VariableName, index, newValue);
@@ -268,18 +282,18 @@ public sealed partial class VariableTrackingService : IVariableTrackingService
 
         if (string.Equals(content, newContent, StringComparison.Ordinal))
         {
-            return false;
+            return PropertyWrite.AlreadyCurrent;
         }
 
         if (!IsExpectedPropertyEdit(doc, newContent, variableInfo.VariableName, newValue))
         {
             _onWarning?.Invoke(
                 $"Not updating $({variableInfo.VariableName}) in '{variableInfo.FilePath}': the edit did not change exactly one definition as expected.");
-            return false;
+            return PropertyWrite.Failed;
         }
 
         propertyFile.Write(_fileSystem, variableInfo.FilePath, newContent);
-        return true;
+        return PropertyWrite.Written;
     }
 
     // Guards the text-level edit against regex/XML disagreements: the edited document must still parse, and
