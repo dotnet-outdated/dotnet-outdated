@@ -309,6 +309,21 @@ public sealed partial class VariableTrackingService
             return;
         }
 
+        var remove = GetAttributeValue(item, "Remove");
+        if (remove != null)
+        {
+            // A removal whose condition can't be evaluated is ignored rather than guessed.
+            if (EvaluateCondition(item, filePath, state, null) == true)
+            {
+                foreach (var name in remove.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                {
+                    slot.Remove(name);
+                }
+            }
+
+            return;
+        }
+
         var packageName = (GetAttributeValue(item, "Include") ?? GetAttributeValue(item, "Update"))?.Trim();
         if (string.IsNullOrEmpty(packageName) ||
             !TryGetPackageVersionExpression(item, out var versionExpression, out var isVersionOverride))

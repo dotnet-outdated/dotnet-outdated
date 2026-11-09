@@ -1496,6 +1496,27 @@ Information(""Outdated Sdk"");")
         }
 
         [Fact]
+        public void Discover_PackageReferenceRemovedAndReincludedWithoutVersion_UsesCentralVersion()
+        {
+            var buildPropsPath = XFS.Path(@"c:\repo\Directory.Build.props");
+            var packagesPropsPath = XFS.Path(@"c:\repo\Directory.Packages.props");
+            var projectPath = XFS.Path(@"c:\repo\src\MyProject\MyProject.csproj");
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                [buildPropsPath] = new("<Project><PropertyGroup><LegacyVersion>1.0.0</LegacyVersion></PropertyGroup>" +
+                                       "<ItemGroup><PackageReference Include=\"Serilog\" VersionOverride=\"$(LegacyVersion)\" /></ItemGroup></Project>"),
+                [packagesPropsPath] = new("<Project><PropertyGroup><SerilogVersion>3.0.0</SerilogVersion></PropertyGroup>" +
+                                          "<ItemGroup><PackageVersion Include=\"Serilog\" Version=\"$(SerilogVersion)\" /></ItemGroup></Project>"),
+                [projectPath] = new("<Project><ItemGroup><PackageReference Remove=\"Serilog\" /><PackageReference Include=\"Serilog\" /></ItemGroup></Project>")
+            });
+
+            var info = new VariableTrackingService(fileSystem).DiscoverPackageVariables(projectPath)["Serilog"];
+            Assert.Equal("SerilogVersion", info.VariableName);
+            Assert.Equal("PackageVersion", info.ElementType);
+            Assert.Equal(packagesPropsPath, info.FilePath);
+        }
+
+        [Fact]
         public void Update_StaleDefinitionAfterDotnetAdd_KeepsTheLiteralVersion()
         {
             var projectPath = XFS.Path(@"c:\repo\MyProject.csproj");
