@@ -1,0 +1,20 @@
+<Project>
+  <Sdk Name="DotNet.ReproducibleBuilds.Isolated" Version="2.0.5" />
+
+  <PropertyGroup>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true' or '$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+
+    <!-- Generate the lock file -->
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+
+    <!-- Restore the exact packages as listed in the lock file -->
+    <RestoreLockedMode Condition="'$(ContinuousIntegrationBuild)' == 'true'">true</RestoreLockedMode>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="DotNet.ReproducibleBuilds" Version="2.0.5">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+</Project>
