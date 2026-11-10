@@ -1,4 +1,5 @@
-﻿using DotNetOutdated.Models;
+﻿using DotNetOutdated.Core.Services;
+using DotNetOutdated.Models;
 using NuGet.Versioning;
 using System.Collections.Generic;
 
@@ -24,6 +25,8 @@ namespace DotNetOutdated
         public bool IsAutoReferenced { get; set; }
 
         public bool IsTransitive { get; set; }
+
+        public ReferenceKind Kind { get; set; }
 
         public NuGetVersion LatestVersion { get; set; }
 

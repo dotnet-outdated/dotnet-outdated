@@ -180,7 +180,7 @@ namespace DotNetOutdated.Tests
         {
             var targetFramework = new TargetFramework(NuGetFramework.Parse("net8.0"));
             targetFramework.Dependencies["Cake.Sdk"] = CreateDependency("Cake.Sdk", isTransitive: false);
-            targetFramework.Dependencies[ProjectSdkReferenceHelper.GetDependencyDictionaryKey("Cake.Sdk")] = CreateDependency("Cake.Sdk", isTransitive: false);
+            targetFramework.Dependencies[ProjectSdkReferenceHelper.GetDependencyDictionaryKey("Cake.Sdk")] = CreateDependency("Cake.Sdk", isTransitive: false, kind: ReferenceKind.Sdk);
 
             SdkInjectedPackageReferences.MarkAsAutoReferenced(
                 targetFramework,
@@ -193,7 +193,7 @@ namespace DotNetOutdated.Tests
         private static HashSet<string> GetPackageDefinedNames(params PackageReferenceItem[] items) =>
             SdkInjectedPackageReferences.GetPackageDefinedNames(new MockFileSystem(), items, [PackagesFolder + System.IO.Path.DirectorySeparatorChar, FallbackFolder]);
 
-        private static Dependency CreateDependency(string name, bool isTransitive, bool isDevelopmentDependency = false) =>
-            new(name, VersionRange.Parse("6.0.0"), NuGetVersion.Parse("6.0.0"), isAutoReferenced: false, isTransitive, isDevelopmentDependency);
+        private static Dependency CreateDependency(string name, bool isTransitive, bool isDevelopmentDependency = false, ReferenceKind kind = ReferenceKind.Package) =>
+            new(name, VersionRange.Parse("6.0.0"), NuGetVersion.Parse("6.0.0"), isAutoReferenced: false, isTransitive, isDevelopmentDependency, kind);
     }
 }

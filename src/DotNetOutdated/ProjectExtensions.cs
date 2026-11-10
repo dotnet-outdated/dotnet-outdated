@@ -23,6 +23,7 @@ namespace DotNetOutdated
                                TargetFramework = f.Name,
                                TargetAlias = f.TargetAlias,
                                Dependency = d.Name,
+                               Kind = d.Kind,
                                ResolvedVersion = d.ResolvedVersion,
                                LatestVersion = d.LatestVersion,
                                IsAutoReferenced = d.IsAutoReferenced,
@@ -35,6 +36,7 @@ namespace DotNetOutdated
             var consolidatedPackages = outdated.GroupBy(p => new
             {
                 p.Dependency,
+                p.Kind,
                 p.ResolvedVersion,
                 p.LatestVersion,
                 p.IsTransitive,
@@ -44,6 +46,7 @@ namespace DotNetOutdated
                 .Select(gp => new ConsolidatedPackage
                 {
                     Name = gp.Key.Dependency,
+                    Kind = gp.Key.Kind,
                     ResolvedVersion = gp.Key.ResolvedVersion,
                     LatestVersion = gp.Key.LatestVersion,
                     IsTransitive = gp.Key.IsTransitive,

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO.Abstractions;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
@@ -13,8 +14,10 @@ namespace DotNetOutdated.Core.Services;
 // <Import>s, in that order). Properties are assigned in document order with last-assignment-wins semantics;
 // items are resolved afterwards against the final property values. Where a condition can't be evaluated
 // statically, a property assigned under it is marked ambiguous so callers can refuse to guess.
-public sealed partial class VariableTrackingService
+internal sealed class MSBuildEvaluator(IFileSystem fileSystem)
 {
+    private readonly IFileSystem _fileSystem = fileSystem;
+
     internal sealed class PropertyDefinition
     {
         public string Name { get; init; }
@@ -40,7 +43,7 @@ public sealed partial class VariableTrackingService
         public PropertyDefinition Link { get; init; }
     }
 
-    private sealed class PackageItem
+    internal sealed class PackageItem
     {
         public string PackageName { get; init; }
         public string ElementType { get; init; }
@@ -49,7 +52,7 @@ public sealed partial class VariableTrackingService
         public bool IsVersionOverride { get; init; }
     }
 
-    private sealed class EvaluationState(string projectPath, string projectDirectory)
+    internal sealed class EvaluationState(string projectPath, string projectDirectory)
     {
         public string ProjectPath { get; } = projectPath;
         public string ProjectDirectory { get; } = projectDirectory;
@@ -65,7 +68,20 @@ public sealed partial class VariableTrackingService
         public List<(XElement Item, XElement Group, string FilePath)> PendingItems { get; } = [];
     }
 
-    private EvaluationState EvaluateProject(string projectFilePath, bool includeProjectFile)
+    /// <summary>
+    /// The MSBuild version variable behind each package version of the project: its evaluated Directory.*.props,
+    /// the project file and Directory.Build.targets. Packages whose version is a literal are left out.
+    /// </summary>
+    public Dictionary<string, PackageVariableInfo> PackageVariables(string projectFilePath) =>
+        _fileSystem.File.Exists(projectFilePath)
+            ? BuildPackageVariables(Evaluate(projectFilePath, includeProjectFile: true))
+            : new Dictionary<string, PackageVariableInfo>(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Evaluates the files MSBuild would import for <paramref name="projectFilePath"/>. Without
+    /// <paramref name="includeProjectFile"/> only the Directory.* files are evaluated, as for a file-based app.
+    /// </summary>
+    public EvaluationState Evaluate(string projectFilePath, bool includeProjectFile)
     {
         var projectFullPath = _fileSystem.Path.GetFullPath(projectFilePath);
         var projectDirectory = _fileSystem.Path.GetDirectoryName(projectFullPath) ?? string.Empty;
@@ -269,7 +285,7 @@ public sealed partial class VariableTrackingService
         PropertyDefinition link = null;
         string value;
 
-        if (TryGetSinglePropertyReference(rawValue, out var referenced) && !IsWellKnownProperty(referenced))
+        if (VersionExpression.TryGetSinglePropertyReference(rawValue, out var referenced) && !IsWellKnownProperty(referenced))
         {
             linkName = referenced;
             state.Properties.TryGetValue(referenced, out link);
@@ -446,7 +462,7 @@ public sealed partial class VariableTrackingService
         string WithTrailingSlash(string dir) =>
             string.IsNullOrEmpty(dir) ? string.Empty : dir.TrimEnd('\\', '/') + _fileSystem.Path.DirectorySeparatorChar;
 
-        string ExpandSimple(string input) => MsBuildPropertyReferenceRegex().Replace(input, match =>
+        string ExpandSimple(string input) => VersionExpression.PropertyReferenceRegex().Replace(input, match =>
         {
             var name = match.Groups[1].Value;
             switch (name.ToUpperInvariant())
@@ -505,7 +521,7 @@ public sealed partial class VariableTrackingService
         return expanded;
     }
 
-    private static bool IsPropertyElement(XElement element) =>
+    internal static bool IsPropertyElement(XElement element) =>
         element.Parent != null &&
         element.Parent.Name.LocalName.Equals("PropertyGroup", StringComparison.OrdinalIgnoreCase);
 
@@ -551,9 +567,9 @@ public sealed partial class VariableTrackingService
             VariableValue = string.Empty,
         };
 
-        if (!TryParseVersionExpression(item.VersionExpression, out var variableName, out _))
+        if (!VersionExpression.TryParse(item.VersionExpression, out var variableName, out _))
         {
-            info.VariableName = MsBuildPropertyReferenceRegex().Match(item.VersionExpression) is { Success: true } m ? m.Groups[1].Value : string.Empty;
+            info.VariableName = VersionExpression.PropertyReferenceRegex().Match(item.VersionExpression) is { Success: true } m ? m.Groups[1].Value : string.Empty;
             info.FilePath = item.FilePath;
             info.UnsupportedReason =
                 $"its version '{item.VersionExpression}' is neither a single property reference nor a range whose lower bound is a property reference";
@@ -622,80 +638,25 @@ public sealed partial class VariableTrackingService
         return info;
     }
 
-    // Matches "[ $(Name) , upper ]" style ranges whose lower bound is exactly one property reference.
-    private static readonly Regex LowerBoundRangeRegex = new(
-        @"^\s*(?<open>[\[(])\s*\$\(\s*(?<name>[A-Za-z_][A-Za-z0-9_.-]*)\s*\)\s*,(?<upper>[^,$\[\]()]*)(?<close>[\])])\s*$",
-        RegexOptions.CultureInvariant);
-
-    /// <summary>
-    /// Parses the version expressions whose variable can be updated without changing what the expression means:
-    /// a single property reference (<c>$(V)</c>) or a range whose lower bound is a property (<c>[$(V), 2.0.0)</c>).
-    /// </summary>
-    internal static bool TryParseVersionExpression(string expression, out string variableName, out bool isRange)
+    private static bool TryGetPackageVersionExpression(XElement element, out string versionValue, out bool isVersionOverride)
     {
-        isRange = false;
-        if (TryGetSinglePropertyReference(expression, out variableName))
+        var overrideValue = GetAttributeOrElementValue(element, "VersionOverride");
+        if (!string.IsNullOrEmpty(overrideValue))
         {
+            versionValue = overrideValue;
+            isVersionOverride = true;
             return true;
         }
 
-        var match = LowerBoundRangeRegex.Match(expression ?? string.Empty);
-        if (!match.Success)
-        {
-            variableName = string.Empty;
-            return false;
-        }
-
-        variableName = match.Groups["name"].Value;
-        isRange = true;
-        return true;
+        versionValue = GetAttributeOrElementValue(element, "Version") ?? string.Empty;
+        isVersionOverride = false;
+        return !string.IsNullOrEmpty(versionValue);
     }
 
-    /// <summary>
-    /// Evaluates a supported version expression for a given value of its variable.
-    /// </summary>
-    internal static bool TryEvaluateVersionExpression(string expression, string variableValue, out VersionRange range)
-    {
-        range = null;
-        if (!TryParseVersionExpression(expression, out var variableName, out var isRange))
-        {
-            return false;
-        }
+    private static string GetAttributeOrElementValue(XElement element, string name) =>
+        GetAttributeValue(element, name) ??
+        element.Elements().FirstOrDefault(e => e.Name.LocalName.Equals(name, StringComparison.OrdinalIgnoreCase))?.Value.Trim();
 
-        if (!isRange)
-        {
-            return VersionRange.TryParse(variableValue ?? string.Empty, out range);
-        }
-
-        var substituted = MsBuildPropertyReferenceRegex().Replace(expression, variableValue ?? string.Empty);
-        return VersionRange.TryParse(substituted, out range);
-    }
-
-    /// <summary>
-    /// The expression to write back for <paramref name="newRange"/>: the original when it already evaluates to
-    /// the requested range with the variable at its new value, otherwise the requested range with the variable
-    /// as its lower bound (so a dropped or changed upper bound is never resurrected).
-    /// </summary>
-    internal static string ComputeVersionExpression(string originalExpression, string variableName, VersionRange newRange)
-    {
-        if (!TryParseVersionExpression(originalExpression, out _, out var isRange) || !isRange)
-        {
-            return originalExpression;
-        }
-
-        if (TryEvaluateVersionExpression(originalExpression, newRange.MinVersion.ToString(), out var evaluated) &&
-            evaluated.Equals(newRange))
-        {
-            return originalExpression;
-        }
-
-        var reference = $"$({variableName})";
-        if (newRange.IsPlainVersion())
-        {
-            return reference;
-        }
-
-        var upper = newRange.HasUpperBound ? newRange.MaxVersion.ToNormalizedString() : string.Empty;
-        return $"{(newRange.IsMinInclusive ? "[" : "(")}{reference}, {upper}{(newRange.IsMaxInclusive ? "]" : ")")}";
-    }
+    private static string GetAttributeValue(XElement element, string name) =>
+        element.Attributes().FirstOrDefault(a => a.Name.LocalName.Equals(name, StringComparison.OrdinalIgnoreCase))?.Value;
 }

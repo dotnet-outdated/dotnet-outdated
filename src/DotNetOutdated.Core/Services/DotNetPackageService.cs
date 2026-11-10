@@ -5,51 +5,50 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Abstractions;
 using System.Linq;
-using System.Text.RegularExpressions;
 using System.Xml;
 using System.Xml.Linq;
 
 namespace DotNetOutdated.Core.Services
 {
-    public class DotNetPackageService(
-        IDotNetRunner dotNetRunner,
-        IFileSystem fileSystem,
-        IVariableTrackingService variableTrackingService,
-        Action<string> onWarning) : IDotNetPackageService
+    /// <summary>
+    /// Upgrades package and SDK references. Where a version is written decides how: literal versions go through
+    /// <c>dotnet add package</c> (with <c>Directory.Packages.props</c> formatting kept), and versions that it can't
+    /// update or would lose (MSBuild properties, SDK declarations, file-based app directives) are rewritten directly.
+    /// </summary>
+    public class DotNetPackageService : IDotNetPackageService
     {
-        public DotNetPackageService(IDotNetRunner dotNetRunner, IFileSystem fileSystem, IVariableTrackingService variableTrackingService)
-            : this(dotNetRunner, fileSystem, variableTrackingService, null)
-        {
-        }
-
-        private readonly Action<string> _onWarning = onWarning;
-        private readonly IDotNetRunner _dotNetRunner = dotNetRunner;
-        private readonly IFileSystem _fileSystem = fileSystem;
-        private readonly IVariableTrackingService _variableTrackingService = variableTrackingService;
+        private readonly Action<string> _onWarning;
+        private readonly IDotNetRunner _dotNetRunner;
+        private readonly IFileSystem _fileSystem;
+        private readonly VersionLocator _versionLocator;
+        private readonly FileBasedAppDirectives _fileBasedAppDirectives;
+        private readonly MSBuildVariableWriter _variableWriter;
 
         // Restores already run for a project after a variable reached a value, so a property shared by several
         // projects (or target frameworks) restores each project once rather than only the first.
         private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _restoredVariableStates =
             new(StringComparer.OrdinalIgnoreCase);
 
-        public RunStatus AddPackage(string projectPath, string packageName, string frameworkName, NuGetVersion version)
+        public DotNetPackageService(IDotNetRunner dotNetRunner, IFileSystem fileSystem, Action<string> onWarning = null)
         {
-            return AddPackage(projectPath, packageName, frameworkName, version, false);
+            _dotNetRunner = dotNetRunner;
+            _fileSystem = fileSystem;
+            _onWarning = onWarning;
+
+            var evaluator = new MSBuildEvaluator(fileSystem);
+            _fileBasedAppDirectives = new FileBasedAppDirectives(fileSystem, evaluator, onWarning);
+            _versionLocator = new VersionLocator(fileSystem, evaluator, _fileBasedAppDirectives);
+            _variableWriter = new MSBuildVariableWriter(fileSystem, onWarning);
         }
 
-        public RunStatus AddPackage(string projectPath, string packageName, string frameworkName, NuGetVersion version, bool noRestore, bool ignoreFailedSources = false)
-        {
-            ArgumentNullException.ThrowIfNull(version);
-
-            return AddPackage(projectPath, packageName, frameworkName, new VersionRange(version), noRestore, ignoreFailedSources);
-        }
-
-        public RunStatus AddPackage(string projectPath, string packageName, string frameworkName, VersionRange versionRange)
-        {
-            return AddPackage(projectPath, packageName, frameworkName, versionRange, false);
-        }
-
-        public RunStatus AddPackage(string projectPath, string packageName, string frameworkName, VersionRange versionRange, bool noRestore, bool ignoreFailedSources = false)
+        public RunStatus AddPackage(
+            string projectPath,
+            string packageName,
+            string frameworkName,
+            VersionRange versionRange,
+            bool noRestore = false,
+            bool ignoreFailedSources = false,
+            ReferenceKind kind = ReferenceKind.Package)
         {
             ArgumentNullException.ThrowIfNull(versionRange);
             if (!versionRange.HasLowerBound)
@@ -57,203 +56,171 @@ namespace DotNetOutdated.Core.Services
                 throw new ArgumentException($"Version range '{versionRange}' must have a lower bound.", nameof(versionRange));
             }
 
-            // Paths that can only express a single version (file-based app variables, #:sdk) use the lower bound.
-            var version = versionRange.MinVersion;
-
-            // Check if this package uses a variable reference
-            var variables = _variableTrackingService.DiscoverPackageVariables(projectPath);
-            variables.TryGetValue(packageName, out PackageVariableInfo variableInfo);
-
-            if (variableInfo?.ElementType == PackageVariableInfo.FileBasedPackageDirectiveElementType ||
-                variableInfo?.ElementType == PackageVariableInfo.FileBasedSdkDirectiveElementType)
+            var options = new UpgradeOptions(projectPath, packageName, frameworkName, versionRange, noRestore, ignoreFailedSources);
+            return _versionLocator.Locate(projectPath, packageName, kind) switch
             {
-                if (!_variableTrackingService.TryUpdatePackageVariable(variableInfo, version) &&
-                    !IsFileBasedAppVariableAtRequestedVersion(variableInfo, version))
-                {
-                    return FileBasedAppUpdateFailed(
-                        projectPath,
-                        packageName,
-                        "Could not update the matching #:property value or #:package/#:sdk directive.");
-                }
+                NotEditable notEditable => Failure(notEditable.Message),
+                FileBasedVariableVersion location => UpdateFileBasedVariable(location.Variable, options),
+                FileBasedDirectiveVersion location => UpdateFileBasedDirective(location.Reference, options),
+                ProjectSdkVersion location => UpdateProjectSdk(location.Sdk, options),
+                MSBuildVariableVersion location when noRestore || !location.DotNetAddCanUpdate =>
+                    UpdateVariable(location.Variable, options),
+                MSBuildVariableVersion location => AddWithDotNet(options, location.Variable),
+                LiteralVersion location => UpdateLiteral(location, options),
+                var location => throw new InvalidOperationException($"Unexpected version location {location}."),
+            };
+        }
 
-                return noRestore
-                    ? new RunStatus(string.Empty, string.Empty, 0)
-                    : RestoreProject(projectPath, ignoreFailedSources);
+        private sealed record UpgradeOptions(
+            string ProjectPath,
+            string PackageName,
+            string FrameworkName,
+            VersionRange VersionRange,
+            bool NoRestore,
+            bool IgnoreFailedSources)
+        {
+            // Locations that can only hold a single version (file-based app directives, SDKs) take the lower bound.
+            public NuGetVersion Version => VersionRange.MinVersion;
+        }
+
+        private RunStatus UpdateFileBasedVariable(PackageVariableInfo variableInfo, UpgradeOptions options)
+        {
+            if (!_fileBasedAppDirectives.TryUpdateVariable(variableInfo, options.Version) &&
+                !IsFileBasedAppVariableAtRequestedVersion(variableInfo, options.Version))
+            {
+                return Failure(
+                    $"Failed to update file-based app '{options.ProjectPath}' for '{options.PackageName}'. " +
+                    "Could not update the matching #:property value or #:package/#:sdk directive.");
             }
 
-            if (projectPath.IsCSharpFile())
+            return RestoreUnlessDisabled(options);
+        }
+
+        private RunStatus UpdateFileBasedDirective(FileBasedAppReference reference, UpgradeOptions options)
+        {
+            if (!_fileBasedAppDirectives.TryUpdateDirectReference(options.ProjectPath, reference.Name, reference.Kind, options.Version) &&
+                reference.ResolvedVersion != options.Version)
             {
-                var fileBasedReference = _variableTrackingService.DiscoverFileBasedAppReferences(projectPath)
-                    .FirstOrDefault(reference =>
-                        string.Equals(reference.Name, packageName, StringComparison.OrdinalIgnoreCase) &&
-                        reference.VariableInfo == null);
-
-                if (fileBasedReference?.Kind == FileBasedAppReferenceKind.Sdk)
-                {
-                    if (fileBasedReference.UsesPropertyReferences)
-                    {
-                        return FileBasedAppUpdateFailed(
-                            projectPath,
-                            packageName,
-                            "Direct #:sdk updates require a literal id@version (for example #:sdk Cake.Sdk@6.0.0); " +
-                            "property references in the name or version must be changed via #:property lines.");
-                    }
-
-                    if (!_variableTrackingService.UpdateFileBasedAppDirectReference(projectPath, packageName, fileBasedReference.Kind, version) &&
-                        !IsFileBasedAppDirectReferenceAtRequestedVersion(fileBasedReference, version))
-                    {
-                        return FileBasedAppUpdateFailed(
-                            projectPath,
-                            packageName,
-                            $"Expected a literal #:sdk {packageName}@<version> directive (id match is case-insensitive; trailing comments are preserved).");
-                    }
-
-                    return noRestore
-                        ? new RunStatus(string.Empty, string.Empty, 0)
-                        : RestoreProject(projectPath, ignoreFailedSources);
-                }
-            }
-            else
-            {
-                // `dotnet add package` cannot update an MSBuild project SDK, so rewrite its version in the project file.
-                var sdkReference = ProjectSdkReferenceHelper.Discover(_fileSystem, projectPath)
-                    .FirstOrDefault(reference => string.Equals(reference.Name, packageName, StringComparison.OrdinalIgnoreCase));
-
-                if (sdkReference != null)
-                {
-                    bool updated;
-                    try
-                    {
-                        updated = ProjectSdkReferenceHelper.TryUpdate(_fileSystem, projectPath, packageName, version);
-                    }
-                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-                    {
-                        return new RunStatus(
-                            string.Empty,
-                            $"Failed to update the version of SDK '{packageName}' in '{projectPath}': {ex.Message}",
-                            1);
-                    }
-
-                    if (!updated)
-                    {
-                        // Already at the requested version: a multi-targeted project gets one call per target
-                        // framework, and the first call has already rewritten the file and restored.
-                        return sdkReference.ResolvedVersion == version
-                            ? new RunStatus(string.Empty, string.Empty, 0)
-                            : new RunStatus(
-                                string.Empty,
-                                $"Failed to update the version of SDK '{packageName}' in '{projectPath}'.",
-                                1);
-                    }
-
-                    return noRestore
-                        ? new RunStatus(string.Empty, string.Empty, 0)
-                        : RestoreProject(projectPath, ignoreFailedSources);
-                }
+                return Failure(
+                    $"Failed to update file-based app '{options.ProjectPath}' for '{options.PackageName}'. " +
+                    $"Expected a literal #:sdk {options.PackageName}@<version> directive (id match is case-insensitive; trailing comments are preserved).");
             }
 
-            // `dotnet add package` cannot edit these references (GlobalPackageReference, VersionOverride, or a
-            // PackageReference defined in an imported .props file), so their variable must be updated directly.
-            bool dotnetAddCannotUpdate =
-                variableInfo != null &&
-                (variableInfo.ElementType == "GlobalPackageReference" ||
-                 variableInfo.IsVersionOverride ||
-                 (variableInfo.ElementType == "PackageReference" &&
-                  !string.Equals(variableInfo.PackageReferenceFilePath, projectPath, StringComparison.OrdinalIgnoreCase)));
+            return RestoreUnlessDisabled(options);
+        }
 
-            if (variableInfo?.UnsupportedReason != null)
+        // `dotnet add package` cannot update an MSBuild project SDK, so rewrite its version in the project file.
+        private RunStatus UpdateProjectSdk(ProjectSdkReference sdk, UpgradeOptions options)
+        {
+            bool updated;
+            try
             {
-                if (dotnetAddCannotUpdate)
-                {
-                    return new RunStatus(
-                        string.Empty,
-                        $"Could not update '{packageName}' in '{variableInfo.PackageReferenceFilePath}': {variableInfo.UnsupportedReason}. " +
-                        "Update the version manually.",
-                        1);
-                }
-
-                // Treat it like a literal version: the expression is replaced with the new version.
-                _onWarning?.Invoke(
-                    $"'{packageName}' in '{variableInfo.PackageReferenceFilePath}' will be set to a literal version because " +
-                    $"{variableInfo.UnsupportedReason}; its version expression '{variableInfo.PackageReferenceVersion}' is not preserved.");
-                variableInfo = null;
+                updated = ProjectSdkReferenceHelper.TryUpdate(_fileSystem, options.ProjectPath, options.PackageName, options.Version);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return Failure($"Failed to update the version of SDK '{options.PackageName}' in '{options.ProjectPath}': {ex.Message}");
             }
 
-            // Also update the variable directly when --no-restore is used (avoiding NuGet/Home#12552).
-            if (variableInfo != null && (noRestore || dotnetAddCannotUpdate))
+            if (!updated)
             {
-                var updated = _variableTrackingService.TryUpdatePackageVariable(variableInfo, versionRange);
+                // Already at the requested version: a multi-targeted project gets one call per target
+                // framework, and the first call has already rewritten the file and restored.
+                return sdk.ResolvedVersion == options.Version
+                    ? Success()
+                    : Failure($"Failed to update the version of SDK '{options.PackageName}' in '{options.ProjectPath}'.");
+            }
 
-                // No change is fine when the property already holds the requested value (e.g. the second target
-                // framework of a multi-targeted project, or another project sharing the same property).
-                if (!updated && !IsVariableAtRequestedVersionRange(variableInfo, versionRange))
-                {
-                    return new RunStatus(
-                        string.Empty,
-                        $"Failed to update '{packageName}': could not write '{versionRange.ToVersionString()}' to the " +
-                        $"$({variableInfo.VariableName}) property in '{variableInfo.FilePath}'.",
-                        1);
-                }
+            return RestoreUnlessDisabled(options);
+        }
 
-                if (noRestore)
-                {
-                    return new RunStatus(string.Empty, string.Empty, 0);
-                }
+        // Writes the variable directly: with --no-restore (avoiding NuGet/Home#12552), or where `dotnet add package`
+        // can't edit the reference.
+        private RunStatus UpdateVariable(PackageVariableInfo variableInfo, UpgradeOptions options)
+        {
+            var versionRange = options.VersionRange;
+            var updated = _variableWriter.TryUpdate(variableInfo, versionRange);
 
-                var restoreKey = string.Join(
-                    "|", _fileSystem.Path.GetFullPath(projectPath), variableInfo.FilePath, variableInfo.VariableName, versionRange.ToVersionString());
-                if (!updated && _restoredVariableStates.ContainsKey(restoreKey))
-                {
-                    return new RunStatus(string.Empty, string.Empty, 0);
-                }
+            // No change is fine when the property already holds the requested value (e.g. the second target
+            // framework of a multi-targeted project, or another project sharing the same property).
+            if (!updated && !MSBuildVariableWriter.IsAtVersionRange(variableInfo, versionRange))
+            {
+                return Failure(
+                    $"Failed to update '{options.PackageName}': could not write '{versionRange.ToVersionString()}' to the " +
+                    $"$({variableInfo.VariableName}) property in '{variableInfo.FilePath}'.");
+            }
 
-                var restoreStatus = RestoreProject(projectPath, ignoreFailedSources);
-                if (restoreStatus.IsSuccess)
-                {
-                    _restoredVariableStates[restoreKey] = true;
-                }
+            if (options.NoRestore)
+            {
+                return Success();
+            }
 
-                return restoreStatus;
+            var restoreKey = string.Join(
+                "|", _fileSystem.Path.GetFullPath(options.ProjectPath), variableInfo.FilePath, variableInfo.VariableName, versionRange.ToVersionString());
+            if (!updated && _restoredVariableStates.ContainsKey(restoreKey))
+            {
+                return Success();
+            }
+
+            var restoreStatus = RestoreProject(options);
+            if (restoreStatus.IsSuccess)
+            {
+                _restoredVariableStates[restoreKey] = true;
+            }
+
+            return restoreStatus;
+        }
+
+        private RunStatus UpdateLiteral(LiteralVersion location, UpgradeOptions options)
+        {
+            if (location.Warning != null)
+            {
+                _onWarning?.Invoke(location.Warning);
             }
 
             // When --no-restore is used, `dotnet add package` has an upstream bug where it writes
             // version info to .csproj instead of Directory.Packages.props for CPM projects.
             // See: https://github.com/NuGet/Home/issues/12552
-            if (noRestore)
+            if (options.NoRestore)
             {
-                // For CPM projects without a variable reference, update Directory.Packages.props directly.
-                switch (TryUpdateCentralPackageVersion(projectPath, packageName, versionRange, out var centralPackagesPath))
+                switch (TryUpdateCentralPackageVersion(options.ProjectPath, options.PackageName, options.VersionRange, out var centralPackagesPath))
                 {
                     case CentralPackageVersionUpdate.Updated:
-                        return new RunStatus(string.Empty, string.Empty, 0);
+                        return Success();
                     case CentralPackageVersionUpdate.NoMatchingEntry:
                         // Don't fall back to `dotnet add package --no-restore`: it would write the
                         // version into the project file (NuGet/Home#12552).
-                        return new RunStatus(
-                            string.Empty,
-                            $"Could not update '{packageName}' in '{centralPackagesPath}': no <PackageVersion> or <GlobalPackageReference> " +
-                            "element was found with an Include or Update attribute and a Version attribute. Update the version manually.",
-                            1);
+                        return Failure(
+                            $"Could not update '{options.PackageName}' in '{centralPackagesPath}': no <PackageVersion> or <GlobalPackageReference> " +
+                            "element was found with an Include or Update attribute and a Version attribute. Update the version manually.");
                 }
             }
 
+            return AddWithDotNet(options, variableInfo: null);
+        }
+
+        // Runs `dotnet add package`, then puts back what it loses: the Directory.Packages.props layout and, when the
+        // version came from a variable, the variable reference.
+        private RunStatus AddWithDotNet(UpgradeOptions options, PackageVariableInfo variableInfo)
+        {
+            var projectPath = options.ProjectPath;
             string projectName = _fileSystem.Path.GetFileName(projectPath);
 
             // The formatting replay writes back exactly the text passed to `dotnet add package -v`.
-            var versionText = versionRange.ToVersionString();
-            List<string> arguments = ["add", projectName, "package", packageName, "-v", versionText];
+            var versionText = options.VersionRange.ToVersionString();
+            List<string> arguments = ["add", projectName, "package", options.PackageName, "-v", versionText];
             // File-based apps declare TargetFramework via #:property; dotnet add rejects -f on .cs paths with newer SDKs.
             if (!projectPath.IsCSharpFile())
             {
                 arguments.Add("-f");
-                arguments.Add(frameworkName);
+                arguments.Add(options.FrameworkName);
             }
 
-            if (noRestore)
+            if (options.NoRestore)
             {
                 arguments.Add("--no-restore");
             }
-            if (ignoreFailedSources)
+            if (options.IgnoreFailedSources)
             {
                 arguments.Add("--ignore-failed-sources");
             }
@@ -268,14 +235,13 @@ namespace DotNetOutdated.Core.Services
             {
                 foreach (var original in originalCentralPackages)
                 {
-                    PreserveCentralPackagesFormatting(original.File, original.Bytes, packageName, versionText);
+                    PreserveCentralPackagesFormatting(original.File, original.Bytes, options.PackageName, versionText);
                 }
-            }
 
-            // If the package originally used a variable reference, restore it after the update
-            if (result.IsSuccess && variableInfo != null)
-            {
-                _variableTrackingService.UpdatePackageVariable(variableInfo, versionRange);
+                if (variableInfo != null)
+                {
+                    _variableWriter.TryUpdate(variableInfo, options.VersionRange);
+                }
             }
 
             return result;
@@ -289,16 +255,19 @@ namespace DotNetOutdated.Core.Services
             return _dotNetRunner.Run(_fileSystem.Path.GetDirectoryName(projectPath), arguments);
         }
 
-        private RunStatus RestoreProject(string projectPath, bool ignoreFailedSources)
+        private RunStatus RestoreUnlessDisabled(UpgradeOptions options) =>
+            options.NoRestore ? Success() : RestoreProject(options);
+
+        private RunStatus RestoreProject(UpgradeOptions options)
         {
-            var projectName = _fileSystem.Path.GetFileName(projectPath);
+            var projectName = _fileSystem.Path.GetFileName(options.ProjectPath);
             List<string> arguments = ["restore", projectName];
-            if (ignoreFailedSources)
+            if (options.IgnoreFailedSources)
             {
                 arguments.Add("--ignore-failed-sources");
             }
 
-            return _dotNetRunner.Run(_fileSystem.Path.GetDirectoryName(projectPath), [.. arguments]);
+            return _dotNetRunner.Run(_fileSystem.Path.GetDirectoryName(options.ProjectPath), [.. arguments]);
         }
 
         private enum CentralPackageVersionUpdate
@@ -422,11 +391,9 @@ namespace DotNetOutdated.Core.Services
             }
         }
 
-        private static RunStatus FileBasedAppUpdateFailed(string projectPath, string packageName, string hint) =>
-            new(
-                string.Empty,
-                $"Failed to update file-based app '{projectPath}' for '{packageName}'. {hint}",
-                1);
+        private static RunStatus Success() => new(string.Empty, string.Empty, 0);
+
+        private static RunStatus Failure(string message) => new(string.Empty, message, 1);
 
         private static bool IsFileBasedAppVariableAtRequestedVersion(PackageVariableInfo variableInfo, NuGetVersion version)
         {
@@ -437,18 +404,5 @@ namespace DotNetOutdated.Core.Services
 
             return string.Equals(variableInfo.VariableValue, version.ToString(), StringComparison.OrdinalIgnoreCase);
         }
-
-        private static bool IsVariableAtRequestedVersionRange(PackageVariableInfo variableInfo, VersionRange versionRange)
-        {
-            var expression = string.IsNullOrWhiteSpace(variableInfo.PackageReferenceVersion)
-                ? $"$({variableInfo.VariableName})"
-                : variableInfo.PackageReferenceVersion;
-
-            return VariableTrackingService.TryEvaluateVersionExpression(expression, variableInfo.VariableValue, out var current) &&
-                   current.Equals(versionRange);
-        }
-
-        private static bool IsFileBasedAppDirectReferenceAtRequestedVersion(FileBasedAppReference reference, NuGetVersion version) =>
-            reference.ResolvedVersion == version;
     }
 }

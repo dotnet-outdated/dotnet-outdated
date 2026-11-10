@@ -82,7 +82,7 @@ internal static partial class ProjectSdkReferenceHelper
     /// so an SDK and a package with the same id do not collide.
     /// </summary>
     public static string GetDependencyDictionaryKey(string name) =>
-        FileBasedAppReferenceHelper.GetDependencyDictionaryKey(name, FileBasedAppReferenceKind.Sdk);
+        FileBasedAppReferenceHelper.GetDependencyDictionaryKey(name, ReferenceKind.Sdk);
 
     /// <summary>
     /// Reads every MSBuild project SDK declared in a project file: the <c>Sdk</c> attribute of the root

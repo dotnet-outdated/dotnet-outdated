@@ -223,7 +223,13 @@ namespace DotNetOutdated
                             projectPath = new { type = "string", description = "Path to the project or .cs file-based app" },
                             packageName = new { type = "string", description = "Name of the package" },
                             version = new { type = "string", description = "Version to upgrade to" },
-                            framework = new { type = "string", description = "Target framework" }
+                            framework = new { type = "string", description = "Target framework" },
+                            kind = new
+                            {
+                                type = "string",
+                                @enum = new[] { "package", "sdk" },
+                                description = "Whether packageName is a package or an MSBuild SDK, as reported by analyze_project (default: package)"
+                            }
                         },
                         required = new[] { "projectPath", "packageName", "version", "framework" }
                     }
@@ -383,6 +389,7 @@ namespace DotNetOutdated
                             latestVersion = latestVersion?.ToString(),
                             isAutoReferenced = dep.IsAutoReferenced,
                             isTransitive = dep.IsTransitive,
+                            kind = dep.Kind == ReferenceKind.Sdk ? "sdk" : "package",
                             upgradeSeverity = GetUpgradeSeverity(dep.ResolvedVersion, latestVersion)
                         });
                     }
@@ -430,7 +437,18 @@ namespace DotNetOutdated
                  throw new ArgumentException("framework is required");
             }
 
-            RunStatus status = _dotNetPackageService.AddPackage(projectPath, packageName, framework, version);
+            var kind = ReferenceKind.Package;
+            if (arguments.TryGetProperty("kind", out var kindProp) && kindProp.ValueKind != JsonValueKind.Null)
+            {
+                kind = (kindProp.ValueKind == JsonValueKind.String ? kindProp.GetString()?.ToLowerInvariant() : null) switch
+                {
+                    "package" => ReferenceKind.Package,
+                    "sdk" => ReferenceKind.Sdk,
+                    _ => throw new ArgumentException($"Invalid kind: {kindProp.GetRawText()}. Expected \"package\" or \"sdk\"."),
+                };
+            }
+
+            RunStatus status = _dotNetPackageService.AddPackage(projectPath, packageName, framework, new VersionRange(version), kind: kind);
 
             if (status.IsSuccess)
             {
