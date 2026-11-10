@@ -205,6 +205,35 @@ namespace DotNetOutdated.Tests
             Assert.Contains("Successfully updated Aspire.AppHost.Sdk to 9.1.0", output);
         }
 
+        [Theory]
+        [InlineData("1")]
+        [InlineData("true")]
+        [InlineData("\"\"")]
+        [InlineData("\"nuget\"")]
+        public async Task UpdatePackage_WithInvalidKind_ReturnsErrorWithoutUpdating(string kindJson)
+        {
+            var input = "{\"jsonrpc\": \"2.0\", \"method\": \"tools/call\", \"params\": { \"name\": \"update_package\", \"arguments\": " +
+                "{ \"projectPath\": \"/test/p.csproj\", \"packageName\": \"Newtonsoft.Json\", \"version\": \"13.0.1\", \"framework\": \"net8.0\", \"kind\": " + kindJson + " } }, \"id\": 7}\n";
+
+            var output = await RunServerAsync(input);
+
+            Assert.Contains("Invalid kind", output);
+            _dotNetPackageService.DidNotReceiveWithAnyArgs().AddPackage(default, default, default, default(VersionRange));
+        }
+
+        [Fact]
+        public async Task UpdatePackage_WithNullKind_UpdatesThePackage()
+        {
+            var input = "{\"jsonrpc\": \"2.0\", \"method\": \"tools/call\", \"params\": { \"name\": \"update_package\", \"arguments\": " +
+                "{ \"projectPath\": \"/test/p.csproj\", \"packageName\": \"Newtonsoft.Json\", \"version\": \"13.0.1\", \"framework\": \"net8.0\", \"kind\": null } }, \"id\": 8}\n";
+            _dotNetPackageService.AddPackage("/test/p.csproj", "Newtonsoft.Json", "net8.0", new VersionRange(new NuGetVersion("13.0.1")), kind: ReferenceKind.Package)
+                .Returns(new RunStatus("", "", 0));
+
+            var output = await RunServerAsync(input);
+
+            Assert.Contains("Successfully updated Newtonsoft.Json to 13.0.1", output);
+        }
+
         [Fact]
         public async Task UpdatePackage_WhenAddPackageFails_ReturnsOutputAndErrors()
         {

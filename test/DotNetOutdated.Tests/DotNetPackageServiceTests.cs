@@ -1196,6 +1196,38 @@ Information(""Outdated Sdk"");")
         }
 
         [Theory]
+        [InlineData(false, ReferenceKind.Package)]
+        [InlineData(false, ReferenceKind.Sdk)]
+        [InlineData(true, ReferenceKind.Package)]
+        [InlineData(true, ReferenceKind.Sdk)]
+        public void FileBasedAppSdkAndPackageWithTheSameId_UpdatesOnlyTheRequestedKindsProperty(bool sdkFirst, ReferenceKind kind)
+        {
+            var appPath = XFS.Path(@"c:\repo\app.cs");
+            const string packageLine = "#:package Cake.Sdk@$(PackageVersion)\n";
+            const string sdkLine = "#:sdk Cake.Sdk@$(SdkVersion)\n";
+            var original =
+                "#:property PackageVersion=6.0.0\n" +
+                "#:property SdkVersion=6.0.0\n" +
+                (sdkFirst ? sdkLine + packageLine : packageLine + sdkLine) +
+                "Console.WriteLine();\n";
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { appPath, new MockFileData(original) }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
+
+            var result = service.AddPackage(appPath, "Cake.Sdk", "net10.0", new VersionRange(new NuGetVersion("6.1.0")), noRestore: true, kind: kind);
+
+            Assert.True(result.IsSuccess, result.FailureDetails);
+            dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
+            var updatedProperty = kind == ReferenceKind.Sdk ? "SdkVersion" : "PackageVersion";
+            Assert.Equal(
+                original.Replace($"#:property {updatedProperty}=6.0.0", $"#:property {updatedProperty}=6.1.0"),
+                mockFileSystem.File.ReadAllText(appPath));
+        }
+
+        [Theory]
         [InlineData("#:sdk Cake.Sdk@6.0.0\n", ReferenceKind.Sdk)]
         [InlineData("#:property CakeVersion=6.0.0\n#:package Cake.Core@$(CakeVersion)\n", ReferenceKind.Package)]
         public void FileBasedApp_Update_PreservesByteOrderMark(string content, ReferenceKind kind)

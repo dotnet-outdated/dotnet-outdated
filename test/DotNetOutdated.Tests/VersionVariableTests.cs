@@ -22,10 +22,22 @@ namespace DotNetOutdated.Tests
             private readonly MSBuildVariableWriter _writer = new(fileSystem, onWarning);
             private FileBasedAppDirectives Directives => new(fileSystem, _evaluator, onWarning);
 
-            public Dictionary<string, PackageVariableInfo> DiscoverPackageVariables(string projectFilePath) =>
-                projectFilePath.IsCSharpFile()
-                    ? Directives.PackageVariables(projectFilePath)
-                    : _evaluator.PackageVariables(projectFilePath);
+            // For a file-based app, the package and SDK variables together (the tests don't reuse an id across kinds).
+            public Dictionary<string, PackageVariableInfo> DiscoverPackageVariables(string projectFilePath)
+            {
+                if (!projectFilePath.IsCSharpFile())
+                {
+                    return _evaluator.PackageVariables(projectFilePath);
+                }
+
+                var variables = Directives.PackageVariables(projectFilePath, ReferenceKind.Package);
+                foreach (var (name, variableInfo) in Directives.PackageVariables(projectFilePath, ReferenceKind.Sdk))
+                {
+                    variables.Add(name, variableInfo);
+                }
+
+                return variables;
+            }
 
             public IReadOnlyList<FileBasedAppReference> DiscoverFileBasedAppReferences(string projectFilePath) =>
                 Directives.References(projectFilePath);

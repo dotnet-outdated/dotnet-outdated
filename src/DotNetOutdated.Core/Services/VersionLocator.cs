@@ -54,8 +54,7 @@ internal sealed class VersionLocator(IFileSystem fileSystem, MSBuildEvaluator ev
 
     private VersionLocation LocateInFileBasedApp(string projectPath, string name, ReferenceKind kind)
     {
-        if (_fileBasedAppDirectives.PackageVariables(projectPath).TryGetValue(name, out var variableInfo) &&
-            variableInfo.ReferenceKind == kind)
+        if (_fileBasedAppDirectives.PackageVariables(projectPath, kind).TryGetValue(name, out var variableInfo))
         {
             return new FileBasedVariableVersion(variableInfo);
         }

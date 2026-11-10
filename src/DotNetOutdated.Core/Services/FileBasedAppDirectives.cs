@@ -48,7 +48,7 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, MSB
         var scan = Scan(projectFilePath);
         var references = new List<FileBasedAppReference>(scan.LiteralReferences);
 
-        foreach (var variableInfo in scan.PackageVariables.Values)
+        foreach (var variableInfo in scan.PackageVariables.Values.Concat(scan.SdkVariables.Values))
         {
             if (!variableInfo.IsFileBasedDirective ||
                 !NuGetVersion.TryParse(variableInfo.VariableValue, out var resolvedVersion))
@@ -75,11 +75,20 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, MSB
         ];
     }
 
-    /// <summary>The property behind each property-backed directive version, keyed by the resolved package or SDK id.</summary>
-    public Dictionary<string, PackageVariableInfo> PackageVariables(string projectFilePath) =>
-        projectFilePath.IsCSharpFile() && _fileSystem.File.Exists(projectFilePath)
-            ? Scan(projectFilePath).PackageVariables
-            : new Dictionary<string, PackageVariableInfo>(StringComparer.OrdinalIgnoreCase);
+    /// <summary>
+    /// The property behind each property-backed <c>#:package</c> or <c>#:sdk</c> directive version, keyed by the
+    /// resolved id. Packages and SDKs are kept apart, since an app can declare a package and an SDK with the same id.
+    /// </summary>
+    public Dictionary<string, PackageVariableInfo> PackageVariables(string projectFilePath, ReferenceKind kind)
+    {
+        if (!projectFilePath.IsCSharpFile() || !_fileSystem.File.Exists(projectFilePath))
+        {
+            return new Dictionary<string, PackageVariableInfo>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        var scan = Scan(projectFilePath);
+        return kind == ReferenceKind.Sdk ? scan.SdkVariables : scan.PackageVariables;
+    }
 
     /// <summary>Rewrites the version of a literal <c>#:package Id@Version</c> or <c>#:sdk Id@Version</c> directive.</summary>
     /// <returns><see langword="true"/> when the directive line was changed.</returns>
@@ -228,11 +237,15 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, MSB
         return true;
     }
 
-    private sealed record ScanResult(Dictionary<string, PackageVariableInfo> PackageVariables, List<FileBasedAppReference> LiteralReferences);
+    private sealed record ScanResult(
+        Dictionary<string, PackageVariableInfo> PackageVariables,
+        Dictionary<string, PackageVariableInfo> SdkVariables,
+        List<FileBasedAppReference> LiteralReferences);
 
     private ScanResult Scan(string projectFilePath)
     {
         var packageVariables = new Dictionary<string, PackageVariableInfo>(StringComparer.OrdinalIgnoreCase);
+        var sdkVariables = new Dictionary<string, PackageVariableInfo>(StringComparer.OrdinalIgnoreCase);
         var literalReferences = new List<FileBasedAppReference>();
         var propertyDefinitions = new Dictionary<string, (string Value, string FilePath)>(StringComparer.OrdinalIgnoreCase);
 
@@ -261,7 +274,7 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, MSB
             var sdkMatch = SdkDirectiveLineRegex().Match(line);
             if (sdkMatch.Success)
             {
-                ScanSdkLine(sdkMatch.Groups[1].Value, projectFilePath, propertyDefinitions, packageVariables);
+                ScanSdkLine(sdkMatch.Groups[1].Value, projectFilePath, propertyDefinitions, sdkVariables);
                 if (TryCreateReference(sdkMatch.Groups[1].Value, propertyDefinitions, ReferenceKind.Sdk, out var sdkReference))
                 {
                     literalReferences.Add(sdkReference);
@@ -269,7 +282,7 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, MSB
             }
         }
 
-        return new ScanResult(packageVariables, literalReferences);
+        return new ScanResult(packageVariables, sdkVariables, literalReferences);
     }
 
     // Properties visible to a file-based app from Directory.Build.props and friends (raw values, for chain resolution).

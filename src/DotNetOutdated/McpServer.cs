@@ -438,13 +438,13 @@ namespace DotNetOutdated
             }
 
             var kind = ReferenceKind.Package;
-            if (arguments.TryGetProperty("kind", out var kindProp) && kindProp.ValueKind == JsonValueKind.String)
+            if (arguments.TryGetProperty("kind", out var kindProp) && kindProp.ValueKind != JsonValueKind.Null)
             {
-                kind = kindProp.GetString()?.ToLowerInvariant() switch
+                kind = (kindProp.ValueKind == JsonValueKind.String ? kindProp.GetString()?.ToLowerInvariant() : null) switch
                 {
-                    "package" or null or "" => ReferenceKind.Package,
+                    "package" => ReferenceKind.Package,
                     "sdk" => ReferenceKind.Sdk,
-                    var other => throw new ArgumentException($"Invalid kind: {other}. Expected 'package' or 'sdk'."),
+                    _ => throw new ArgumentException($"Invalid kind: {kindProp.GetRawText()}. Expected \"package\" or \"sdk\"."),
                 };
             }
 
