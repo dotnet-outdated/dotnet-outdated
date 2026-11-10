@@ -4,14 +4,14 @@
   </PropertyGroup>
   <ItemGroup>
     <!-- open range: capped by -mv -->
-    <PackageReference Include="System.Text.Json" Version="6.0.0" />
+    <PackageReference Include="DotNetOutdated.Fake.TextJson" Version="6.0.0" />
     <!-- exact pin below -mv: must not be reported -->
-    <PackageReference Include="System.Text.Encodings.Web" Version="[6.0.0]" />
+    <PackageReference Include="DotNetOutdated.Fake.TextEncodings" Version="[6.0.0]" />
     <!-- exact pin above -mv: must not be reported -->
-    <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="[9.0.0]" />
+    <PackageReference Include="DotNetOutdated.Fake.AsyncInterfaces" Version="[9.0.0]" />
     <!-- range with upper bound below -mv: upper bound must win -->
-    <PackageReference Include="Microsoft.Extensions.Options" Version="[6.0.0, 7.0.0)" />
+    <PackageReference Include="DotNetOutdated.Fake.Options" Version="[6.0.0, 7.0.0)" />
     <!-- range with upper bound above -mv: -mv must win -->
-    <PackageReference Include="Microsoft.Extensions.Logging" Version="[6.0.0, 10.0.0)" />
+    <PackageReference Include="DotNetOutdated.Fake.Logging" Version="[6.0.0, 10.0.0)" />
   </ItemGroup>
 </Project>

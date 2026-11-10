@@ -1,6 +1,6 @@
 <Project>
   <PropertyGroup>
-    <NewtonsoftJsonVersion>11.0.1</NewtonsoftJsonVersion>
-    <MicrosoftExtensionsVersion>2.1.0</MicrosoftExtensionsVersion>
+    <FakeJsonVersion>11.0.1</FakeJsonVersion>
+    <FakeExtensionsVersion>2.1.0</FakeExtensionsVersion>
   </PropertyGroup>
 </Project>

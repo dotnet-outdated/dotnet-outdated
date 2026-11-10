@@ -4,10 +4,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="coverlet.msbuild" Version="2.3.0" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="2.4.0" />
-    <PackageReference Include="StyleCop.Analyzers" Version="1.0.0" />
-    <PackageReference Include="Microsoft.CodeQuality.Analyzers" Version="2.6.0" />
+    <PackageReference Include="DotNetOutdated.Fake.Coverage" Version="2.3.0" />
+    <PackageReference Include="DotNetOutdated.Fake.TestAdapter" Version="2.4.0" />
+    <PackageReference Include="DotNetOutdated.Fake.StyleAnalyzers" Version="1.0.0" />
+    <PackageReference Include="DotNetOutdated.Fake.QualityAnalyzers" Version="2.6.0" />
   </ItemGroup>
 
 

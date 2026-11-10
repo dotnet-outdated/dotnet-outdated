@@ -4,7 +4,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Newtonsoft.Json" />
-    <PackageReference Include="Microsoft.Extensions.Logging" />
+    <PackageReference Include="DotNetOutdated.Fake.Json" />
+    <PackageReference Include="DotNetOutdated.Fake.Logging" />
   </ItemGroup>
 </Project>

@@ -1,9 +1,9 @@
 <Project>
-  <Import Project="Sdk.props" Sdk="Microsoft.Build.NoTargets" Version="3.7.0" />
+  <Import Project="Sdk.props" Sdk="DotNetOutdated.Fake.NoTargets.Sdk" Version="3.7.0" />
 
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
   </PropertyGroup>
 
-  <Import Project="Sdk.targets" Sdk="Microsoft.Build.NoTargets" Version="3.7.0" />
+  <Import Project="Sdk.targets" Sdk="DotNetOutdated.Fake.NoTargets.Sdk" Version="3.7.0" />
 </Project>

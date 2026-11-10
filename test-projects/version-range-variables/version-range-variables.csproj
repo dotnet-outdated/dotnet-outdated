@@ -1,9 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
-    <NewtonsoftJsonVersion>[12.0.1,13.0.0)</NewtonsoftJsonVersion>
+    <FakeJsonVersion>[12.0.1,13.0.0)</FakeJsonVersion>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Newtonsoft.Json" Version="$(NewtonsoftJsonVersion)" />
+    <PackageReference Include="DotNetOutdated.Fake.Json" Version="$(FakeJsonVersion)" />
   </ItemGroup>
 </Project>

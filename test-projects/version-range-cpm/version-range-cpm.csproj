@@ -3,7 +3,7 @@
     <TargetFramework>netstandard2.0</TargetFramework>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Newtonsoft.Json" />
-    <PackageReference Include="System.Text.Json" />
+    <PackageReference Include="DotNetOutdated.Fake.Json" />
+    <PackageReference Include="DotNetOutdated.Fake.TextJson" />
   </ItemGroup>
 </Project>
