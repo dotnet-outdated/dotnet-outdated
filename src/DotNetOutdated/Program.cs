@@ -258,8 +258,11 @@ namespace DotNetOutdated
                   if (status is null || status.IsSuccess)
                   {
                      var newVersionRange = UpgradeVersionRange.Compute(project.OriginalVersionRange, package.LatestVersion, package.IsTransitive);
+                     var frameworkName = string.IsNullOrEmpty(project.TargetAlias)
+                         ? project.Framework.GetShortFolderName()
+                         : project.TargetAlias;
 
-                     status = _dotNetPackageService.AddPackage(project.ProjectFilePath, package.Name, project.Framework.GetShortFolderName(), newVersionRange, NoRestore, IgnoreFailedSources);
+                     status = _dotNetPackageService.AddPackage(project.ProjectFilePath, package.Name, frameworkName, newVersionRange, NoRestore, IgnoreFailedSources);
                   }
 
                   if (status.IsSuccess)
@@ -479,7 +482,10 @@ namespace DotNetOutdated
          await Task.WhenAll(tasks).ConfigureAwait(false);
 
          if (!outdatedDependencies.IsEmpty)
-            outdatedFrameworks.Add(new AnalyzedTargetFramework(targetFramework.Name, outdatedDependencies));
+            outdatedFrameworks.Add(new AnalyzedTargetFramework(targetFramework.Name, outdatedDependencies)
+            {
+               TargetAlias = targetFramework.TargetAlias,
+            });
       }
 
       private async Task AddOutdatedDependencyIfNeeded(

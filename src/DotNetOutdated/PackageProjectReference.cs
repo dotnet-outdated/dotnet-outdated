@@ -9,6 +9,8 @@ namespace DotNetOutdated
 
         public NuGetFramework Framework { get; set; }
 
+        public string TargetAlias { get; set; }
+
         public string Project { get; set; }
 
         public string ProjectFilePath { get; set; }

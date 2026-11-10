@@ -21,6 +21,7 @@ namespace DotNetOutdated
                                Project = p.Name,
                                ProjectFilePath = p.FilePath,
                                TargetFramework = f.Name,
+                               TargetAlias = f.TargetAlias,
                                Dependency = d.Name,
                                ResolvedVersion = d.ResolvedVersion,
                                LatestVersion = d.LatestVersion,
@@ -53,6 +54,7 @@ namespace DotNetOutdated
                         Project = v.Project,
                         ProjectFilePath = v.ProjectFilePath,
                         Framework = v.TargetFramework,
+                        TargetAlias = v.TargetAlias,
                         OriginalVersionRange = v.OriginalVersionRange,
                     }).ToList()
                 })

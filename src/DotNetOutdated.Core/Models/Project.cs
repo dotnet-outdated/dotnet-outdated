@@ -32,6 +32,8 @@ namespace DotNetOutdated.Core.Models
 
         public NuGetFramework Name { get; set; }
 
+        public string TargetAlias { get; set; }
+
         public TargetFramework(NuGetFramework name)
         {
             Name = name;
