@@ -100,10 +100,10 @@ namespace DotNetOutdated.Core.Services
             foreach (var (key, dependency) in targetFramework.Dependencies.ToList())
             {
                 if (!dependency.IsTransitive && !dependency.IsAutoReferenced && packageDefinedNames.Contains(dependency.Name) &&
-                    key != ProjectSdkReferenceHelper.GetDependencyDictionaryKey(dependency.Name))
+                    dependency.Kind == ReferenceKind.Package)
                 {
                     targetFramework.Dependencies[key] = new Dependency(dependency.Name, dependency.VersionRange, dependency.ResolvedVersion,
-                        isAutoReferenced: true, isTransitive: false, dependency.IsDevelopmentDependency);
+                        isAutoReferenced: true, isTransitive: false, dependency.IsDevelopmentDependency, dependency.Kind);
                 }
             }
         }

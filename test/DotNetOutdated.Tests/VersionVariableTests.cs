@@ -1,3 +1,6 @@
+using DotNetOutdated.Core;
+using System.IO.Abstractions;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.IO.Abstractions.TestingHelpers;
@@ -9,15 +12,49 @@ using XFS = System.IO.Abstractions.TestingHelpers.MockUnixSupport;
 
 namespace DotNetOutdated.Tests
 {
-    public class VariableTrackingServiceTests
+    public class VersionVariableTests
     {
+        // The version-variable modules composed as DotNetPackageService composes them: discovery through the MSBuild
+        // evaluator or the file-based app directives, writes through the variable writer or the directives.
+        private sealed class VersionVariables(IFileSystem fileSystem, Action<string> onWarning = null)
+        {
+            private readonly MSBuildEvaluator _evaluator = new(fileSystem);
+            private readonly MSBuildVariableWriter _writer = new(fileSystem, onWarning);
+            private FileBasedAppDirectives Directives => new(fileSystem, _evaluator, onWarning);
+
+            public Dictionary<string, PackageVariableInfo> DiscoverPackageVariables(string projectFilePath) =>
+                projectFilePath.IsCSharpFile()
+                    ? Directives.PackageVariables(projectFilePath)
+                    : _evaluator.PackageVariables(projectFilePath);
+
+            public IReadOnlyList<FileBasedAppReference> DiscoverFileBasedAppReferences(string projectFilePath) =>
+                Directives.References(projectFilePath);
+
+            public bool TryUpdatePackageVariable(PackageVariableInfo variableInfo, NuGetVersion newVersion) =>
+                TryUpdatePackageVariable(variableInfo, new VersionRange(newVersion));
+
+            public bool TryUpdatePackageVariable(PackageVariableInfo variableInfo, VersionRange newVersionRange) =>
+                variableInfo.IsFileBasedDirective
+                    ? Directives.TryUpdateVariable(variableInfo, newVersionRange.MinVersion)
+                    : _writer.TryUpdate(variableInfo, newVersionRange);
+
+            public void UpdatePackageVariable(PackageVariableInfo variableInfo, NuGetVersion newVersion) =>
+                TryUpdatePackageVariable(variableInfo, newVersion);
+
+            public void UpdatePackageVariable(PackageVariableInfo variableInfo, VersionRange newVersionRange) =>
+                TryUpdatePackageVariable(variableInfo, newVersionRange);
+
+            public bool UpdateFileBasedAppDirectReference(string projectFilePath, string name, ReferenceKind kind, NuGetVersion newVersion) =>
+                Directives.TryUpdateDirectReference(projectFilePath, name, kind, newVersion);
+        }
+
         [Theory]
         [InlineData("cs", "sdk", false)]
         [InlineData("cs", "sdk", true)]
         [InlineData("cs", "package", false)]
         [InlineData("cs", "package", true)]
         [InlineData("csproj", "package", true)]
-        public void Discover_InParallel_PreservesCacheEntriesAndAllowsUpdates(string extension, string directive, bool useVariable)
+        public void Discover_InParallel_ReturnsCorrectResultsAndAllowsUpdates(string extension, string directive, bool useVariable)
         {
             const int projectCount = 256;
             var paths = new string[projectCount];
@@ -34,12 +71,11 @@ namespace DotNetOutdated.Tests
 
             var fileSystem = new MockFileSystem(files);
             var warnings = new List<string>();
-            var service = new VariableTrackingService(fileSystem, warnings.Add);
+            var service = new VersionVariables(fileSystem, warnings.Add);
             var cachedVariables = new Dictionary<string, PackageVariableInfo>[projectCount];
 
             for (var attempt = 0; attempt < 10; attempt++)
             {
-                service.ClearCache();
                 Parallel.For(0, projectCount, i =>
                 {
                     if (extension == "cs")
@@ -58,10 +94,6 @@ namespace DotNetOutdated.Tests
                     }
                 });
 
-                for (var i = 0; i < projectCount; i++)
-                {
-                    Assert.Same(cachedVariables[i], service.DiscoverPackageVariables(paths[i]));
-                }
             }
 
             if (useVariable)
@@ -71,13 +103,17 @@ namespace DotNetOutdated.Tests
             }
             else
             {
-                var kind = directive == "sdk" ? FileBasedAppReferenceKind.Sdk : FileBasedAppReferenceKind.Package;
+                var kind = directive == "sdk" ? ReferenceKind.Sdk : ReferenceKind.Package;
                 Assert.True(service.UpdateFileBasedAppDirectReference(paths[0], "Test.Package", kind, new NuGetVersion("2.0.0")));
                 Assert.Contains($"#:{directive} Test.Package@2.0.0", fileSystem.File.ReadAllText(paths[0]));
             }
 
             Assert.Empty(warnings);
-            Assert.Same(cachedVariables[1], service.DiscoverPackageVariables(paths[1]));
+            if (useVariable)
+            {
+                Assert.Equal("1.0.0", service.DiscoverPackageVariables(paths[1])["Test.Package"].VariableValue);
+            }
+
             if (extension == "cs")
             {
                 Assert.Equal(new NuGetVersion("2.0.0"), Assert.Single(service.DiscoverFileBasedAppReferences(paths[0])).ResolvedVersion);
@@ -104,7 +140,7 @@ namespace DotNetOutdated.Tests
                 }
             });
 
-            var service = new VariableTrackingService(mockFileSystem);
+            var service = new VersionVariables(mockFileSystem);
             var result = service.DiscoverPackageVariables(projectPath);
 
             var info = Assert.Contains("Newtonsoft.Json", result);
@@ -138,7 +174,7 @@ namespace DotNetOutdated.Tests
                 }
             });
 
-            var service = new VariableTrackingService(mockFileSystem);
+            var service = new VersionVariables(mockFileSystem);
             var result = service.DiscoverPackageVariables(projectPath);
 
             var info = Assert.Contains("Newtonsoft.Json", result);
@@ -170,7 +206,7 @@ namespace DotNetOutdated.Tests
                 { projectPath, new MockFileData(@"<Project></Project>") }
             });
 
-            var service = new VariableTrackingService(mockFileSystem);
+            var service = new VersionVariables(mockFileSystem);
             var result = service.DiscoverPackageVariables(projectPath);
 
             var info = Assert.Contains("Newtonsoft.Json", result);
@@ -201,7 +237,7 @@ namespace DotNetOutdated.Tests
                 { projectPath, new MockFileData(@"<Project></Project>") }
             });
 
-            var service = new VariableTrackingService(mockFileSystem);
+            var service = new VersionVariables(mockFileSystem);
             var result = service.DiscoverPackageVariables(projectPath);
 
             var info = Assert.Contains("SomeAnalyzer", result);
@@ -223,7 +259,7 @@ namespace DotNetOutdated.Tests
                 }
             });
 
-            var service = new VariableTrackingService(mockFileSystem);
+            var service = new VersionVariables(mockFileSystem);
             var result = service.DiscoverPackageVariables(projectPath);
 
             Assert.Empty(result);
@@ -235,7 +271,7 @@ namespace DotNetOutdated.Tests
             var projectPath = XFS.Path(@"c:\repo\src\MyProject\MyProject.csproj");
             var mockFileSystem = new MockFileSystem();
 
-            var service = new VariableTrackingService(mockFileSystem);
+            var service = new VersionVariables(mockFileSystem);
             var result = service.DiscoverPackageVariables(projectPath);
 
             Assert.Empty(result);
@@ -269,7 +305,7 @@ namespace DotNetOutdated.Tests
                 }
             });
 
-            var service = new VariableTrackingService(mockFileSystem);
+            var service = new VersionVariables(mockFileSystem);
             var result = service.DiscoverPackageVariables(projectPath);
 
             var info = Assert.Contains("Newtonsoft.Json", result);
@@ -278,7 +314,7 @@ namespace DotNetOutdated.Tests
         }
 
         [Fact]
-        public void Discover_ResultIsCached_StaleResultReturnedAfterFileChange()
+        public void Discover_ReadsFilesOnEveryCall_ReflectsFileChange()
         {
             var projectPath = XFS.Path(@"c:\repo\src\MyProject\MyProject.csproj");
             var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
@@ -295,9 +331,8 @@ namespace DotNetOutdated.Tests
                 }
             });
 
-            var service = new VariableTrackingService(mockFileSystem);
+            var service = new VersionVariables(mockFileSystem);
 
-            // First call populates cache
             var first = service.DiscoverPackageVariables(projectPath);
             Assert.Equal("12.0.3", first["Newtonsoft.Json"].VariableValue);
 
@@ -311,45 +346,8 @@ namespace DotNetOutdated.Tests
   </ItemGroup>
 </Project>");
 
-            // Second call should return the cached (stale) value
             var second = service.DiscoverPackageVariables(projectPath);
-            Assert.Equal("12.0.3", second["Newtonsoft.Json"].VariableValue);
-        }
-
-        [Fact]
-        public void ClearCache_ForcesReread()
-        {
-            var projectPath = XFS.Path(@"c:\repo\src\MyProject\MyProject.csproj");
-            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
-            {
-                {
-                    projectPath, new MockFileData(@"<Project>
-  <PropertyGroup>
-    <NewtonsoftJsonVersion>12.0.3</NewtonsoftJsonVersion>
-  </PropertyGroup>
-  <ItemGroup>
-    <PackageReference Include=""Newtonsoft.Json"" Version=""$(NewtonsoftJsonVersion)"" />
-  </ItemGroup>
-</Project>")
-                }
-            });
-
-            var service = new VariableTrackingService(mockFileSystem);
-            service.DiscoverPackageVariables(projectPath);
-
-            // Modify file, then clear cache
-            mockFileSystem.File.WriteAllText(projectPath, @"<Project>
-  <PropertyGroup>
-    <NewtonsoftJsonVersion>13.0.1</NewtonsoftJsonVersion>
-  </PropertyGroup>
-  <ItemGroup>
-    <PackageReference Include=""Newtonsoft.Json"" Version=""$(NewtonsoftJsonVersion)"" />
-  </ItemGroup>
-</Project>");
-            service.ClearCache();
-
-            var result = service.DiscoverPackageVariables(projectPath);
-            Assert.Equal("13.0.1", result["Newtonsoft.Json"].VariableValue);
+            Assert.Equal("13.0.1", second["Newtonsoft.Json"].VariableValue);
         }
 
         // ── UpdatePackageVariable ─────────────────────────────────────────────────
@@ -374,7 +372,7 @@ namespace DotNetOutdated.Tests
                 }
             });
 
-            var service = new VariableTrackingService(mockFileSystem);
+            var service = new VersionVariables(mockFileSystem);
             var variableInfo = new PackageVariableInfo
             {
                 PackageName = "Newtonsoft.Json",
@@ -414,7 +412,7 @@ namespace DotNetOutdated.Tests
                 }
             });
 
-            var service = new VariableTrackingService(mockFileSystem);
+            var service = new VersionVariables(mockFileSystem);
             var variableInfo = new PackageVariableInfo
             {
                 PackageName = "Newtonsoft.Json",
@@ -451,7 +449,7 @@ namespace DotNetOutdated.Tests
                 }
             });
 
-            var service = new VariableTrackingService(mockFileSystem);
+            var service = new VersionVariables(mockFileSystem);
             var variableInfo = new PackageVariableInfo
             {
                 PackageName = "Some.Package",
@@ -492,7 +490,7 @@ namespace DotNetOutdated.Tests
                 }
             });
 
-            var service = new VariableTrackingService(mockFileSystem);
+            var service = new VersionVariables(mockFileSystem);
             var variableInfo = new PackageVariableInfo
             {
                 PackageName = "Newtonsoft.Json",
@@ -537,7 +535,7 @@ namespace DotNetOutdated.Tests
                 { projectPath, new MockFileData(@"<Project></Project>") }
             });
 
-            var service = new VariableTrackingService(mockFileSystem);
+            var service = new VersionVariables(mockFileSystem);
             var variableInfo = new PackageVariableInfo
             {
                 PackageName = "Newtonsoft.Json",
@@ -577,7 +575,7 @@ namespace DotNetOutdated.Tests
                 }
             });
 
-            var service = new VariableTrackingService(mockFileSystem);
+            var service = new VersionVariables(mockFileSystem);
             var variableInfo = new PackageVariableInfo
             {
                 PackageName = "Newtonsoft.Json",
@@ -605,7 +603,7 @@ namespace DotNetOutdated.Tests
             });
 
             var warnings = new System.Collections.Generic.List<string>();
-            var service = new VariableTrackingService(mockFileSystem, warnings.Add);
+            var service = new VersionVariables(mockFileSystem, warnings.Add);
             var variableInfo = new PackageVariableInfo
             {
                 PackageName = "Newtonsoft.Json",
@@ -623,7 +621,7 @@ namespace DotNetOutdated.Tests
         }
 
         [Fact]
-        public void Update_InvalidatesCache_SubsequentDiscoverReadsNewValues()
+        public void Update_SubsequentDiscoverReadsNewValues()
         {
             var projectPath = XFS.Path(@"c:\repo\src\MyProject\MyProject.csproj");
             var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
@@ -640,9 +638,8 @@ namespace DotNetOutdated.Tests
                 }
             });
 
-            var service = new VariableTrackingService(mockFileSystem);
+            var service = new VersionVariables(mockFileSystem);
 
-            // Populate cache with pre-upgrade state
             var before = service.DiscoverPackageVariables(projectPath);
             Assert.Equal("12.0.3", before["Newtonsoft.Json"].VariableValue);
 
@@ -656,7 +653,7 @@ namespace DotNetOutdated.Tests
   </ItemGroup>
 </Project>");
 
-            // UpdatePackageVariable should write the new version and invalidate the cache
+            // UpdatePackageVariable should write the new version
             service.UpdatePackageVariable(before["Newtonsoft.Json"], new NuGetVersion("13.0.1"));
 
             // Discover should re-read now and report the new version
@@ -679,7 +676,7 @@ Console.WriteLine();")
                 }
             });
 
-            var service = new VariableTrackingService(mockFileSystem);
+            var service = new VersionVariables(mockFileSystem);
             var result = service.DiscoverPackageVariables(appPath);
 
             var info = Assert.Contains("Humanizer", result);
@@ -707,7 +704,7 @@ Console.WriteLine();")
                 }
             });
 
-            var service = new VariableTrackingService(mockFileSystem);
+            var service = new VersionVariables(mockFileSystem);
             var variableInfo = service.DiscoverPackageVariables(appPath)["Humanizer"];
 
             service.UpdatePackageVariable(variableInfo, new NuGetVersion("3.0.11"));
@@ -730,7 +727,7 @@ Console.WriteLine();")
                 [appPath] = new("#:package Serilog@$(V)\nConsole.WriteLine();\n")
             });
 
-            var service = new VariableTrackingService(fileSystem);
+            var service = new VersionVariables(fileSystem);
             var info = service.DiscoverPackageVariables(appPath)["Serilog"];
             Assert.Equal("1.0.0", info.VariableValue);
 
@@ -759,7 +756,7 @@ Console.WriteLine();")
                 }
             });
 
-            var service = new VariableTrackingService(mockFileSystem);
+            var service = new VersionVariables(mockFileSystem);
             var result = service.DiscoverPackageVariables(appPath);
 
             var info = Assert.Contains("Humanizer", result);
@@ -780,7 +777,7 @@ Information(""Outdated Sdk"");")
                 }
             });
 
-            var service = new VariableTrackingService(mockFileSystem);
+            var service = new VersionVariables(mockFileSystem);
             var result = service.DiscoverPackageVariables(appPath);
 
             var info = Assert.Contains("Cake.Sdk", result);
@@ -804,7 +801,7 @@ Information(""Outdated Sdk"");")
                 }
             });
 
-            var service = new VariableTrackingService(mockFileSystem);
+            var service = new VersionVariables(mockFileSystem);
             var variableInfo = Assert.Contains("Cake.Sdk", service.DiscoverPackageVariables(appPath));
 
             Assert.Equal("6.2.0", variableInfo.VariableValue);
@@ -826,12 +823,12 @@ Information(""Outdated Sdk"");")
                 }
             });
 
-            var service = new VariableTrackingService(mockFileSystem);
+            var service = new VersionVariables(mockFileSystem);
             var result = service.DiscoverFileBasedAppReferences(appPath).Single();
 
             Assert.Equal("Cake.Sdk", result.Name);
             Assert.Equal(new NuGetVersion("6.0.0"), result.ResolvedVersion);
-            Assert.Equal(FileBasedAppReferenceKind.Sdk, result.Kind);
+            Assert.Equal(ReferenceKind.Sdk, result.Kind);
             Assert.Null(result.VariableInfo);
             Assert.Equal(result.ResolvedVersion, result.VersionRange.MinVersion);
             Assert.True(result.VersionRange.IsMinInclusive);
@@ -852,7 +849,7 @@ Information(""Outdated Sdk"");")
                 }
             });
 
-            var service = new VariableTrackingService(mockFileSystem);
+            var service = new VersionVariables(mockFileSystem);
             var variableInfo = Assert.Contains("Cake.Sdk", service.DiscoverPackageVariables(appPath));
             Assert.Equal("SdkVersion", variableInfo.VariableName);
             Assert.Equal("6.0.0", variableInfo.VariableValue);
@@ -876,9 +873,9 @@ Information(""Outdated Sdk"");")
                 }
             });
 
-            var service = new VariableTrackingService(mockFileSystem);
+            var service = new VersionVariables(mockFileSystem);
 
-            Assert.True(service.UpdateFileBasedAppDirectReference(appPath, "Cake.Sdk", FileBasedAppReferenceKind.Sdk, new NuGetVersion("6.2.0")));
+            Assert.True(service.UpdateFileBasedAppDirectReference(appPath, "Cake.Sdk", ReferenceKind.Sdk, new NuGetVersion("6.2.0")));
 
             var content = mockFileSystem.File.ReadAllText(appPath);
             Assert.Contains("#:sdk Cake.Sdk@6.2.0", content);
@@ -896,9 +893,9 @@ Information(""Outdated Sdk"");")
                 }
             });
 
-            var service = new VariableTrackingService(mockFileSystem);
+            var service = new VersionVariables(mockFileSystem);
 
-            Assert.True(service.UpdateFileBasedAppDirectReference(appPath, "Cake.Sdk", FileBasedAppReferenceKind.Sdk, new NuGetVersion("6.2.0")));
+            Assert.True(service.UpdateFileBasedAppDirectReference(appPath, "Cake.Sdk", ReferenceKind.Sdk, new NuGetVersion("6.2.0")));
 
             var content = mockFileSystem.File.ReadAllText(appPath);
             Assert.Contains("#:sdk Cake.Sdk@6.2.0 // pinned for now", content);
@@ -916,12 +913,12 @@ Information(""Outdated Sdk"");")
                 }
             });
 
-            var service = new VariableTrackingService(mockFileSystem);
+            var service = new VersionVariables(mockFileSystem);
             var reference = service.DiscoverFileBasedAppReferences(appPath).Single();
 
             Assert.Equal("Cake.Sdk", reference.Name);
             Assert.Equal(new NuGetVersion("6.0.0"), reference.ResolvedVersion);
-            Assert.Equal(FileBasedAppReferenceKind.Sdk, reference.Kind);
+            Assert.Equal(ReferenceKind.Sdk, reference.Kind);
         }
 
         [Fact]
@@ -938,7 +935,7 @@ Information(""Outdated Sdk"");")
                 }
             });
 
-            var service = new VariableTrackingService(mockFileSystem);
+            var service = new VersionVariables(mockFileSystem);
             var variableInfo = service.DiscoverPackageVariables(appPath)["Cake.Sdk"];
 
             Assert.True(service.TryUpdatePackageVariable(variableInfo, new NuGetVersion("6.2.0")));
@@ -960,9 +957,9 @@ Information(""Outdated Sdk"");")
                 }
             });
 
-            var service = new VariableTrackingService(mockFileSystem);
+            var service = new VersionVariables(mockFileSystem);
 
-            Assert.False(service.UpdateFileBasedAppDirectReference(appPath, "Cake.Sdk", FileBasedAppReferenceKind.Sdk, new NuGetVersion("6.2.0")));
+            Assert.False(service.UpdateFileBasedAppDirectReference(appPath, "Cake.Sdk", ReferenceKind.Sdk, new NuGetVersion("6.2.0")));
             Assert.Contains("#:sdk $(SdkId)@6.0.0", mockFileSystem.File.ReadAllText(appPath));
         }
 
@@ -980,7 +977,7 @@ Information(""Outdated Sdk"");")
                 }
             });
 
-            var service = new VariableTrackingService(mockFileSystem);
+            var service = new VersionVariables(mockFileSystem);
             var reference = service.DiscoverFileBasedAppReferences(appPath).Single();
 
             Assert.Equal("Cake.Sdk", reference.Name);
@@ -1003,16 +1000,16 @@ Console.WriteLine();")
                 }
             });
 
-            var service = new VariableTrackingService(mockFileSystem);
+            var service = new VersionVariables(mockFileSystem);
             var references = service.DiscoverFileBasedAppReferences(appPath);
 
             Assert.Equal(2, references.Count);
             Assert.Contains(references, reference =>
-                reference.Kind == FileBasedAppReferenceKind.Package &&
+                reference.Kind == ReferenceKind.Package &&
                 reference.Name == "SharedId" &&
                 reference.ResolvedVersion == new NuGetVersion("1.0.0"));
             Assert.Contains(references, reference =>
-                reference.Kind == FileBasedAppReferenceKind.Sdk &&
+                reference.Kind == ReferenceKind.Sdk &&
                 reference.Name == "SharedId" &&
                 reference.ResolvedVersion == new NuGetVersion("2.0.0"));
         }
@@ -1022,13 +1019,13 @@ Console.WriteLine();")
         {
             Assert.Equal(
                 "SharedId#package",
-                FileBasedAppReferenceHelper.GetDependencyDictionaryKey("SharedId", FileBasedAppReferenceKind.Package));
+                FileBasedAppReferenceHelper.GetDependencyDictionaryKey("SharedId", ReferenceKind.Package));
             Assert.Equal(
                 "SharedId#sdk",
-                FileBasedAppReferenceHelper.GetDependencyDictionaryKey("SharedId", FileBasedAppReferenceKind.Sdk));
+                FileBasedAppReferenceHelper.GetDependencyDictionaryKey("SharedId", ReferenceKind.Sdk));
             Assert.NotEqual(
-                FileBasedAppReferenceHelper.GetDependencyDictionaryKey("SharedId", FileBasedAppReferenceKind.Package),
-                FileBasedAppReferenceHelper.GetDependencyDictionaryKey("SharedId", FileBasedAppReferenceKind.Sdk));
+                FileBasedAppReferenceHelper.GetDependencyDictionaryKey("SharedId", ReferenceKind.Package),
+                FileBasedAppReferenceHelper.GetDependencyDictionaryKey("SharedId", ReferenceKind.Sdk));
         }
 
         [Fact]
@@ -1045,7 +1042,7 @@ Information(""Outdated Sdk"");")
                 }
             });
 
-            var service = new VariableTrackingService(mockFileSystem);
+            var service = new VersionVariables(mockFileSystem);
             var variableInfo = service.DiscoverPackageVariables(appPath)["Cake.Sdk"];
 
             Assert.True(service.TryUpdatePackageVariable(variableInfo, new NuGetVersion("6.2.0")));
@@ -1069,7 +1066,7 @@ Information(""Outdated Sdk"");")
                 }
             });
 
-            var service = new VariableTrackingService(mockFileSystem);
+            var service = new VersionVariables(mockFileSystem);
             var variableInfo = service.DiscoverPackageVariables(appPath)["Cake.Sdk"];
 
             Assert.True(service.TryUpdatePackageVariable(variableInfo, new NuGetVersion("6.2.0")));
@@ -1097,7 +1094,7 @@ Information(""Outdated Sdk"");")
             }
 
             var fileSystem = new MockFileSystem(files);
-            var service = new VariableTrackingService(fileSystem);
+            var service = new VersionVariables(fileSystem);
 
             var info = Assert.Contains("Microsoft.Maui.Controls", service.DiscoverPackageVariables(projectPath));
             Assert.Equal("MauiVersion", info.VariableName);
@@ -1128,7 +1125,7 @@ Information(""Outdated Sdk"");")
             var projectPath = XFS.Path(@"c:\repo\MyProject.csproj");
             var original = $"<Project>\n  <PropertyGroup>\n    {beforeProps}\n  </PropertyGroup>\n  <ItemGroup>\n    <PackageReference Include=\"Microsoft.Maui.Controls\" Version=\"$(MauiVersion)\" />\n  </ItemGroup>\n</Project>";
             var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData> { [projectPath] = new(original) });
-            var service = new VariableTrackingService(fileSystem);
+            var service = new VersionVariables(fileSystem);
 
             var info = service.DiscoverPackageVariables(projectPath)["Microsoft.Maui.Controls"];
             Assert.Equal("8.0.3", info.VariableValue);
@@ -1153,7 +1150,7 @@ Information(""Outdated Sdk"");")
                 [projectPath] = new("<Project><ItemGroup><PackageReference Include=\"Microsoft.Maui.Controls\" Version=\"$(MauiVersion)\" /></ItemGroup></Project>")
             });
 
-            var service = new VariableTrackingService(fileSystem);
+            var service = new VersionVariables(fileSystem);
             var info = service.DiscoverPackageVariables(projectPath)["Microsoft.Maui.Controls"];
             Assert.Null(info.UnsupportedReason);
             Assert.Equal("8.0.3", info.VariableValue);
@@ -1173,12 +1170,12 @@ Information(""Outdated Sdk"");")
                                     "<ItemGroup><PackageReference Include=\"Microsoft.Maui.Controls\" Version=\"$(MauiVersion)\" /></ItemGroup></Project>")
             });
 
-            var info = new VariableTrackingService(fileSystem).DiscoverPackageVariables(projectPath)["Microsoft.Maui.Controls"];
+            var info = new VersionVariables(fileSystem).DiscoverPackageVariables(projectPath)["Microsoft.Maui.Controls"];
             Assert.NotNull(info.UnsupportedReason);
         }
 
         [Fact]
-        public void DiscoverAndUpdate_ChainedVariablesAndImportedProps_UpdatesRootPropertyAndInvalidatesCache()
+        public void DiscoverAndUpdate_ChainedVariablesAndImportedProps_UpdatesRootProperty()
         {
             var buildPropsPath = XFS.Path(@"c:\repo\Directory.Build.props");
             var versionsPropsPath = XFS.Path(@"c:\repo\eng\Versions.props");
@@ -1190,7 +1187,7 @@ Information(""Outdated Sdk"");")
                 [projectPath] = new("<Project><PropertyGroup><MauiVersion>$(SharedMauiVersion)</MauiVersion></PropertyGroup><ItemGroup><PackageReference Include=\"Microsoft.Maui.Controls\" Version=\"$(MauiVersion)\" /></ItemGroup></Project>")
             });
 
-            var service = new VariableTrackingService(fileSystem);
+            var service = new VersionVariables(fileSystem);
             var info = service.DiscoverPackageVariables(projectPath)["Microsoft.Maui.Controls"];
             Assert.Equal("SharedMauiVersion", info.VariableName);
             Assert.Equal("8.0.3", info.VariableValue);
@@ -1218,7 +1215,7 @@ Information(""Outdated Sdk"");")
                                     "<PackageReference Include=\"Serilog\" Version=\"$([System.String]::Copy('2.10.0'))\" /></ItemGroup></Project>")
             });
 
-            var discovered = new VariableTrackingService(fileSystem).DiscoverPackageVariables(projectPath);
+            var discovered = new VersionVariables(fileSystem).DiscoverPackageVariables(projectPath);
             Assert.Contains("Newtonsoft.Json", discovered);
             Assert.NotNull(Assert.Contains("Serilog", discovered).UnsupportedReason);
         }
@@ -1235,7 +1232,7 @@ Information(""Outdated Sdk"");")
             var originalElement = string.Format(itemTemplate, originalExpr);
             var original = $"<Project><PropertyGroup><MauiVersion>8.0.3</MauiVersion></PropertyGroup><ItemGroup>{originalElement}</ItemGroup></Project>";
             var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData> { [projectPath] = new(original) });
-            var service = new VariableTrackingService(fileSystem);
+            var service = new VersionVariables(fileSystem);
 
             var info = service.DiscoverPackageVariables(projectPath)["Microsoft.Maui.Controls"];
             Assert.Equal(expectVersionOverride, info.IsVersionOverride);
@@ -1259,7 +1256,7 @@ Information(""Outdated Sdk"");")
                 [projectPath] = new("<Project Sdk=\"Microsoft.NET.Sdk\"></Project>"),
             });
 
-            Assert.Empty(new VariableTrackingService(fileSystem).DiscoverPackageVariables(projectPath));
+            Assert.Empty(new VersionVariables(fileSystem).DiscoverPackageVariables(projectPath));
         }
 
         [Fact]
@@ -1272,7 +1269,7 @@ Information(""Outdated Sdk"");")
                 [projectPath] = new("<Project Sdk=\"Microsoft.NET.Sdk\"><ItemGroup><PackageReference Update=\"Serilog\" Version=\"2.0.0\" /></ItemGroup></Project>"),
             });
 
-            Assert.DoesNotContain("Serilog", new VariableTrackingService(fileSystem).DiscoverPackageVariables(projectPath));
+            Assert.DoesNotContain("Serilog", new VersionVariables(fileSystem).DiscoverPackageVariables(projectPath));
         }
 
         [Fact]
@@ -1282,7 +1279,7 @@ Information(""Outdated Sdk"");")
             var original = "<Project><PropertyGroup><V>8.0.3</V><Early>$(V)</Early><V>8.0.3</V></PropertyGroup>" +
                            "<ItemGroup><PackageReference Include=\"Serilog\" Version=\"$(V)\" /></ItemGroup></Project>";
             var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData> { [projectPath] = new(original) });
-            var service = new VariableTrackingService(fileSystem);
+            var service = new VersionVariables(fileSystem);
 
             Assert.True(service.TryUpdatePackageVariable(service.DiscoverPackageVariables(projectPath)["Serilog"], new NuGetVersion("8.0.100")));
 
@@ -1299,7 +1296,7 @@ Information(""Outdated Sdk"");")
                            "  <PropertyGroup>\n    <UseMaui>true</UseMaui>\n  </PropertyGroup>\n" +
                            "  <ItemGroup>\n    <PackageReference Include=\"Microsoft.Maui.Controls\" Version=\"$(MauiVersion)\" />\n  </ItemGroup>\n</Project>";
             var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData> { [projectPath] = new(original) });
-            var service = new VariableTrackingService(fileSystem);
+            var service = new VersionVariables(fileSystem);
 
             Assert.True(service.TryUpdatePackageVariable(service.DiscoverPackageVariables(projectPath)["Microsoft.Maui.Controls"], new NuGetVersion("8.0.100")));
 
@@ -1315,7 +1312,7 @@ Information(""Outdated Sdk"");")
             var original = "<Project><PropertyGroup><MauiVersion>8.0.3</MauiVersion></PropertyGroup>" +
                            "<ItemGroup><PackageReference Include=\"Microsoft.Maui.Controls\" Version=\"[$(MauiVersion), 9.0.0)\" /></ItemGroup></Project>";
             var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData> { [projectPath] = new(original) });
-            var service = new VariableTrackingService(fileSystem);
+            var service = new VersionVariables(fileSystem);
             var info = service.DiscoverPackageVariables(projectPath)["Microsoft.Maui.Controls"];
 
             // Direct update (no `dotnet add package` beforehand): the expression itself must change.
@@ -1333,7 +1330,7 @@ Information(""Outdated Sdk"");")
             var original = "<Project><PropertyGroup><MauiVersion>8.0.3</MauiVersion></PropertyGroup>" +
                            "<ItemGroup><PackageReference Include=\"Microsoft.Maui.Controls\" Version=\"[$(MauiVersion), 9.0.0)\" /></ItemGroup></Project>";
             var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData> { [projectPath] = new(original) });
-            var service = new VariableTrackingService(fileSystem);
+            var service = new VersionVariables(fileSystem);
             var info = service.DiscoverPackageVariables(projectPath)["Microsoft.Maui.Controls"];
 
             Assert.True(service.TryUpdatePackageVariable(info, VersionRange.Parse("[8.0.100, 10.0.0)")));
@@ -1351,7 +1348,7 @@ Information(""Outdated Sdk"");")
                            "<MauiVersion Condition=\"'$(TargetFramework)' == 'net9.0'\">9.0.0</MauiVersion></PropertyGroup>" +
                            "<ItemGroup><PackageReference Include=\"Microsoft.Maui.Controls\" Version=\"$(MauiVersion)\" /></ItemGroup></Project>";
             var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData> { [projectPath] = new(original) });
-            var service = new VariableTrackingService(fileSystem);
+            var service = new VersionVariables(fileSystem);
 
             var info = service.DiscoverPackageVariables(projectPath)["Microsoft.Maui.Controls"];
             Assert.Equal(ambiguous, info.UnsupportedReason != null);
@@ -1375,7 +1372,7 @@ Information(""Outdated Sdk"");")
                                     "<ItemGroup><PackageReference Include=\"Microsoft.Maui.Controls\" Version=\"$(MauiVersion)\" /></ItemGroup></Project>"),
             });
 
-            var info = new VariableTrackingService(fileSystem).DiscoverPackageVariables(projectPath)["Microsoft.Maui.Controls"];
+            var info = new VersionVariables(fileSystem).DiscoverPackageVariables(projectPath)["Microsoft.Maui.Controls"];
 
             Assert.Equal(versionsPath, info.FilePath);
             Assert.Equal("8.0.3", info.VariableValue);
@@ -1393,7 +1390,7 @@ Information(""Outdated Sdk"");")
                 [projectPath] = new("<Project><ItemGroup><PackageReference Include=\"Serilog\" /></ItemGroup></Project>"),
             });
 
-            var info = new VariableTrackingService(fileSystem).DiscoverPackageVariables(projectPath)["Serilog"];
+            var info = new VersionVariables(fileSystem).DiscoverPackageVariables(projectPath)["Serilog"];
 
             Assert.Equal(packagesPath, info.FilePath);
             Assert.Equal("2.0.0", info.VariableValue);
@@ -1412,7 +1409,7 @@ Information(""Outdated Sdk"");")
                 [projectPath] = new("<Project><ItemGroup><PackageReference Include=\"Serilog\" Version=\"$(V)\" /></ItemGroup></Project>"),
             });
 
-            var info = new VariableTrackingService(fileSystem).DiscoverPackageVariables(projectPath)["Serilog"];
+            var info = new VersionVariables(fileSystem).DiscoverPackageVariables(projectPath)["Serilog"];
 
             Assert.Equal(rootPropsPath, info.FilePath);
         }
@@ -1426,7 +1423,7 @@ Information(""Outdated Sdk"");")
             var original = "<Project><PropertyGroup><MajorVersion>2</MajorVersion><MaxVersion>3.0.0</MaxVersion></PropertyGroup>" +
                            $"<ItemGroup><PackageReference Include=\"Serilog\" Version=\"{expression}\" /></ItemGroup></Project>";
             var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData> { [projectPath] = new(original) });
-            var service = new VariableTrackingService(fileSystem);
+            var service = new VersionVariables(fileSystem);
 
             var info = service.DiscoverPackageVariables(projectPath)["Serilog"];
 
@@ -1442,7 +1439,7 @@ Information(""Outdated Sdk"");")
             var original = "<Project>\n  <PropertyGroup>\n    <MyMauiVersion>$(MauiVersion)</MyMauiVersion>\n  </PropertyGroup>\n" +
                            "  <ItemGroup>\n    <PackageReference Include=\"Microsoft.Maui.Controls\" Version=\"$(MyMauiVersion)\" />\n  </ItemGroup>\n</Project>";
             var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData> { [projectPath] = new(original) });
-            var service = new VariableTrackingService(fileSystem);
+            var service = new VersionVariables(fileSystem);
 
             var info = service.DiscoverPackageVariables(projectPath)["Microsoft.Maui.Controls"];
             Assert.Equal("MauiVersion", info.VariableName);
@@ -1465,7 +1462,7 @@ Information(""Outdated Sdk"");")
             var original = "<Project><PropertyGroup><V>1.0.0</V></PropertyGroup><ItemGroup><PackageReference Include=\"Serilog\" Version=\"$(V)\" /></ItemGroup></Project>";
             var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData> { [projectPath] = new(original) });
             var warnings = new List<string>();
-            var service = new VariableTrackingService(fileSystem, warnings.Add);
+            var service = new VersionVariables(fileSystem, warnings.Add);
             var info = service.DiscoverPackageVariables(projectPath)["Serilog"];
 
             // Someone else edits the property between discovery and update.
@@ -1488,7 +1485,7 @@ Information(""Outdated Sdk"");")
                 "  <ItemGroup Condition=\"'$(TargetFramework)' == 'net9.0'\"><PackageReference Update=\"Microsoft.Maui.Controls\" VersionOverride=\"9.0.0\" /></ItemGroup>\n" +
                 "</Project>";
             var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData> { [projectPath] = new(original) });
-            var service = new VariableTrackingService(fileSystem);
+            var service = new VersionVariables(fileSystem);
 
             var info = service.DiscoverPackageVariables(projectPath)["Microsoft.Maui.Controls"];
             Assert.True(info.IsVersionOverride);
@@ -1510,7 +1507,7 @@ Information(""Outdated Sdk"");")
                 [projectPath] = new("<Project><PropertyGroup><UseSerilog>true</UseSerilog></PropertyGroup></Project>")
             });
 
-            var info = new VariableTrackingService(fileSystem).DiscoverPackageVariables(projectPath)["Serilog"];
+            var info = new VersionVariables(fileSystem).DiscoverPackageVariables(projectPath)["Serilog"];
             Assert.Equal("SerilogVersion", info.VariableName);
             Assert.Equal(buildPropsPath, info.PackageReferenceFilePath);
         }
@@ -1530,7 +1527,7 @@ Information(""Outdated Sdk"");")
                 [projectPath] = new("<Project><ItemGroup><PackageReference Remove=\"Serilog\" /><PackageReference Include=\"Serilog\" /></ItemGroup></Project>")
             });
 
-            var info = new VariableTrackingService(fileSystem).DiscoverPackageVariables(projectPath)["Serilog"];
+            var info = new VersionVariables(fileSystem).DiscoverPackageVariables(projectPath)["Serilog"];
             Assert.Equal("SerilogVersion", info.VariableName);
             Assert.Equal("PackageVersion", info.ElementType);
             Assert.Equal(packagesPropsPath, info.FilePath);
@@ -1549,7 +1546,7 @@ Information(""Outdated Sdk"");")
                                     "<ItemGroup><PackageReference Include=\"Serilog\" Version=\"$(SerilogVersion)\" /></ItemGroup></Project>")
             });
 
-            var info = new VariableTrackingService(fileSystem).DiscoverPackageVariables(projectPath)["Serilog"];
+            var info = new VersionVariables(fileSystem).DiscoverPackageVariables(projectPath)["Serilog"];
             Assert.NotNull(info.UnsupportedReason);
         }
 
@@ -1560,7 +1557,7 @@ Information(""Outdated Sdk"");")
             var original = "<Project><PropertyGroup><V>1.0.0</V></PropertyGroup><ItemGroup><PackageReference Include=\"Serilog\" Version=\"$(V)\" /></ItemGroup></Project>";
             var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData> { [projectPath] = new(original) });
             var warnings = new List<string>();
-            var service = new VariableTrackingService(fileSystem, warnings.Add);
+            var service = new VersionVariables(fileSystem, warnings.Add);
             var info = service.DiscoverPackageVariables(projectPath)["Serilog"];
 
             // The property changes after discovery, then `dotnet add package` writes the literal version.

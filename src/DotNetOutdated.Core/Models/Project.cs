@@ -1,4 +1,5 @@
-﻿using NuGet.Frameworks;
+﻿using DotNetOutdated.Core.Services;
+using NuGet.Frameworks;
 using NuGet.Versioning;
 using System;
 using System.Collections.Generic;
@@ -48,14 +49,25 @@ namespace DotNetOutdated.Core.Models
 
         public bool IsTransitive { get; }
 
+        /// <summary>Whether this is a package or an SDK reference.</summary>
+        public ReferenceKind Kind { get; }
+
         public string Name { get; }
 
         public NuGetVersion ResolvedVersion { get; }
 
         public VersionRange VersionRange { get; }
 
-        public Dependency(string name, VersionRange versionRange, NuGetVersion resolvedVersion, bool isAutoReferenced, bool isTransitive, bool isDevelopmentDependency)
+        public Dependency(
+            string name,
+            VersionRange versionRange,
+            NuGetVersion resolvedVersion,
+            bool isAutoReferenced,
+            bool isTransitive,
+            bool isDevelopmentDependency,
+            ReferenceKind kind = ReferenceKind.Package)
         {
+            Kind = kind;
             Name = name;
             VersionRange = versionRange;
             ResolvedVersion = resolvedVersion;

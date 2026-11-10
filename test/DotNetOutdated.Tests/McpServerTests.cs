@@ -184,12 +184,25 @@ namespace DotNetOutdated.Tests
         {
             var input = "{\"jsonrpc\": \"2.0\", \"method\": \"tools/call\", \"params\": { \"name\": \"update_package\", \"arguments\": " +
                 "{ \"projectPath\": \"/test/p.csproj\", \"packageName\": \"Newtonsoft.Json\", \"version\": \"13.0.1\", \"framework\": \"net8.0\" } }, \"id\": 5}\n";
-            _dotNetPackageService.AddPackage("/test/p.csproj", "Newtonsoft.Json", "net8.0", new NuGetVersion("13.0.1"))
+            _dotNetPackageService.AddPackage("/test/p.csproj", "Newtonsoft.Json", "net8.0", new VersionRange(new NuGetVersion("13.0.1")))
                 .Returns(new RunStatus("", "", 0));
 
             var output = await RunServerAsync(input);
 
             Assert.Contains("Successfully updated Newtonsoft.Json to 13.0.1", output);
+        }
+
+        [Fact]
+        public async Task UpdatePackage_WithSdkKind_UpdatesTheSdk()
+        {
+            var input = "{\"jsonrpc\": \"2.0\", \"method\": \"tools/call\", \"params\": { \"name\": \"update_package\", \"arguments\": " +
+                "{ \"projectPath\": \"/test/p.csproj\", \"packageName\": \"Aspire.AppHost.Sdk\", \"version\": \"9.1.0\", \"framework\": \"net8.0\", \"kind\": \"sdk\" } }, \"id\": 6}\n";
+            _dotNetPackageService.AddPackage("/test/p.csproj", "Aspire.AppHost.Sdk", "net8.0", new VersionRange(new NuGetVersion("9.1.0")), kind: ReferenceKind.Sdk)
+                .Returns(new RunStatus("", "", 0));
+
+            var output = await RunServerAsync(input);
+
+            Assert.Contains("Successfully updated Aspire.AppHost.Sdk to 9.1.0", output);
         }
 
         [Fact]
@@ -200,7 +213,7 @@ namespace DotNetOutdated.Tests
             var input = "{\"jsonrpc\": \"2.0\", \"method\": \"tools/call\", \"params\": { \"name\": \"update_package\", \"arguments\": { \"projectPath\": \"/test/project1.csproj\", \"packageName\": \"Contoso.Widgets\", \"version\": \"2.0.0\", \"framework\": \"net8.0\" } }, \"id\": 4}\n";
 
             _dotNetPackageService
-                .AddPackage("/test/project1.csproj", "Contoso.Widgets", "net8.0", new NuGetVersion("2.0.0"))
+                .AddPackage("/test/project1.csproj", "Contoso.Widgets", "net8.0", new VersionRange(new NuGetVersion("2.0.0")))
                 .Returns(new RunStatus("error: Cannot edit items in imported files", "stderr detail", 1));
 
             // Act

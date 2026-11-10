@@ -95,12 +95,35 @@ public class UpgradePackagesTests
         Assert.DoesNotContain("restore log", written);
     }
 
+    [Fact]
+    public void SdkAndPackageWithTheSameId_AreUpgradedSeparatelyByKind()
+    {
+        // Arrange
+        AddPackageReturns(new RunStatus(string.Empty, string.Empty, exitCode: 0));
+        var package = new Dependency("Cake.Sdk", VersionRange.Parse("1.0.0"), new NuGetVersion("1.0.0"), isAutoReferenced: false, isTransitive: false, isDevelopmentDependency: false);
+        var sdk = new Dependency("Cake.Sdk", VersionRange.Parse("1.0.0"), new NuGetVersion("1.0.0"), isAutoReferenced: false, isTransitive: false, isDevelopmentDependency: false, ReferenceKind.Sdk);
+
+        // Act
+        (bool success, _) = RunUpgrade(package, sdk);
+
+        // Assert
+        Assert.True(success);
+        foreach (var kind in new[] { ReferenceKind.Package, ReferenceKind.Sdk })
+        {
+            _packageService.Received(1).AddPackage(
+                Arg.Any<string>(), "Cake.Sdk", Arg.Any<string>(), Arg.Any<VersionRange>(), Arg.Any<bool>(), Arg.Any<bool>(), kind);
+        }
+    }
+
     private void AddPackageReturns(RunStatus status) =>
         _packageService
-            .AddPackage(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<VersionRange>(), Arg.Any<bool>(), Arg.Any<bool>())
+            .AddPackage(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<VersionRange>(), Arg.Any<bool>(), Arg.Any<bool>(), Arg.Any<ReferenceKind>())
             .Returns(status);
 
-    private (bool Success, string Written) RunUpgrade()
+    private (bool Success, string Written) RunUpgrade() =>
+        RunUpgrade(new Dependency(PackageName, VersionRange.Parse("1.0.0"), new NuGetVersion("1.0.0"), isAutoReferenced: false, isTransitive: false, isDevelopmentDependency: false));
+
+    private (bool Success, string Written) RunUpgrade(params Dependency[] dependencies)
     {
         var program = new Program(
             Substitute.For<System.IO.Abstractions.IFileSystem>(),
@@ -114,8 +137,9 @@ public class UpgradePackagesTests
             Upgrade = (true, UpgradeType.Auto)
         };
 
-        var dependency = new Dependency(PackageName, VersionRange.Parse("1.0.0"), new NuGetVersion("1.0.0"), isAutoReferenced: false, isTransitive: false, isDevelopmentDependency: false);
-        var targetFramework = new AnalyzedTargetFramework(NuGetFramework.Parse("net8.0"), [new AnalyzedDependency(dependency, new NuGetVersion("2.0.0"))]);
+        var targetFramework = new AnalyzedTargetFramework(
+            NuGetFramework.Parse("net8.0"),
+            dependencies.Select(dependency => new AnalyzedDependency(dependency, new NuGetVersion("2.0.0"))));
         // A file-based app path keeps the test off the file system: for a .csproj, IsProjectSdkStyle()
         // would read the project file to decide whether to remove the package before adding it.
         var projects = new List<AnalyzedProject> { new("MyProject", "/projects/MyProject/app.cs", [targetFramework]) };

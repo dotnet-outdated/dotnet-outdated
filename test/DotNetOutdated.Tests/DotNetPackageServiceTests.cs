@@ -34,17 +34,6 @@ namespace DotNetOutdated.Tests
   </ItemGroup>
 </Project>";
 
-        private static IVariableTrackingService EmptyVariableTrackingService()
-        {
-            var mock = Substitute.For<IVariableTrackingService>();
-            mock.DiscoverPackageVariables(default).ReturnsForAnyArgs([]);
-            mock.DiscoverFileBasedAppReferences(default).ReturnsForAnyArgs([]);
-            mock.TryUpdatePackageVariable(default, default(NuGetVersion)).ReturnsForAnyArgs(true);
-            mock.TryUpdatePackageVariable(default, default(VersionRange)).ReturnsForAnyArgs(true);
-            mock.UpdateFileBasedAppDirectReference(default, default, default, default).ReturnsForAnyArgs(true);
-            return mock;
-        }
-
         [Fact]
         public void CpmProjectWithNoRestore_UpdatesDirectoryPackagesProps_DoesNotCallDotNet()
         {
@@ -59,11 +48,11 @@ namespace DotNetOutdated.Tests
             });
 
             var dotNetRunner = Substitute.For<IDotNetRunner>();
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem, EmptyVariableTrackingService());
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
 
             // Act
             var result = service.AddPackage(projectPath, "Newtonsoft.Json", "net8.0",
-                new NuGetVersion("13.0.1"), noRestore: true);
+                new VersionRange(new NuGetVersion("13.0.1")), noRestore: true);
 
             // Assert
             Assert.True(result.IsSuccess);
@@ -173,9 +162,9 @@ namespace DotNetOutdated.Tests
             });
 
             var dotNetRunner = Substitute.For<IDotNetRunner>();
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem, EmptyVariableTrackingService());
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
 
-            var result = service.AddPackage(projectPath, "SomePackage", "net8.0", new NuGetVersion("2.0.0"), noRestore: true);
+            var result = service.AddPackage(projectPath, "SomePackage", "net8.0", new VersionRange(new NuGetVersion("2.0.0")), noRestore: true);
 
             Assert.False(result.IsSuccess);
             Assert.Contains("SomePackage", result.Errors);
@@ -293,9 +282,9 @@ namespace DotNetOutdated.Tests
             });
 
             var dotNetRunner = Substitute.For<IDotNetRunner>();
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem, EmptyVariableTrackingService());
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
 
-            var result = service.AddPackage(projectPath, packageName, "net8.0", new NuGetVersion(version), noRestore: true);
+            var result = service.AddPackage(projectPath, packageName, "net8.0", new VersionRange(new NuGetVersion(version)), noRestore: true);
 
             Assert.True(result.IsSuccess);
             dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
@@ -317,11 +306,11 @@ namespace DotNetOutdated.Tests
 
             var dotNetRunner = Substitute.For<IDotNetRunner>();
             dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem, EmptyVariableTrackingService());
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
 
             // Act
             var result = service.AddPackage(projectPath, "Newtonsoft.Json", "net8.0",
-                new NuGetVersion("13.0.1"), noRestore: false);
+                new VersionRange(new NuGetVersion("13.0.1")), noRestore: false);
 
             // Assert
             dotNetRunner.ReceivedWithAnyArgs(1).Run(default, default);
@@ -344,11 +333,11 @@ namespace DotNetOutdated.Tests
 
             var dotNetRunner = Substitute.For<IDotNetRunner>();
             dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem, EmptyVariableTrackingService());
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
 
             // Act
             var result = service.AddPackage(projectPath, "Newtonsoft.Json", "net8.0",
-                new NuGetVersion("13.0.1"), noRestore: true);
+                new VersionRange(new NuGetVersion("13.0.1")), noRestore: true);
 
             // Assert - should fall through to dotnet add package
             dotNetRunner.ReceivedWithAnyArgs(1).Run(default, default);
@@ -395,10 +384,10 @@ namespace DotNetOutdated.Tests
                     .Replace("  <ItemGroup>", "  <!-- Keep packages separate from properties. -->\n  <ItemGroup>"));
                 return new RunStatus("", "", 0);
             });
-            var service = new DotNetPackageService(dotNetRunner, fileSystem, EmptyVariableTrackingService());
+            var service = new DotNetPackageService(dotNetRunner, fileSystem);
 
             var result = service.AddPackage(projectPath, "Newtonsoft.Json", "net8.0",
-                new NuGetVersion("13.0.1"), noRestore);
+                new VersionRange(new NuGetVersion("13.0.1")), noRestore);
 
             Assert.True(result.IsSuccess);
             Assert.Equal(original.Replace("12.0.3", "13.0.1"), fileSystem.File.ReadAllText(propsPath));
@@ -440,7 +429,7 @@ namespace DotNetOutdated.Tests
                 fileSystem.File.WriteAllText(propsPath, DirectoryPackagesPropsContent.Replace("12.0.3", "[13.0.4, 14.0.0)"));
                 return new RunStatus("", "", 0);
             });
-            var service = new DotNetPackageService(dotNetRunner, fileSystem, EmptyVariableTrackingService());
+            var service = new DotNetPackageService(dotNetRunner, fileSystem);
 
             var result = service.AddPackage(projectPath, "Newtonsoft.Json", "net8.0",
                 VersionRange.Parse("[13.0.4, 14.0.0)"), noRestore, ignoreFailedSources: false);
@@ -455,27 +444,35 @@ namespace DotNetOutdated.Tests
         }
 
         [Theory]
-        [InlineData(true, "[12.0.1,14.0.0)", true)]
-        [InlineData(false, "[13.0.4,14.0.0)", true)]
-        [InlineData(false, "[12.0.1,14.0.0)", false)]
-        public void CpmVariableWithNoRestore_ReportsFailureWhenRangeCannotBeWritten(bool updated, string currentValue, bool expectSuccess)
+        [InlineData(false, "[12.0.1,14.0.0)", true)]
+        [InlineData(true, "[13.0.4,14.0.0)", true)]
+        [InlineData(true, "[12.0.1,14.0.0)", false)]
+        public void CpmVariableWithNoRestore_ReportsFailureWhenRangeCannotBeWritten(bool readOnly, string currentValue, bool expectSuccess)
         {
+            var propsPath = XFS.Path(@"c:\repo\Directory.Packages.props");
             var projectPath = XFS.Path(@"c:\repo\src\MyProject\MyProject.csproj");
-            var variableInfo = new PackageVariableInfo
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
             {
-                PackageName = "Newtonsoft.Json",
-                VariableName = "NewtonsoftJsonVersion",
-                VariableValue = currentValue,
-                FilePath = XFS.Path(@"c:\repo\Directory.Packages.props"),
-                PackageReferenceFilePath = XFS.Path(@"c:\repo\Directory.Packages.props"),
-                ElementType = "PackageVersion"
-            };
-            var variableTracking = Substitute.For<IVariableTrackingService>();
-            variableTracking.DiscoverPackageVariables(projectPath).Returns(new Dictionary<string, PackageVariableInfo> { ["Newtonsoft.Json"] = variableInfo });
-            variableTracking.DiscoverFileBasedAppReferences(projectPath).Returns([]);
-            variableTracking.TryUpdatePackageVariable(variableInfo, Arg.Any<VersionRange>()).Returns(updated);
+                {
+                    propsPath, new MockFileData($@"<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <NewtonsoftJsonVersion>{currentValue}</NewtonsoftJsonVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageVersion Include=""Newtonsoft.Json"" Version=""$(NewtonsoftJsonVersion)"" />
+  </ItemGroup>
+</Project>")
+                },
+                { projectPath, new MockFileData(@"<Project Sdk=""Microsoft.NET.Sdk""><ItemGroup><PackageReference Include=""Newtonsoft.Json"" /></ItemGroup></Project>") }
+            });
+            if (readOnly)
+            {
+                fileSystem.File.SetAttributes(propsPath, FileAttributes.ReadOnly);
+            }
+
             var dotNetRunner = Substitute.For<IDotNetRunner>();
-            var service = new DotNetPackageService(dotNetRunner, new MockFileSystem(), variableTracking);
+            var service = new DotNetPackageService(dotNetRunner, fileSystem);
 
             var result = service.AddPackage(projectPath, "Newtonsoft.Json", "net8.0",
                 VersionRange.Parse("[13.0.4, 14.0.0)"), noRestore: true, ignoreFailedSources: false);
@@ -508,10 +505,10 @@ namespace DotNetOutdated.Tests
                 fileSystem.File.WriteAllText(propsPath, System.Xml.Linq.XDocument.Parse(content).ToString());
                 return new RunStatus("", "", 0);
             });
-            var service = new DotNetPackageService(dotNetRunner, fileSystem, EmptyVariableTrackingService());
+            var service = new DotNetPackageService(dotNetRunner, fileSystem);
 
-            var first = service.AddPackage(projectPath, "Newtonsoft.Json", "net8.0", new NuGetVersion("13.0.1"), noRestore: false);
-            var second = service.AddPackage(projectPath, "Serilog", "net8.0", new NuGetVersion("2.11.0"), noRestore: false);
+            var first = service.AddPackage(projectPath, "Newtonsoft.Json", "net8.0", new VersionRange(new NuGetVersion("13.0.1")), noRestore: false);
+            var second = service.AddPackage(projectPath, "Serilog", "net8.0", new VersionRange(new NuGetVersion("2.11.0")), noRestore: false);
 
             Assert.True(first.IsSuccess);
             Assert.True(second.IsSuccess);
@@ -536,10 +533,10 @@ namespace DotNetOutdated.Tests
                 fileSystem.File.WriteAllText(propsPath, updated);
                 return new RunStatus("", "", 0);
             });
-            var service = new DotNetPackageService(dotNetRunner, fileSystem, EmptyVariableTrackingService());
+            var service = new DotNetPackageService(dotNetRunner, fileSystem);
 
             var result = service.AddPackage(projectPath, "Newtonsoft.Json", "net8.0",
-                new NuGetVersion("13.0.1"), noRestore: false);
+                new VersionRange(new NuGetVersion("13.0.1")), noRestore: false);
 
             Assert.True(result.IsSuccess);
             Assert.Equal(updated, fileSystem.File.ReadAllText(propsPath));
@@ -567,10 +564,10 @@ namespace DotNetOutdated.Tests
                     System.Xml.Linq.XDocument.Parse(original.Replace("12.0.3", "13.0.1")).ToString());
                 return new RunStatus("", "", 0);
             });
-            var service = new DotNetPackageService(dotNetRunner, fileSystem, EmptyVariableTrackingService());
+            var service = new DotNetPackageService(dotNetRunner, fileSystem);
 
             var result = service.AddPackage(projectPath, "Newtonsoft.Json", "net8.0",
-                new NuGetVersion("13.0.1"), noRestore: false);
+                new VersionRange(new NuGetVersion("13.0.1")), noRestore: false);
 
             Assert.True(result.IsSuccess);
             Assert.Equal(original.Replace("12.0.3", "13.0.1"), fileSystem.File.ReadAllText(propsPath));
@@ -598,9 +595,9 @@ namespace DotNetOutdated.Tests
                 fileSystem.File.WriteAllText(propsPath, System.Xml.Linq.XDocument.Parse(expected).ToString());
                 return new RunStatus("", "", 0);
             });
-            var service = new DotNetPackageService(dotNetRunner, fileSystem, EmptyVariableTrackingService());
+            var service = new DotNetPackageService(dotNetRunner, fileSystem);
 
-            var result = service.AddPackage(projectPath, "Newtonsoft.Json", "net8.0", new NuGetVersion("13.0.1"), noRestore: false);
+            var result = service.AddPackage(projectPath, "Newtonsoft.Json", "net8.0", new VersionRange(new NuGetVersion("13.0.1")), noRestore: false);
 
             Assert.True(result.IsSuccess);
             Assert.Equal(expected, fileSystem.File.ReadAllText(propsPath));
@@ -629,10 +626,10 @@ namespace DotNetOutdated.Tests
                 fileSystem.File.WriteAllText(propsPath, DirectoryPackagesPropsContent.Replace("12.0.3", "13.0.1"));
                 return new RunStatus("", "", 0);
             });
-            var service = new DotNetPackageService(dotNetRunner, fileSystem, EmptyVariableTrackingService());
+            var service = new DotNetPackageService(dotNetRunner, fileSystem);
 
             var result = service.AddPackage(projectPath, "Newtonsoft.Json", "net8.0",
-                new NuGetVersion("13.0.1"), noRestore: false);
+                new VersionRange(new NuGetVersion("13.0.1")), noRestore: false);
 
             byte[] expected = [.. encoding.GetPreamble(), .. encoding.GetBytes(original.Replace("12.0.3", "13.0.1"))];
             Assert.True(result.IsSuccess);
@@ -656,10 +653,10 @@ namespace DotNetOutdated.Tests
                 { projectPath, new MockFileData("<Project></Project>") }
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
-            var service = new DotNetPackageService(dotNetRunner, fileSystem, EmptyVariableTrackingService());
+            var service = new DotNetPackageService(dotNetRunner, fileSystem);
 
             var result = service.AddPackage(projectPath, "Newtonsoft.Json", "net8.0",
-                new NuGetVersion("13.0.1"), noRestore: true);
+                new VersionRange(new NuGetVersion("13.0.1")), noRestore: true);
 
             byte[] expected = [.. encoding.GetPreamble(), .. encoding.GetBytes(original.Replace("12.0.3", "13.0.1"))];
             Assert.True(result.IsSuccess);
@@ -691,10 +688,10 @@ namespace DotNetOutdated.Tests
                 }
                 return new RunStatus("", "", 0);
             });
-            var service = new DotNetPackageService(dotNetRunner, fileSystem, EmptyVariableTrackingService());
+            var service = new DotNetPackageService(dotNetRunner, fileSystem);
 
             var result = service.AddPackage(projectPath, "Newtonsoft.Json", "net8.0",
-                new NuGetVersion("13.0.1"), noRestore: false);
+                new VersionRange(new NuGetVersion("13.0.1")), noRestore: false);
 
             Assert.True(result.IsSuccess);
             Assert.Equal(cliUpdatesFile ? updatedBytes : originalBytes, fileSystem.File.ReadAllBytes(propsPath));
@@ -730,10 +727,10 @@ namespace DotNetOutdated.Tests
                 fileSystem.File.WriteAllText(propsPath, rewritten);
                 return new RunStatus("", "", 0);
             });
-            var service = new DotNetPackageService(dotNetRunner, fileSystem, new VariableTrackingService(fileSystem));
+            var service = new DotNetPackageService(dotNetRunner, fileSystem);
 
             var result = service.AddPackage(projectPath, "Newtonsoft.Json", "net8.0",
-                new NuGetVersion("13.0.1"), noRestore: false);
+                new VersionRange(new NuGetVersion("13.0.1")), noRestore: false);
 
             Assert.True(result.IsSuccess);
             Assert.Equal(original.Replace("12.0.3", "13.0.1"), fileSystem.File.ReadAllText(propsPath));
@@ -767,10 +764,10 @@ namespace DotNetOutdated.Tests
                     System.Xml.Linq.XDocument.Parse(original.Replace("$(JsonVersion)", "13.0.1")).ToString());
                 return new RunStatus("", "", 0);
             });
-            var service = new DotNetPackageService(dotNetRunner, fileSystem, new VariableTrackingService(fileSystem));
+            var service = new DotNetPackageService(dotNetRunner, fileSystem);
 
             var result = service.AddPackage(projectPath, "Newtonsoft.Json", "net8.0",
-                new NuGetVersion("13.0.1"), noRestore: false);
+                new VersionRange(new NuGetVersion("13.0.1")), noRestore: false);
 
             Assert.True(result.IsSuccess);
             Assert.Equal(original.Replace("12.0.3", "13.0.1"), fileSystem.File.ReadAllText(propsPath));
@@ -801,10 +798,10 @@ namespace DotNetOutdated.Tests
                 fileSystem.File.WriteAllText(propsPath, original.Replace("$(JsonVersion)", "13.0.1"));
                 return new RunStatus("", "", 0);
             });
-            var service = new DotNetPackageService(dotNetRunner, fileSystem, new VariableTrackingService(fileSystem));
+            var service = new DotNetPackageService(dotNetRunner, fileSystem);
 
             var result = service.AddPackage(projectPath, "Newtonsoft.Json", "net8.0",
-                new NuGetVersion("13.0.1"), noRestore);
+                new VersionRange(new NuGetVersion("13.0.1")), noRestore);
 
             byte[] expected = [.. encoding.GetPreamble(), .. encoding.GetBytes(original.Replace("12.0.3", "13.0.1"))];
             Assert.True(result.IsSuccess);
@@ -828,10 +825,10 @@ namespace DotNetOutdated.Tests
                 fileSystem.File.WriteAllText(propsPath, updated);
                 return new RunStatus("", "Package is incompatible", 1);
             });
-            var service = new DotNetPackageService(dotNetRunner, fileSystem, EmptyVariableTrackingService());
+            var service = new DotNetPackageService(dotNetRunner, fileSystem);
 
             var result = service.AddPackage(projectPath, "Newtonsoft.Json", "net8.0",
-                new NuGetVersion("13.0.1"), noRestore: false);
+                new VersionRange(new NuGetVersion("13.0.1")), noRestore: false);
 
             Assert.False(result.IsSuccess);
             Assert.Equal(updated, fileSystem.File.ReadAllText(propsPath));
@@ -851,11 +848,11 @@ namespace DotNetOutdated.Tests
             });
 
             var dotNetRunner = Substitute.For<IDotNetRunner>();
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem, EmptyVariableTrackingService());
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
 
             // Act
             var result = service.AddPackage(projectPath, "Newtonsoft.Json", "net8.0",
-                new NuGetVersion("13.0.1"), noRestore: true);
+                new VersionRange(new NuGetVersion("13.0.1")), noRestore: true);
 
             // Assert
             Assert.True(result.IsSuccess);
@@ -887,9 +884,9 @@ namespace DotNetOutdated.Tests
                 fileSystem.File.WriteAllText(propsPath, DirectoryPackagesPropsContent.Replace("12.0.3", "13.0.1"));
                 return new RunStatus("", "", 0);
             });
-            var service = new DotNetPackageService(dotNetRunner, fileSystem, EmptyVariableTrackingService());
+            var service = new DotNetPackageService(dotNetRunner, fileSystem);
 
-            var result = service.AddPackage(projectPath, "Newtonsoft.Json", "net8.0", new NuGetVersion("13.0.1"), noRestore);
+            var result = service.AddPackage(projectPath, "Newtonsoft.Json", "net8.0", new VersionRange(new NuGetVersion("13.0.1")), noRestore);
 
             Assert.True(result.IsSuccess);
             Assert.Equal(original.Replace("12.0.3", "13.0.1"), fileSystem.File.ReadAllText(propsPath));
@@ -914,11 +911,11 @@ namespace DotNetOutdated.Tests
             });
 
             var dotNetRunner = Substitute.For<IDotNetRunner>();
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem, EmptyVariableTrackingService());
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
 
             // Act
             var result = service.AddPackage(projectPath, "SomeAnalyzer", "net8.0",
-                new NuGetVersion("2.0.0"), noRestore: true);
+                new VersionRange(new NuGetVersion("2.0.0")), noRestore: true);
 
             // Assert
             Assert.True(result.IsSuccess);
@@ -944,11 +941,11 @@ namespace DotNetOutdated.Tests
 
             var dotNetRunner = Substitute.For<IDotNetRunner>();
             dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem, EmptyVariableTrackingService());
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
 
             // Act - package "UnknownPackage" is not in Directory.Packages.props
             var result = service.AddPackage(projectPath, "UnknownPackage", "net8.0",
-                new NuGetVersion("1.0.0"), noRestore: true);
+                new VersionRange(new NuGetVersion("1.0.0")), noRestore: true);
 
             // Assert - should fall through to dotnet add package
             dotNetRunner.ReceivedWithAnyArgs(1).Run(default, default);
@@ -969,9 +966,9 @@ Console.WriteLine();")
                 }
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem, new VariableTrackingService(mockFileSystem));
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
 
-            var result = service.AddPackage(appPath, "Humanizer", "net10.0", new NuGetVersion("3.0.11"), noRestore: true);
+            var result = service.AddPackage(appPath, "Humanizer", "net10.0", new VersionRange(new NuGetVersion("3.0.11")), noRestore: true);
 
             Assert.True(result.IsSuccess);
             dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
@@ -995,9 +992,9 @@ Console.WriteLine();")
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
             dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem, new VariableTrackingService(mockFileSystem));
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
 
-            var result = service.AddPackage(appPath, "Humanizer", "net10.0", new NuGetVersion("3.0.11"), noRestore: false);
+            var result = service.AddPackage(appPath, "Humanizer", "net10.0", new VersionRange(new NuGetVersion("3.0.11")), noRestore: false);
 
             Assert.True(result.IsSuccess);
             dotNetRunner.Received().Run(XFS.Path(@"c:\repo"), Arg.Is<string[]>(a => a[0] == "restore" && a[1] == "app.cs"));
@@ -1017,9 +1014,9 @@ Console.WriteLine();")
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
             dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem, new VariableTrackingService(mockFileSystem));
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
 
-            var result = service.AddPackage(appPath, "Humanizer", "net10.0", new NuGetVersion("3.0.11"), noRestore: true);
+            var result = service.AddPackage(appPath, "Humanizer", "net10.0", new VersionRange(new NuGetVersion("3.0.11")), noRestore: true);
 
             Assert.True(result.IsSuccess);
             dotNetRunner.Received().Run(
@@ -1047,9 +1044,9 @@ Information(""Outdated Sdk"");")
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
             dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem, new VariableTrackingService(mockFileSystem));
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
 
-            var result = service.AddPackage(appPath, "Cake.Sdk", "net10.0", new NuGetVersion("6.2.0"), noRestore: true);
+            var result = service.AddPackage(appPath, "Cake.Sdk", "net10.0", new VersionRange(new NuGetVersion("6.2.0")), noRestore: true, kind: ReferenceKind.Sdk);
 
             Assert.True(result.IsSuccess);
             dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
@@ -1059,42 +1056,23 @@ Information(""Outdated Sdk"");")
         }
 
         [Fact]
-        public void FileBasedAppDirectSdkWithPropertyReferences_ReturnsFailureWithoutCallingDotNet()
+        public void FileBasedAppSdkWithUnresolvedPropertyReference_ReturnsFailureWithoutCallingDotNet()
         {
             var appPath = XFS.Path(@"c:\repo\cake.cs");
+            const string content = "#:sdk $(SdkId)@6.0.0";
             var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
             {
-                { appPath, new MockFileData("#:sdk $(SdkId)@6.0.0") }
+                { appPath, new MockFileData(content) }
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
-            var variableTracking = Substitute.For<IVariableTrackingService>();
-            variableTracking.DiscoverPackageVariables(appPath).Returns([]);
-            variableTracking.DiscoverFileBasedAppReferences(appPath).Returns(
-            [
-                new FileBasedAppReference
-                {
-                    Name = "Cake.Sdk",
-                    Kind = FileBasedAppReferenceKind.Sdk,
-                    NameExpression = "$(SdkId)",
-                    VersionExpression = "6.0.0",
-                    ResolvedVersion = new NuGetVersion("6.0.0"),
-                    VersionRange = FileBasedAppReferenceHelper.CreateMinimumVersionRange(new NuGetVersion("6.0.0"))
-                }
-            ]);
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
 
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem, variableTracking);
-
-            var result = service.AddPackage(appPath, "Cake.Sdk", "net10.0", new NuGetVersion("6.2.0"), noRestore: true);
+            var result = service.AddPackage(appPath, "Cake.Sdk", "net10.0", new VersionRange(new NuGetVersion("6.2.0")), noRestore: true, kind: ReferenceKind.Sdk);
 
             Assert.False(result.IsSuccess);
-            Assert.Contains("Direct #:sdk updates require a literal id@version", result.Errors);
-            Assert.Contains("#:property", result.Errors);
+            Assert.Contains("Failed to update file-based app", result.Errors);
+            Assert.Equal(content, mockFileSystem.File.ReadAllText(appPath));
             dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
-            variableTracking.DidNotReceive().UpdateFileBasedAppDirectReference(
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<FileBasedAppReferenceKind>(),
-                Arg.Any<NuGetVersion>());
         }
 
         [Fact]
@@ -1111,9 +1089,9 @@ Information(""Outdated Sdk"");")
                 }
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem, new VariableTrackingService(mockFileSystem));
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
 
-            var result = service.AddPackage(appPath, "Cake.Sdk", "net10.0", new NuGetVersion("6.2.0"), noRestore: true);
+            var result = service.AddPackage(appPath, "Cake.Sdk", "net10.0", new VersionRange(new NuGetVersion("6.2.0")), noRestore: true, kind: ReferenceKind.Sdk);
 
             Assert.True(result.IsSuccess);
             dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
@@ -1136,9 +1114,9 @@ Information(""Outdated Sdk"");")
                 }
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem, new VariableTrackingService(mockFileSystem));
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
 
-            var result = service.AddPackage(appPath, "Cake.Sdk", "net10.0", new NuGetVersion("6.2.0"), noRestore: true);
+            var result = service.AddPackage(appPath, "Cake.Sdk", "net10.0", new VersionRange(new NuGetVersion("6.2.0")), noRestore: true, kind: ReferenceKind.Sdk);
 
             Assert.True(result.IsSuccess);
             dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
@@ -1158,9 +1136,9 @@ Information(""Outdated Sdk"");")
                 }
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem, new VariableTrackingService(mockFileSystem));
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
 
-            var result = service.AddPackage(appPath, "Cake.Sdk", "net10.0", new NuGetVersion("6.2.0"), noRestore: true);
+            var result = service.AddPackage(appPath, "Cake.Sdk", "net10.0", new VersionRange(new NuGetVersion("6.2.0")), noRestore: true, kind: ReferenceKind.Sdk);
 
             Assert.True(result.IsSuccess);
             dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
@@ -1177,14 +1155,65 @@ Information(""Outdated Sdk"");")
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
             dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus(string.Empty, string.Empty, 0));
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem, EmptyVariableTrackingService());
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
 
-            var result = service.AddPackage(projectPath, "Aspire.AppHost.Sdk", "net10.0", new NuGetVersion("13.0.2"));
+            var result = service.AddPackage(projectPath, "Aspire.AppHost.Sdk", "net10.0", new VersionRange(new NuGetVersion("13.0.2")), kind: ReferenceKind.Sdk);
 
             Assert.True(result.IsSuccess);
             Assert.Equal(@"<Project Sdk=""Aspire.AppHost.Sdk/13.0.2""></Project>", mockFileSystem.File.ReadAllText(projectPath));
             dotNetRunner.Received(1).Run(XFS.Path(@"c:\repo\AppHost"), Arg.Is<string[]>(a => a.Length == 2 && a[0] == "restore" && a[1] == "AppHost.csproj"));
             dotNetRunner.DidNotReceive().Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[0] == "add"));
+        }
+
+        [Theory]
+        [InlineData(ReferenceKind.Package)]
+        [InlineData(ReferenceKind.Sdk)]
+        public void ProjectSdkAndPackageWithTheSameId_UpdatesOnlyTheRequestedKind(ReferenceKind kind)
+        {
+            var projectPath = XFS.Path(@"c:\repo\Build\Build.csproj");
+            const string original = @"<Project Sdk=""Cake.Sdk/6.0.0""><ItemGroup><PackageReference Include=""Cake.Sdk"" Version=""6.0.0"" /></ItemGroup></Project>";
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { projectPath, new MockFileData(original) }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus(string.Empty, string.Empty, 0));
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
+
+            var result = service.AddPackage(projectPath, "Cake.Sdk", "net10.0", new VersionRange(new NuGetVersion("6.1.0")), noRestore: true, kind: kind);
+
+            Assert.True(result.IsSuccess);
+            if (kind == ReferenceKind.Sdk)
+            {
+                Assert.Equal(original.Replace("Cake.Sdk/6.0.0", "Cake.Sdk/6.1.0"), mockFileSystem.File.ReadAllText(projectPath));
+                dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
+            }
+            else
+            {
+                Assert.Equal(original, mockFileSystem.File.ReadAllText(projectPath));
+                dotNetRunner.Received(1).Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[0] == "add" && a[3] == "Cake.Sdk"));
+            }
+        }
+
+        [Theory]
+        [InlineData("#:sdk Cake.Sdk@6.0.0\n", ReferenceKind.Sdk)]
+        [InlineData("#:property CakeVersion=6.0.0\n#:package Cake.Core@$(CakeVersion)\n", ReferenceKind.Package)]
+        public void FileBasedApp_Update_PreservesByteOrderMark(string content, ReferenceKind kind)
+        {
+            var appPath = XFS.Path(@"c:\repo\build.cs");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { appPath, new MockFileData([.. System.Text.Encoding.UTF8.GetPreamble(), .. System.Text.Encoding.UTF8.GetBytes(content)]) }
+            });
+            var service = new DotNetPackageService(Substitute.For<IDotNetRunner>(), mockFileSystem);
+            var name = kind == ReferenceKind.Sdk ? "Cake.Sdk" : "Cake.Core";
+
+            var result = service.AddPackage(appPath, name, "net10.0", new VersionRange(new NuGetVersion("6.1.0")), noRestore: true, kind: kind);
+
+            Assert.True(result.IsSuccess, result.Errors);
+            var bytes = mockFileSystem.File.ReadAllBytes(appPath);
+            Assert.Equal(System.Text.Encoding.UTF8.GetPreamble(), bytes[..3]);
+            Assert.Equal(content.Replace("6.0.0", "6.1.0"), System.Text.Encoding.UTF8.GetString(bytes[3..]));
         }
 
         [Fact]
@@ -1197,9 +1226,9 @@ Information(""Outdated Sdk"");")
             });
             mockFileSystem.File.SetAttributes(projectPath, FileAttributes.ReadOnly);
             var dotNetRunner = Substitute.For<IDotNetRunner>();
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem, EmptyVariableTrackingService());
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
 
-            var result = service.AddPackage(projectPath, "Aspire.AppHost.Sdk", "net10.0", new NuGetVersion("13.0.2"));
+            var result = service.AddPackage(projectPath, "Aspire.AppHost.Sdk", "net10.0", new VersionRange(new NuGetVersion("13.0.2")), kind: ReferenceKind.Sdk);
 
             Assert.False(result.IsSuccess);
             Assert.Contains("Aspire.AppHost.Sdk", result.Errors);
@@ -1215,9 +1244,9 @@ Information(""Outdated Sdk"");")
                 { projectPath, new MockFileData(@"<Project Sdk=""Microsoft.NET.Sdk""><Sdk Name=""Aspire.AppHost.Sdk"" Version=""13.0.2"" /></Project>") }
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem, EmptyVariableTrackingService());
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
 
-            var result = service.AddPackage(projectPath, "Aspire.AppHost.Sdk", "net10.0", new NuGetVersion("13.0.2"), noRestore: true);
+            var result = service.AddPackage(projectPath, "Aspire.AppHost.Sdk", "net10.0", new VersionRange(new NuGetVersion("13.0.2")), noRestore: true, kind: ReferenceKind.Sdk);
 
             Assert.True(result.IsSuccess);
             dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
@@ -1233,10 +1262,10 @@ Information(""Outdated Sdk"");")
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
             dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus(string.Empty, string.Empty, 0));
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem, EmptyVariableTrackingService());
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
 
-            var first = service.AddPackage(projectPath, "Microsoft.Build.NoTargets", "net8.0", new NuGetVersion("3.7.134"));
-            var second = service.AddPackage(projectPath, "Microsoft.Build.NoTargets", "netstandard2.0", new NuGetVersion("3.7.134"));
+            var first = service.AddPackage(projectPath, "Microsoft.Build.NoTargets", "net8.0", new VersionRange(new NuGetVersion("3.7.134")), kind: ReferenceKind.Sdk);
+            var second = service.AddPackage(projectPath, "Microsoft.Build.NoTargets", "netstandard2.0", new VersionRange(new NuGetVersion("3.7.134")), kind: ReferenceKind.Sdk);
 
             Assert.True(first.IsSuccess);
             Assert.True(second.IsSuccess);
@@ -1258,7 +1287,7 @@ Information(""Outdated Sdk"");")
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
             dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem, EmptyVariableTrackingService());
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
 
             var result = service.AddPackage(projectPath, "Newtonsoft.Json", "net8.0", VersionRange.Parse(range));
 
@@ -1278,9 +1307,9 @@ Information(""Outdated Sdk"");")
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
             dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem, EmptyVariableTrackingService());
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
 
-            service.AddPackage(projectPath, "Some.Package", "net8.0", new NuGetVersion("4.5.0.0"));
+            service.AddPackage(projectPath, "Some.Package", "net8.0", new VersionRange(new NuGetVersion("4.5.0.0")));
 
             dotNetRunner.Received(1).Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[5] == "4.5.0.0"));
         }
@@ -1296,7 +1325,7 @@ Information(""Outdated Sdk"");")
                 { projectPath, new MockFileData("<Project></Project>") }
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem, EmptyVariableTrackingService());
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
 
             var result = service.AddPackage(projectPath, "Newtonsoft.Json", "net8.0",
                 VersionRange.Parse("[13.0.4, 14.0.0)"), noRestore: true, ignoreFailedSources: false);
@@ -1309,7 +1338,7 @@ Information(""Outdated Sdk"");")
         [Fact]
         public void AddPackage_WithRangeWithoutLowerBound_Throws()
         {
-            var service = new DotNetPackageService(Substitute.For<IDotNetRunner>(), new MockFileSystem(), EmptyVariableTrackingService());
+            var service = new DotNetPackageService(Substitute.For<IDotNetRunner>(), new MockFileSystem());
 
             Assert.Throws<ArgumentException>(() =>
                 service.AddPackage(XFS.Path(@"c:\repo\MyProject.csproj"), "Newtonsoft.Json", "net8.0", VersionRange.Parse("(, 14.0.0)")));
@@ -1338,10 +1367,10 @@ Information(""Outdated Sdk"");")
             var fileSystem = new MockFileSystem(files);
             var dotNetRunner = Substitute.For<IDotNetRunner>();
             dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
-            var service = new DotNetPackageService(dotNetRunner, fileSystem, new VariableTrackingService(fileSystem));
+            var service = new DotNetPackageService(dotNetRunner, fileSystem);
 
-            var first = service.AddPackage(projectPath, "Microsoft.Maui.Controls", "net8.0", new NuGetVersion("8.0.100"), noRestore);
-            var second = service.AddPackage(projectPath, "Microsoft.Maui.Controls", "net9.0", new NuGetVersion("8.0.100"), noRestore);
+            var first = service.AddPackage(projectPath, "Microsoft.Maui.Controls", "net8.0", new VersionRange(new NuGetVersion("8.0.100")), noRestore);
+            var second = service.AddPackage(projectPath, "Microsoft.Maui.Controls", "net9.0", new VersionRange(new NuGetVersion("8.0.100")), noRestore);
 
             Assert.True(first.IsSuccess);
             Assert.True(second.IsSuccess);
@@ -1374,10 +1403,10 @@ Information(""Outdated Sdk"");")
                 return new RunStatus("", "", 0);
             });
 
-            var service = new DotNetPackageService(dotNetRunner, fileSystem, new VariableTrackingService(fileSystem));
+            var service = new DotNetPackageService(dotNetRunner, fileSystem);
 
-            Assert.True(service.AddPackage(projectPath, "Microsoft.Maui.Controls", "net8.0", new NuGetVersion("8.0.100"), noRestore: false).IsSuccess);
-            Assert.True(service.AddPackage(projectPath, "Microsoft.Maui.Controls.Compatibility", "net8.0", new NuGetVersion("8.0.100"), noRestore: false).IsSuccess);
+            Assert.True(service.AddPackage(projectPath, "Microsoft.Maui.Controls", "net8.0", new VersionRange(new NuGetVersion("8.0.100")), noRestore: false).IsSuccess);
+            Assert.True(service.AddPackage(projectPath, "Microsoft.Maui.Controls.Compatibility", "net8.0", new VersionRange(new NuGetVersion("8.0.100")), noRestore: false).IsSuccess);
 
             var finalContent = fileSystem.File.ReadAllText(projectPath);
             Assert.Single(Regex.Matches(finalContent, @"<MauiVersion>8\.0\.100</MauiVersion>"));
@@ -1399,11 +1428,11 @@ Information(""Outdated Sdk"");")
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
             dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
-            var service = new DotNetPackageService(dotNetRunner, fileSystem, new VariableTrackingService(fileSystem));
+            var service = new DotNetPackageService(dotNetRunner, fileSystem);
 
             foreach (var (project, framework) in new[] { (projectA, "net8.0"), (projectA, "net9.0"), (projectB, "net8.0"), (projectB, "net9.0") })
             {
-                Assert.True(service.AddPackage(project, "Analyzers", framework, new NuGetVersion("8.0.100"), noRestore: false).IsSuccess);
+                Assert.True(service.AddPackage(project, "Analyzers", framework, new VersionRange(new NuGetVersion("8.0.100")), noRestore: false).IsSuccess);
             }
 
             dotNetRunner.Received(1).Run(XFS.Path(@"c:\repo\A"), Arg.Is<string[]>(a => a[0] == "restore"));
@@ -1423,9 +1452,9 @@ Information(""Outdated Sdk"");")
                 [projectPath] = new("<Project Sdk=\"Microsoft.NET.Sdk\"></Project>"),
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
-            var service = new DotNetPackageService(dotNetRunner, fileSystem, new VariableTrackingService(fileSystem));
+            var service = new DotNetPackageService(dotNetRunner, fileSystem);
 
-            var status = service.AddPackage(projectPath, "Analyzers", "net8.0", new NuGetVersion("9.0.0"), noRestore: false);
+            var status = service.AddPackage(projectPath, "Analyzers", "net8.0", new VersionRange(new NuGetVersion("9.0.0")), noRestore: false);
 
             Assert.False(status.IsSuccess);
             Assert.Contains("Update the version manually", status.Errors);
@@ -1445,9 +1474,9 @@ Information(""Outdated Sdk"");")
             var dotNetRunner = Substitute.For<IDotNetRunner>();
             dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
             var warnings = new List<string>();
-            var service = new DotNetPackageService(dotNetRunner, fileSystem, new VariableTrackingService(fileSystem), warnings.Add);
+            var service = new DotNetPackageService(dotNetRunner, fileSystem, warnings.Add);
 
-            Assert.True(service.AddPackage(projectPath, "Serilog", "net8.0", new NuGetVersion("9.0.0"), noRestore: false).IsSuccess);
+            Assert.True(service.AddPackage(projectPath, "Serilog", "net8.0", new VersionRange(new NuGetVersion("9.0.0")), noRestore: false).IsSuccess);
 
             dotNetRunner.Received(1).Run(XFS.Path(@"c:\repo\A"), Arg.Is<string[]>(a => a[0] == "add" && a[3] == "Serilog"));
             var warning = Assert.Single(warnings);

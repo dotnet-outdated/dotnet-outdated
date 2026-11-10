@@ -2,6 +2,7 @@
 using CsvHelper;
 using System.Linq;
 using DotNetOutdated.Core.Models;
+using DotNetOutdated.Core.Services;
 using DotNetOutdated.Services;
 using System.Text.Json.Serialization;
 using NuGet.Frameworks;
@@ -75,6 +76,9 @@ namespace DotNetOutdated.Models
 
         [JsonIgnore]
         public VersionRange OriginalVersionRange => _dependency.VersionRange;
+
+        [JsonIgnore]
+        public ReferenceKind Kind => _dependency.Kind;
 
         [JsonPropertyOrder(0)]
         public string Name => _dependency.Name;

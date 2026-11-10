@@ -99,15 +99,10 @@ namespace DotNetOutdated
                 .AddSingleton<IDotNetRunner, DotNetRunner>()
                  .AddSingleton<IDependencyGraphService, DependencyGraphService>()
                  .AddSingleton<IDotNetRestoreService, DotNetRestoreService>()
-                 .AddSingleton<IVariableTrackingService>(provider =>
-                     new VariableTrackingService(
-                         provider.GetService<IFileSystem>(),
-                         msg => provider.GetService<IReporter>().Warn(msg)))
                  .AddSingleton<IDotNetPackageService>(provider =>
                      new DotNetPackageService(
                          provider.GetService<IDotNetRunner>(),
                          provider.GetService<IFileSystem>(),
-                         provider.GetService<IVariableTrackingService>(),
                          msg => provider.GetService<IReporter>().Warn(msg)))
                  .AddSingleton<INuGetPackageInfoService, NuGetPackageInfoService>()
                  .AddSingleton<INuGetPackageResolutionService, NuGetPackageResolutionService>()
@@ -249,7 +244,7 @@ namespace DotNetOutdated
                {
                   RunStatus status = null;
 
-                  if (!project.IsProjectSdkStyle())
+                  if (package.Kind == ReferenceKind.Package && !project.IsProjectSdkStyle())
                   {
                      console.WriteLine("Project format not SDK style or centrally managed, removing package before upgrade.");
                      status = _dotNetPackageService.RemovePackage(project.ProjectFilePath, package.Name);
@@ -262,7 +257,7 @@ namespace DotNetOutdated
                          ? project.Framework.GetShortFolderName()
                          : project.TargetAlias;
 
-                     status = _dotNetPackageService.AddPackage(project.ProjectFilePath, package.Name, frameworkName, newVersionRange, NoRestore, IgnoreFailedSources);
+                     status = _dotNetPackageService.AddPackage(project.ProjectFilePath, package.Name, frameworkName, newVersionRange, NoRestore, IgnoreFailedSources, package.Kind);
                   }
 
                   if (status.IsSuccess)

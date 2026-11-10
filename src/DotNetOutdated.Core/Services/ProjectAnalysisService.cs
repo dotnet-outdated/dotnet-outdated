@@ -21,7 +21,7 @@ namespace DotNetOutdated.Core.Services
         private readonly IDependencyGraphService _dependencyGraphService;
         private readonly IDotNetRestoreService _dotNetRestoreService;
         private readonly IFileSystem _fileSystem;
-        private readonly IVariableTrackingService _variableTrackingService;
+        private readonly FileBasedAppDirectives _fileBasedAppDirectives;
         private readonly ILogger _logger;
 
         // Limits the concurrent `dotnet msbuild` evaluations for SDK-injected package references across all projects
@@ -32,7 +32,7 @@ namespace DotNetOutdated.Core.Services
             IDependencyGraphService dependencyGraphService,
             IDotNetRestoreService dotNetRestoreService,
             IFileSystem fileSystem)
-            : this(dependencyGraphService, dotNetRestoreService, fileSystem, new VariableTrackingService(fileSystem))
+            : this(dependencyGraphService, dotNetRestoreService, fileSystem, NullLogger.Instance)
         {
         }
 
@@ -40,31 +40,12 @@ namespace DotNetOutdated.Core.Services
             IDependencyGraphService dependencyGraphService,
             IDotNetRestoreService dotNetRestoreService,
             IFileSystem fileSystem,
-            ILogger logger)
-            : this(dependencyGraphService, dotNetRestoreService, fileSystem, new VariableTrackingService(fileSystem), logger)
-        {
-        }
-
-        public ProjectAnalysisService(
-            IDependencyGraphService dependencyGraphService,
-            IDotNetRestoreService dotNetRestoreService,
-            IFileSystem fileSystem,
-            IVariableTrackingService variableTrackingService)
-            : this(dependencyGraphService, dotNetRestoreService, fileSystem, variableTrackingService, NullLogger.Instance)
-        {
-        }
-
-        public ProjectAnalysisService(
-            IDependencyGraphService dependencyGraphService,
-            IDotNetRestoreService dotNetRestoreService,
-            IFileSystem fileSystem,
-            IVariableTrackingService variableTrackingService,
             ILogger logger)
         {
             _dependencyGraphService = dependencyGraphService;
             _dotNetRestoreService = dotNetRestoreService;
             _fileSystem = fileSystem;
-            _variableTrackingService = variableTrackingService;
+            _fileBasedAppDirectives = new FileBasedAppDirectives(fileSystem, new MSBuildEvaluator(fileSystem));
             _logger = logger;
         }
 
@@ -157,7 +138,8 @@ namespace DotNetOutdated.Core.Services
                                 sdkReference.ResolvedVersion,
                                 isAutoReferenced: false,
                                 isTransitive: false,
-                                isDevelopmentDependency: false);
+                                isDevelopmentDependency: false,
+                                ReferenceKind.Sdk);
                         }
 
                         if (packageFolders != null)
@@ -176,7 +158,7 @@ namespace DotNetOutdated.Core.Services
 
         private void ApplyFileBasedAppDirectives(string projectPath, TargetFramework targetFramework)
         {
-            var fileBasedReferences = _variableTrackingService.DiscoverFileBasedAppReferences(projectPath);
+            var fileBasedReferences = _fileBasedAppDirectives.References(projectPath);
             if (fileBasedReferences.Count == 0)
             {
                 return;
@@ -204,7 +186,8 @@ namespace DotNetOutdated.Core.Services
                     reference.ResolvedVersion,
                     isAutoReferenced: false,
                     isTransitive: false,
-                    isDevelopmentDependency: false);
+                    isDevelopmentDependency: false,
+                    reference.Kind);
             }
         }
 

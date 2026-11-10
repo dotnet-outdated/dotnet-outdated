@@ -28,7 +28,7 @@ public sealed class FileBasedAppReference
     /// <summary>
     /// Gets whether the reference came from a <c>#:package</c> or <c>#:sdk</c> directive.
     /// </summary>
-    public FileBasedAppReferenceKind Kind { get; init; }
+    public ReferenceKind Kind { get; init; }
 
     /// <summary>
     /// Gets the unresolved package or SDK id expression from the source directive (for example <c>Cake.Sdk</c> or <c>$(SdkId)</c>).
@@ -43,7 +43,7 @@ public sealed class FileBasedAppReference
     /// <summary>
     /// Gets variable-tracking metadata when the directive uses a <c>#:property</c>-backed version; otherwise <see langword="null"/>.
     /// </summary>
-    public PackageVariableInfo? VariableInfo { get; init; }
+    internal PackageVariableInfo? VariableInfo { get; init; }
 
     /// <summary>
     /// Gets whether either directive expression contains an MSBuild property reference such as <c>$(PropertyName)</c>.
@@ -61,14 +61,8 @@ internal static class FileBasedAppReferenceHelper
     /// Determines whether either expression contains an MSBuild property reference.
     /// </summary>
     public static bool ContainsPropertyReference(string nameExpression, string versionExpression) =>
-        ExpressionContainsPropertyReference(nameExpression) ||
-        ExpressionContainsPropertyReference(versionExpression);
-
-    /// <summary>
-    /// Determines whether a single expression contains an MSBuild property reference.
-    /// </summary>
-    public static bool ExpressionContainsPropertyReference(string expression) =>
-        !string.IsNullOrEmpty(expression) && expression.Contains("$(");
+        VersionExpression.ContainsPropertyReference(nameExpression) ||
+        VersionExpression.ContainsPropertyReference(versionExpression);
 
     /// <summary>
     /// Creates a minimum-inclusive version range (<c>[version, )</c>) for a directive version. The directive
@@ -87,27 +81,11 @@ internal static class FileBasedAppReferenceHelper
     /// <summary>
     /// Gets the dictionary key for storing a file-based app reference in <see cref="Models.TargetFramework.Dependencies"/>.
     /// </summary>
-    public static string GetDependencyDictionaryKey(string name, FileBasedAppReferenceKind kind) =>
+    public static string GetDependencyDictionaryKey(string name, ReferenceKind kind) =>
         kind switch
         {
-            FileBasedAppReferenceKind.Sdk => $"{name}#sdk",
-            FileBasedAppReferenceKind.Package => $"{name}#package",
+            ReferenceKind.Sdk => $"{name}#sdk",
+            ReferenceKind.Package => $"{name}#package",
             _ => name
         };
-}
-
-/// <summary>
-/// The kind of file-based app directive that declared a reference.
-/// </summary>
-public enum FileBasedAppReferenceKind
-{
-    /// <summary>
-    /// A <c>#:package</c> directive.
-    /// </summary>
-    Package,
-
-    /// <summary>
-    /// A <c>#:sdk</c> directive.
-    /// </summary>
-    Sdk
 }

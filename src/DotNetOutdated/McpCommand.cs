@@ -23,15 +23,10 @@ namespace DotNetOutdated
                  .AddSingleton<IDotNetRunner, DotNetRunner>()
                  .AddSingleton<IDependencyGraphService, DependencyGraphService>()
                  .AddSingleton<IDotNetRestoreService, DotNetRestoreService>()
-                 .AddSingleton<IVariableTrackingService>(provider =>
-                     new VariableTrackingService(
-                         provider.GetService<IFileSystem>(),
-                         msg => provider.GetService<IReporter>().Warn(msg)))
                  .AddSingleton<IDotNetPackageService>(provider =>
                      new DotNetPackageService(
                          provider.GetService<IDotNetRunner>(),
                          provider.GetService<IFileSystem>(),
-                         provider.GetService<IVariableTrackingService>(),
                          msg => provider.GetService<IReporter>().Warn(msg)))
                  .AddSingleton<INuGetPackageInfoService, NuGetPackageInfoService>()
                  .AddSingleton<INuGetPackageResolutionService, NuGetPackageResolutionService>()
