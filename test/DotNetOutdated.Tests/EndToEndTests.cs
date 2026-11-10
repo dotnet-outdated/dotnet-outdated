@@ -156,10 +156,10 @@ public static class EndToEndTests
                 .GetProperty("TargetFrameworks")
                 .EnumerateArray()
                 .SelectMany(targetFramework => targetFramework.GetProperty("Dependencies").EnumerateArray()),
-            dependency => dependency.GetProperty("Name").GetString() == "Newtonsoft.Json");
+            dependency => dependency.GetProperty("Name").GetString() == "DotNetOutdated.Fake.Json");
 
         Assert.Equal("11.0.1", analyzedDependency.GetProperty("ResolvedVersion").GetString());
-        Assert.False(string.IsNullOrWhiteSpace(analyzedDependency.GetProperty("LatestVersion").GetString()));
+        Assert.Equal("13.0.4", analyzedDependency.GetProperty("LatestVersion").GetString());
     }
 
     [RequiresFileBasedAppSdk]
@@ -174,10 +174,9 @@ public static class EndToEndTests
 
         var content = File.ReadAllText(appPath);
 
-        Assert.Contains("#:property NewtonsoftJsonPackageId=Newtonsoft.Json", content);
-        Assert.Contains("#:property NewtonsoftJsonPackageVersion=", content);
-        Assert.Contains("#:package $(NewtonsoftJsonPackageId)@$(NewtonsoftJsonPackageVersion)", content);
-        Assert.DoesNotContain("#:property NewtonsoftJsonPackageVersion=11.0.1", content);
+        Assert.Contains("#:property FakeJsonPackageId=DotNetOutdated.Fake.Json", content);
+        Assert.Contains("#:property FakeJsonPackageVersion=13.0.4", content);
+        Assert.Contains("#:package $(FakeJsonPackageId)@$(FakeJsonPackageVersion)", content);
     }
 
     [RequiresFileBasedAppSdk]
@@ -192,8 +191,7 @@ public static class EndToEndTests
 
         var content = File.ReadAllText(appPath);
 
-        Assert.Contains("#:package Newtonsoft.Json@", content);
-        Assert.DoesNotContain("#:package Newtonsoft.Json@11.0.1", content);
+        Assert.Contains("#:package DotNetOutdated.Fake.Json@13.0.4", content);
     }
 
     [RequiresFileBasedAppSdk]
@@ -219,14 +217,13 @@ public static class EndToEndTests
             .SelectMany(targetFramework => targetFramework.GetProperty("Dependencies").EnumerateArray())
             .ToList();
 
-        Assert.Contains(dependencies, dependency => dependency.GetProperty("Name").GetString() == "Cake.Sdk");
-        Assert.DoesNotContain(dependencies, dependency => dependency.GetProperty("Name").GetString() == "Cake.Generator");
+        Assert.Contains(dependencies, dependency => dependency.GetProperty("Name").GetString() == "DotNetOutdated.Fake.App.Sdk");
+        Assert.DoesNotContain(dependencies, dependency => dependency.GetProperty("Name").GetString() == "DotNetOutdated.Fake.App.Generator");
 
-        var analyzedSdk = Assert.Single(dependencies, dependency => dependency.GetProperty("Name").GetString() == "Cake.Sdk");
+        var analyzedSdk = Assert.Single(dependencies, dependency => dependency.GetProperty("Name").GetString() == "DotNetOutdated.Fake.App.Sdk");
 
         Assert.Equal("6.0.0", analyzedSdk.GetProperty("ResolvedVersion").GetString());
-        Assert.False(string.IsNullOrWhiteSpace(analyzedSdk.GetProperty("LatestVersion").GetString()));
-        Assert.NotEqual("6.0.0", analyzedSdk.GetProperty("LatestVersion").GetString());
+        Assert.Equal("6.1.0", analyzedSdk.GetProperty("LatestVersion").GetString());
     }
 
     [RequiresFileBasedAppSdk]
@@ -241,9 +238,28 @@ public static class EndToEndTests
 
         var content = File.ReadAllText(appPath);
 
-        Assert.Contains("#:sdk Cake.Sdk@", content);
-        Assert.DoesNotContain("#:sdk Cake.Sdk@6.0.0", content);
-        Assert.DoesNotContain("Cake.Generator", content);
+        Assert.Contains("#:sdk DotNetOutdated.Fake.App.Sdk@6.1.0", content);
+        Assert.DoesNotContain("DotNetOutdated.Fake.App.Generator", content);
+    }
+
+    [RequiresFileBasedAppSdk]
+    public static void File_Based_App_With_Outdated_Package_Fails_On_Updates()
+    {
+        using var project = TestSetup("file-based-app");
+
+        var actual = Program.Main([Path.Combine(project.Path, "app.cs"), "--fail-on-updates"]);
+
+        Assert.Equal(2, actual);
+    }
+
+    [RequiresFileBasedAppSdk]
+    public static void File_Based_App_With_Outdated_Sdk_Fails_On_Updates()
+    {
+        using var project = TestSetup("file-based-app-sdk");
+
+        var actual = Program.Main([Path.Combine(project.Path, "app.cs"), "--fail-on-updates"]);
+
+        Assert.Equal(2, actual);
     }
 
     [Theory]
@@ -273,9 +289,9 @@ public static class EndToEndTests
             .Select(d => d.GetProperty("Name").GetString())
             .ToList();
 
-        Assert.Contains("Newtonsoft.Json", dependencyNames);
-        Assert.Equal(includeAutoReferences, dependencyNames.Contains("MSTest.TestFramework"));
-        Assert.Equal(includeAutoReferences, dependencyNames.Contains("Microsoft.NET.Test.Sdk"));
+        Assert.Contains("DotNetOutdated.Fake.Json", dependencyNames);
+        Assert.Equal(includeAutoReferences, dependencyNames.Contains("DotNetOutdated.Fake.TestFramework"));
+        Assert.Equal(includeAutoReferences, dependencyNames.Contains("DotNetOutdated.Fake.TestHost"));
     }
 
     [Fact]
@@ -288,15 +304,15 @@ public static class EndToEndTests
 
         var content = File.ReadAllText(Path.Combine(project.Path, "sdk-injected-packages.csproj"));
 
-        Assert.DoesNotContain("<PackageReference Include=\"Newtonsoft.Json\" Version=\"11.0.1\" />", content);
-        Assert.DoesNotContain("MSTest.TestFramework", content);
-        Assert.DoesNotContain("Microsoft.NET.Test.Sdk", content);
+        Assert.Contains("<PackageReference Include=\"DotNetOutdated.Fake.Json\" Version=\"13.0.4\" />", content);
+        Assert.DoesNotContain("DotNetOutdated.Fake.TestFramework", content);
+        Assert.DoesNotContain("DotNetOutdated.Fake.TestHost", content);
     }
 
     [Theory]
-    [InlineData("project-sdk-attribute", "<Project Sdk=\"Microsoft.Build.NoTargets/3.7.0\">")]
-    [InlineData("project-sdk-element", "<Sdk Name=\"Microsoft.Build.NoTargets\" Version=\"3.7.0\" />")]
-    [InlineData("project-sdk-import", "Sdk=\"Microsoft.Build.NoTargets\" Version=\"3.7.0\"")]
+    [InlineData("project-sdk-attribute", "<Project Sdk=\"DotNetOutdated.Fake.NoTargets.Sdk/3.7.0\">")]
+    [InlineData("project-sdk-element", "<Sdk Name=\"DotNetOutdated.Fake.NoTargets.Sdk\" Version=\"3.7.0\" />")]
+    [InlineData("project-sdk-import", "Sdk=\"DotNetOutdated.Fake.NoTargets.Sdk\" Version=\"3.7.0\"")]
     public static void Can_Upgrade_Project_With_Versioned_Project_Sdk(string testProjectName, string originalSdkDeclaration)
     {
         using var project = TestSetup(testProjectName);
@@ -311,8 +327,8 @@ public static class EndToEndTests
         Assert.DoesNotContain("PackageReference", content);
 
         var sdk = Assert.Single(ProjectSdkReferenceHelper.Discover(new System.IO.Abstractions.FileSystem(), projectFilePath));
-        Assert.Equal("Microsoft.Build.NoTargets", sdk.Name);
-        Assert.True(sdk.ResolvedVersion > new NuGetVersion("3.7.0"), $"Expected an upgraded SDK version, got {sdk.ResolvedVersion}");
+        Assert.Equal("DotNetOutdated.Fake.NoTargets.Sdk", sdk.Name);
+        Assert.Equal(new NuGetVersion("3.8.0"), sdk.ResolvedVersion);
     }
 
     [Theory]
@@ -354,12 +370,7 @@ public static class EndToEndTests
             {
                 foreach (var dependency in tfm["Dependencies"].AsArray())
                 {
-                    var latestVersionString = (string)dependency["LatestVersion"];
-
-                    Assert.True(Version.TryParse(latestVersionString, out var latestVersion));
-                    Assert.Equal(8, latestVersion.Major);
-                    Assert.Equal(0, latestVersion.Minor);
-                    Assert.NotEqual(0, latestVersion.Build);
+                    Assert.Equal("8.0.1", (string)dependency["LatestVersion"]);
                 }
             }
         }
@@ -368,7 +379,7 @@ public static class EndToEndTests
         var csprojDependencyVersions = csproj.Descendants("PackageReference")
             .ToDictionary(e => (string)e.Attribute("Include"), e => (string)e.Attribute("Version"));
 
-        Assert.StartsWith("8.0.", csprojDependencyVersions["System.Text.Json"]);
+        Assert.Equal("8.0.1", csprojDependencyVersions["DotNetOutdated.Fake.TextJson"]);
     }
 
     [Fact]
@@ -398,19 +409,17 @@ public static class EndToEndTests
         }
 
         // Exact pins are never upgraded, whether they are below or above the maximum version
-        Assert.DoesNotContain("System.Text.Encodings.Web", latestVersions.Keys);
-        Assert.DoesNotContain("Microsoft.Bcl.AsyncInterfaces", latestVersions.Keys);
+        Assert.DoesNotContain("DotNetOutdated.Fake.TextEncodings", latestVersions.Keys);
+        Assert.DoesNotContain("DotNetOutdated.Fake.AsyncInterfaces", latestVersions.Keys);
 
         // A declared upper bound below the maximum version wins: [6.0.0, 7.0.0)
-        Assert.Equal(6, latestVersions["Microsoft.Extensions.Options"].Major);
+        Assert.Equal(new NuGetVersion("6.0.1"), latestVersions["DotNetOutdated.Fake.Options"]);
 
         // The maximum version wins over a higher declared upper bound: [6.0.0, 10.0.0)
-        Assert.Equal(8, latestVersions["Microsoft.Extensions.Logging"].Major);
-        Assert.Equal(0, latestVersions["Microsoft.Extensions.Logging"].Minor);
+        Assert.Equal(new NuGetVersion("8.0.1"), latestVersions["DotNetOutdated.Fake.Logging"]);
 
         // An open-ended version is capped at the maximum version: 6.0.0
-        Assert.Equal(8, latestVersions["System.Text.Json"].Major);
-        Assert.Equal(0, latestVersions["System.Text.Json"].Minor);
+        Assert.Equal(new NuGetVersion("8.0.1"), latestVersions["DotNetOutdated.Fake.TextJson"]);
     }
 
     [Fact]
@@ -426,20 +435,16 @@ public static class EndToEndTests
             .ToDictionary(e => (string)e.Attribute("Include"), e => (string)e.Attribute("Version"));
 
         // Exact pins are left alone
-        Assert.Equal("[6.0.0]", versions["System.Text.Encodings.Web"]);
-        Assert.Equal("[9.0.0]", versions["Microsoft.Bcl.AsyncInterfaces"]);
+        Assert.Equal("[6.0.0]", versions["DotNetOutdated.Fake.TextEncodings"]);
+        Assert.Equal("[9.0.0]", versions["DotNetOutdated.Fake.AsyncInterfaces"]);
 
         // Declared upper bounds are kept; --maximum-version only narrows the choice
-        var options = VersionRange.Parse(versions["Microsoft.Extensions.Options"]);
-        Assert.Equal(6, options.MinVersion.Major);
-        Assert.Equal(new NuGetVersion(7, 0, 0), options.MaxVersion);
+        Assert.Equal("[6.0.1, 7.0.0)", versions["DotNetOutdated.Fake.Options"]);
 
-        var logging = VersionRange.Parse(versions["Microsoft.Extensions.Logging"]);
-        Assert.Equal(new NuGetVersion(8, 0, logging.MinVersion.Patch), logging.MinVersion);
-        Assert.Equal(new NuGetVersion(10, 0, 0), logging.MaxVersion);
+        Assert.Equal("[8.0.1, 10.0.0)", versions["DotNetOutdated.Fake.Logging"]);
 
         // A plain version stays a plain version
-        Assert.StartsWith("8.0.", versions["System.Text.Json"]);
+        Assert.Equal("8.0.1", versions["DotNetOutdated.Fake.TextJson"]);
     }
 
     [Fact]
@@ -453,11 +458,11 @@ public static class EndToEndTests
         var projectFilePath = Directory.GetFiles(project.Path, "*.csproj").First();
         var content = File.ReadAllText(projectFilePath);
 
-        Assert.Contains("Version=\"$(NewtonsoftJsonVersion)\"", content);
-        Assert.Contains("Version=\"$(MicrosoftExtensionsVersion)\"", content);
+        Assert.Contains("Version=\"$(FakeJsonVersion)\"", content);
+        Assert.Contains("Version=\"$(FakeExtensionsVersion)\"", content);
 
-        Assert.DoesNotContain("<NewtonsoftJsonVersion>11.0.1</NewtonsoftJsonVersion>", content);
-        Assert.DoesNotContain("<MicrosoftExtensionsVersion>2.1.0</MicrosoftExtensionsVersion>", content);
+        Assert.Contains("<FakeJsonVersion>13.0.4</FakeJsonVersion>", content);
+        Assert.Contains("<FakeExtensionsVersion>10.0.0</FakeExtensionsVersion>", content);
     }
 
     [Fact]
@@ -470,7 +475,7 @@ public static class EndToEndTests
             "\t\t<ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>\n" +
             "\t</PropertyGroup>\n\n" +
             "\t<ItemGroup>\n" +
-            "\t\t<PackageVersion Include=\"Newtonsoft.Json\" Version=\"13.0.1\" />\n" +
+            "\t\t<PackageVersion Include=\"DotNetOutdated.Fake.Json\" Version=\"13.0.1\" />\n" +
             "\t</ItemGroup>\n\n" +
             "</Project>\n\n";
         File.WriteAllText(propsPath, original);
@@ -493,12 +498,12 @@ public static class EndToEndTests
         var content = File.ReadAllText(propsFilePath);
 
         // Verify variable references are preserved in Directory.Packages.props
-        Assert.Contains("Version=\"$(NewtonsoftJsonVersion)\"", content);
-        Assert.Contains("Version=\"$(MicrosoftExtensionsVersion)\"", content);
+        Assert.Contains("Version=\"$(FakeJsonVersion)\"", content);
+        Assert.Contains("Version=\"$(FakeExtensionsVersion)\"", content);
 
-        // Verify old versions are not present
-        Assert.DoesNotContain("<NewtonsoftJsonVersion>11.0.1</NewtonsoftJsonVersion>", content);
-        Assert.DoesNotContain("<MicrosoftExtensionsVersion>2.1.0</MicrosoftExtensionsVersion>", content);
+        // The variables hold the new versions
+        Assert.Contains("<FakeJsonVersion>13.0.4</FakeJsonVersion>", content);
+        Assert.Contains("<FakeExtensionsVersion>10.0.0</FakeExtensionsVersion>", content);
     }
 
     [Fact]
@@ -518,12 +523,12 @@ public static class EndToEndTests
         var projectContent = File.ReadAllText(projectFilePath);
 
         // Verify variable references are preserved in project file
-        Assert.Contains("Version=\"$(NewtonsoftJsonVersion)\"", projectContent);
-        Assert.Contains("Version=\"$(MicrosoftExtensionsVersion)\"", projectContent);
+        Assert.Contains("Version=\"$(FakeJsonVersion)\"", projectContent);
+        Assert.Contains("Version=\"$(FakeExtensionsVersion)\"", projectContent);
 
-        // Verify old versions are not present in Directory.Build.props
-        Assert.DoesNotContain("<NewtonsoftJsonVersion>11.0.1</NewtonsoftJsonVersion>", propsContent);
-        Assert.DoesNotContain("<MicrosoftExtensionsVersion>2.1.0</MicrosoftExtensionsVersion>", propsContent);
+        // The variables in Directory.Build.props hold the new versions
+        Assert.Contains("<FakeJsonVersion>13.0.4</FakeJsonVersion>", propsContent);
+        Assert.Contains("<FakeExtensionsVersion>10.0.0</FakeExtensionsVersion>", propsContent);
     }
 
     [Fact]
@@ -541,19 +546,15 @@ public static class EndToEndTests
         var jsonDependencyVersions = output["Projects"][0]["TargetFrameworks"][0]["Dependencies"].AsArray()
             .ToDictionary(d => (string)d["Name"], d => (string)d["LatestVersion"]);
 
-        Assert.True(Version.TryParse(jsonDependencyVersions["System.Text.Json"], out var systemTextJsonVersion));
-        Assert.True(systemTextJsonVersion > new Version(6, 0, 0));
-        Assert.True(systemTextJsonVersion < new Version(8, 0, 0));
-
-        Assert.True(Version.TryParse(jsonDependencyVersions["Microsoft.Extensions.DependencyInjection"], out var dependencyInjectionVersion));
-        Assert.Equal(new Version(7, 0, 0), dependencyInjectionVersion);
+        Assert.Equal("7.0.0", jsonDependencyVersions["DotNetOutdated.Fake.TextJson"]);
+        Assert.Equal("7.0.0", jsonDependencyVersions["DotNetOutdated.Fake.DependencyInjection"]);
 
         var csproj = XDocument.Load(Path.Combine(directory.Path, "version-range.csproj"));
         var csprojDependencyVersions = csproj.Descendants("PackageReference")
             .ToDictionary(e => (string)e.Attribute("Include"), e => (string)e.Attribute("Version"));
 
-        Assert.Equal($"[{systemTextJsonVersion}, 8.0.0)", csprojDependencyVersions["System.Text.Json"]);
-        Assert.Equal("[7.0.0]", csprojDependencyVersions["Microsoft.Extensions.DependencyInjection"]);
+        Assert.Equal("[7.0.0, 8.0.0)", csprojDependencyVersions["DotNetOutdated.Fake.TextJson"]);
+        Assert.Equal("[7.0.0]", csprojDependencyVersions["DotNetOutdated.Fake.DependencyInjection"]);
     }
 
     [Fact]
@@ -565,8 +566,8 @@ public static class EndToEndTests
         Assert.Equal(0, actual);
 
         var content = File.ReadAllText(Path.Combine(directory.Path, "version-range-variables.csproj"));
-        Assert.Contains("Version=\"$(NewtonsoftJsonVersion)\"", content);
-        Assert.Contains("<NewtonsoftJsonVersion>[12.0.3, 13.0.0)</NewtonsoftJsonVersion>", content);
+        Assert.Contains("Version=\"$(FakeJsonVersion)\"", content);
+        Assert.Contains("<FakeJsonVersion>[12.0.3, 13.0.0)</FakeJsonVersion>", content);
     }
 
     [Theory]
@@ -589,13 +590,10 @@ public static class EndToEndTests
         var packageVersions = props.Descendants("PackageVersion")
             .ToDictionary(e => (string)e.Attribute("Include"), e => (string)e.Attribute("Version"));
 
-        Assert.Equal("$(NewtonsoftJsonVersion)", packageVersions["Newtonsoft.Json"]);
-        Assert.Equal("[12.0.3, 13.0.0)", (string)props.Descendants("NewtonsoftJsonVersion").Single());
+        Assert.Equal("$(FakeJsonVersion)", packageVersions["DotNetOutdated.Fake.Json"]);
+        Assert.Equal("[12.0.3, 13.0.0)", (string)props.Descendants("FakeJsonVersion").Single());
 
-        var systemTextJson = VersionRange.Parse(packageVersions["System.Text.Json"]);
-        Assert.True(systemTextJson.MinVersion > new NuGetVersion(6, 0, 0));
-        Assert.Equal(new NuGetVersion(7, 0, 0), systemTextJson.MaxVersion);
-        Assert.False(systemTextJson.IsMaxInclusive);
+        Assert.Equal("[6.0.1, 7.0.0)", packageVersions["DotNetOutdated.Fake.TextJson"]);
     }
 
     private static (int ExitCode, string Output) RunAndCaptureOutput(string path)
@@ -630,11 +628,28 @@ public static class EndToEndTests
         foreach (var source in Directory.GetFiles(projectPath, "*", SearchOption.TopDirectoryOnly))
         {
             string destination = Path.Combine(temp.Path, Path.GetFileName(source));
-            File.Copy(source, destination);
+            if (Path.GetFileName(source) == "packages.lock.json")
+            {
+                File.WriteAllText(destination, FillContentHashes(File.ReadAllText(source)));
+            }
+            else
+            {
+                File.Copy(source, destination);
+            }
         }
+
+        // Packages come from the local fake feed, so results don't change when packages are published upstream.
+        File.WriteAllText(Path.Combine(temp.Path, "NuGet.Config"), TestPackageFeed.NuGetConfig);
 
         return temp;
     }
+
+    // Lock files in test-projects hold "{{hash:Id/Version}}" in place of the content hash of a fake package.
+    private static string FillContentHashes(string lockFile) =>
+        System.Text.RegularExpressions.Regex.Replace(
+            lockFile,
+            @"\{\{hash:(?<id>[^/]+)/(?<version>[^}]+)\}\}",
+            match => TestPackageFeed.ContentHash(match.Groups["id"].Value, match.Groups["version"].Value));
 
     private sealed class TemporaryDirectory : IDisposable
     {

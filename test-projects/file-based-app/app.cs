@@ -1,9 +1,7 @@
 #!/usr/bin/env dotnet
 #:property TargetFramework=net10.0
-#:property NewtonsoftJsonPackageId=Newtonsoft.Json
-#:property NewtonsoftJsonPackageVersion=11.0.1
-#:package $(NewtonsoftJsonPackageId)@$(NewtonsoftJsonPackageVersion)
+#:property FakeJsonPackageId=DotNetOutdated.Fake.Json
+#:property FakeJsonPackageVersion=11.0.1
+#:package $(FakeJsonPackageId)@$(FakeJsonPackageVersion)
 
-using Newtonsoft.Json;
-
-Console.WriteLine(JsonConvert.SerializeObject(new { Message = "Hello from a file-based app" }));
+Console.WriteLine("Hello from a file-based app");

@@ -3,8 +3,8 @@
     <TargetFrameworks>netstandard2.0</TargetFrameworks>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="System.Text.Json" Version="6.0.0" />
-    <PackageReference Include="System.Text.Encodings.Web" Version="[6.0.0]" />
-    <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="[9.0.0]" />
+    <PackageReference Include="DotNetOutdated.Fake.TextJson" Version="6.0.0" />
+    <PackageReference Include="DotNetOutdated.Fake.TextEncodings" Version="[6.0.0]" />
+    <PackageReference Include="DotNetOutdated.Fake.AsyncInterfaces" Version="[9.0.0]" />
   </ItemGroup>
 </Project>
