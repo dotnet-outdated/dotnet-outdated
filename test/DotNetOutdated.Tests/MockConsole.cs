@@ -7,9 +7,12 @@ namespace DotNetOutdated.Tests
     {
         private readonly MockTextWriter _out;
         private readonly MockTextWriter _error;
+        private readonly TextReader _in;
 
-        public MockConsole()
+        /// <param name="input">What the console reads, for a test that answers prompts; reading throws without it.</param>
+        public MockConsole(string input = null)
         {
+            _in = input == null ? null : new StringReader(input);
             _out = new MockTextWriter();
             _error = new MockTextWriter();
         }
@@ -20,7 +23,7 @@ namespace DotNetOutdated.Tests
 
         public TextWriter Error => _error;
 
-        public TextReader In => throw new NotSupportedException();
+        public TextReader In => _in ?? throw new NotSupportedException();
 
         private ConsoleColor _foreground = ConsoleColor.White;
 

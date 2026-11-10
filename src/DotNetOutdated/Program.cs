@@ -214,13 +214,14 @@ namespace DotNetOutdated
          foreach (var package in consolidatedPackages)
          {
             bool upgrade = true;
+            string referenceNoun = package.Kind == ReferenceKind.Sdk ? "SDK" : "package";
 
             if (Upgrade.UpgradeType == UpgradeType.Prompt)
             {
                string resolvedVersion = package.ResolvedVersion?.ToString() ?? "";
                string latestVersion = package.LatestVersion?.ToString() ?? "";
 
-               console.Write("The package ");
+               console.Write($"The {referenceNoun} ");
                console.Write(package.Description, Constants.ReportingColors.PackageName);
                console.Write($" can be upgraded from {resolvedVersion} to ");
                console.Write(latestVersion, GetUpgradeSeverityColor(package.UpgradeSeverity));
@@ -230,12 +231,12 @@ namespace DotNetOutdated
                   WriteProjectName(project.Description, console);
                }
 
-               upgrade = Prompt.GetYesNo(console, "Do you wish to upgrade this package?", true);
+               upgrade = Prompt.GetYesNo(console, $"Do you wish to upgrade this {referenceNoun}?", true);
             }
 
             if (upgrade)
             {
-               console.Write("Upgrading package ");
+               console.Write($"Upgrading {referenceNoun} ");
                console.Write(package.Description, Constants.ReportingColors.PackageName);
                console.Write("...");
                console.WriteLine();
