@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Security;
 using System.Security.Cryptography;
 using System.Text;
 using NuGet.Frameworks;
@@ -72,11 +73,11 @@ internal static class TestPackageFeed
         <?xml version="1.0" encoding="utf-8"?>
         <configuration>
           <config>
-            <add key="globalPackagesFolder" value="{Paths.Value.GlobalPackagesFolder}" />
+            <add key="globalPackagesFolder" value="{SecurityElement.Escape(Paths.Value.GlobalPackagesFolder)}" />
           </config>
           <packageSources>
             <clear />
-            <add key="fake" value="{Paths.Value.Feed}" />
+            <add key="fake" value="{SecurityElement.Escape(Paths.Value.Feed)}" />
             <add key="nuget.org" value="https://api.nuget.org/v3/index.json" protocolVersion="3" />
           </packageSources>
           <packageSourceMapping>
