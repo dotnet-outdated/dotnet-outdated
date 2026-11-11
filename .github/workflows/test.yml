@@ -27,9 +27,9 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
         framework: ['net8.0', 'net9.0', 'net11.0']
         include:
-          # The tool ships net8.0 and net9.0 builds only; on .NET 11 its net9.0 build rolls forward.
+          # The tool ships net8.0, net9.0 and net10.0 builds only; on .NET 11 its net10.0 build rolls forward.
           - framework: net11.0
-            tool-framework: net9.0
+            tool-framework: net10.0
             tool-args: -p:RollForward=LatestMajor
     timeout-minutes: 30
 

@@ -238,6 +238,78 @@ public class CommandLineTests
         Assert.Contains(expectedError, parseResult.Errors.Select(e => e.Message));
     }
 
+#if NET10_0_OR_GREATER
+    /// <summary>
+    /// The root command is named after the running executable: dotnet-outdated for the tool, testhost here.
+    /// The nushell script lists no options; it asks the tool for them, see <see cref="SuggestDirective_CompletesOptionsAndValues"/>.
+    /// </summary>
+    [Theory]
+    [InlineData("bash", "complete -F _{1} {0}")]
+    [InlineData("zsh", "#compdef {0}")]
+    [InlineData("pwsh", "Register-ArgumentCompleter -Native -CommandName '{0}'")]
+    [InlineData("fish", "complete -c {0}")]
+    [InlineData("nushell", "^{0} $\"[suggest:")]
+    public void CompletionsScript_WritesAScriptForTheShell(string shell, string expectedFormat)
+    {
+        var commandLine = CreateCommandLine();
+        var name = commandLine.RootCommand.Name;
+        var output = new System.IO.StringWriter();
+
+        var exitCode = commandLine.Parse(["completions", "script", shell])
+            .Invoke(new System.CommandLine.InvocationConfiguration { Output = output });
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains(string.Format(expectedFormat, name, name.Replace('-', '_')), output.ToString());
+        Assert.DoesNotContain('\r', output.ToString());
+        if (shell != "nushell")
+            Assert.Contains("--transitive-depth", output.ToString());
+    }
+
+    [Fact]
+    public void CompletionsScript_RejectsAnUnknownShell()
+    {
+        var error = new System.IO.StringWriter();
+
+        var exitCode = CreateCommandLine().Parse(["completions", "script", "tcsh"])
+            .Invoke(new System.CommandLine.InvocationConfiguration { Output = new System.IO.StringWriter(), Error = error });
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("Shell 'tcsh' is not supported. Supported shells: bash, fish, nushell, pwsh, zsh.", error.ToString());
+    }
+
+    [Fact]
+    public void CompletionsScript_WithoutAShell_ReportsAnUnsupportedShellAsAnError()
+    {
+        var shell = Environment.GetEnvironmentVariable("SHELL");
+        try
+        {
+            Environment.SetEnvironmentVariable("SHELL", "/bin/tcsh");
+
+            var parseResult = CreateCommandLine().Parse(["completions", "script"]);
+
+            Assert.NotEmpty(parseResult.Errors);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("SHELL", shell);
+        }
+    }
+
+    [Theory]
+    [InlineData("dotnet-outdated --tr", "--transitive|--transitive-depth")]
+    [InlineData("dotnet-outdated -vl Ma", "Major")]
+    public void SuggestDirective_CompletesOptionsAndValues(string commandLineText, string expected)
+    {
+        var output = new System.IO.StringWriter();
+
+        var exitCode = CreateCommandLine().Parse([$"[suggest:{commandLineText.Length}]", commandLineText])
+            .Invoke(new System.CommandLine.InvocationConfiguration { Output = output });
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(expected, string.Join("|", output.ToString().Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)));
+    }
+
+#endif
     private static ProgramCommandLine CreateCommandLine() => new(
         run: (_, _) => throw new InvalidOperationException("Only parsed."),
         runMcp: _ => throw new InvalidOperationException("Only parsed."));

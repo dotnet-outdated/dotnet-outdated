@@ -202,6 +202,80 @@ For failing CI builds, a proposed protocol is to have another CI build which wil
 
 Also, some companies/users do not feel comfortable jumping directly on the newest versions, as they might contain some bugs, and might want to wait for some time before updating to the newest package.
 
+## Shell completions
+
+**dotnet-outdated** can generate tab-completion scripts for its options and their values (for example `-of <TAB>` offers `Csv`, `Json` and `Markdown`) for Bash, Zsh, Fish, PowerShell and Nushell:
+
+```bash
+dotnet-outdated completions script <bash|zsh|fish|pwsh|nushell>
+```
+
+Without a shell name, it uses the shell named in the `SHELL` environment variable (PowerShell on Windows).
+
+Shell completions require the .NET 10 runtime or later. On older runtimes the tool runs without the `completions` command. Completion is registered for the `dotnet-outdated` command, which `dotnet tool install --global` puts on your `PATH`. It does not work with `dotnet outdated`, which the `dotnet` command's own completion handles. The scripts list the tool's options, so generate them again after you update the tool.
+
+### Bash
+
+With the [bash-completion](https://github.com/scop/bash-completion) package installed, which most Linux distributions include, save the script where bash-completion loads it on demand:
+
+```bash
+mkdir -p ~/.local/share/bash-completion/completions
+dotnet-outdated completions script bash > ~/.local/share/bash-completion/completions/dotnet-outdated
+```
+
+Without bash-completion, add this to your `~/.bashrc` instead:
+
+```bash
+eval "$(dotnet-outdated completions script bash)"
+```
+
+### Zsh
+
+Save the script as `_dotnet-outdated` in a directory on your `fpath`:
+
+```zsh
+mkdir -p ~/.zfunc
+dotnet-outdated completions script zsh > ~/.zfunc/_dotnet-outdated
+```
+
+If that directory is not already on your `fpath`, add it in your `~/.zshrc` before `compinit` runs:
+
+```zsh
+fpath=(~/.zfunc $fpath)
+autoload -Uz compinit && compinit
+```
+
+### Fish
+
+```fish
+dotnet-outdated completions script fish > ~/.config/fish/completions/dotnet-outdated.fish
+```
+
+### PowerShell
+
+Append the script to your PowerShell profile:
+
+```powershell
+if (-not (Test-Path $PROFILE)) { New-Item -ItemType File -Force -Path $PROFILE | Out-Null }
+dotnet-outdated completions script pwsh >> $PROFILE
+```
+
+### Nushell
+
+Save the script and `source` it from your `config.nu`:
+
+```nu
+mkdir ($nu.default-config-dir | path join completions)
+dotnet-outdated completions script nushell | save -f ($nu.default-config-dir | path join completions dotnet-outdated.nu)
+```
+
+```nu
+# in config.nu
+source ($nu.default-config-dir | path join completions dotnet-outdated.nu)
+```
+
+The Nushell script asks **dotnet-outdated** for completions each time you press <kbd>Tab</kbd>, so it stays current after you update the tool.
+
 ## Model Context Protocol (MCP) Server
 
 **dotnet-outdated** includes a built-in [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server. This allows AI agents (like Claude Desktop, GitHub Copilot, etc.) to interact with your .NET projects to discover, analyze, and update outdated NuGet packages.

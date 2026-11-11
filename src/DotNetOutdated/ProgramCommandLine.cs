@@ -3,7 +3,11 @@ using NuGet.Common;
 using System;
 using System.Collections.Generic;
 using System.CommandLine;
+using System.Linq;
 using System.CommandLine.Parsing;
+#if NET10_0_OR_GREATER
+using System.CommandLine.StaticCompletions;
+#endif
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -165,6 +169,14 @@ namespace DotNetOutdated
 
       public Command McpCommand { get; } = new("mcp", "Runs the Model Context Protocol (MCP) server.");
 
+#if NET10_0_OR_GREATER
+      /// <summary>
+      /// The <c>completions script [shell]</c> subcommand, which prints a shell completion script for this command line.
+      /// </summary>
+      /// <remarks>Only in the net10.0 build, as System.CommandLine.StaticCompletions only targets net10.0.</remarks>
+      public CompletionsCommandDefinition CompletionsCommand { get; } = new();
+#endif
+
       public ParserConfiguration ParserConfiguration { get; } = new()
       {
          EnablePosixBundling = false,
@@ -207,6 +219,13 @@ namespace DotNetOutdated
             IdleTimeout,
             McpCommand,
          };
+
+#if NET10_0_OR_GREATER
+         CompletionsCommandParser.ConfigureCommand(CompletionsCommand);
+         CompletionsCommand.GenerateScriptCommand.ShellArgument.DefaultValueFactory = ShellFromEnvironment;
+         CompletionsCommand.GenerateScriptCommand.SetAction(WriteCompletionScript);
+         RootCommand.Subcommands.Add(CompletionsCommand);
+#endif
 
          RootCommand.Validators.Add(RejectFlagsWithAttachedValues);
          RootCommand.SetAction(run);
@@ -327,6 +346,46 @@ namespace DotNetOutdated
 
          return result;
       }
+
+#if NET10_0_OR_GREATER
+      /// <summary>
+      /// Writes the completion script for the requested shell, as the package's own action does, but with LF line endings.
+      /// </summary>
+      /// <remarks>
+      /// System.CommandLine.StaticCompletions 3.0.0 mixes CRLF into the bash, zsh, pwsh and nushell scripts, and bash
+      /// fails on the stray carriage returns (<c>return\r: command not found</c>), so option values never complete.
+      /// </remarks>
+      private int WriteCompletionScript(ParseResult parseResult)
+      {
+         var shell = parseResult.GetValue(CompletionsCommand.GenerateScriptCommand.ShellArgument);
+         if (!CompletionsCommandParser.ShellProviders.TryGetValue(shell, out var provider))
+         {
+            parseResult.InvocationConfiguration.Error.WriteLine(
+               $"Shell '{shell}' is not supported. Supported shells: {string.Join(", ", CompletionsCommandParser.ShellProviders.Keys.Order())}.");
+            return 1;
+         }
+
+         parseResult.InvocationConfiguration.Output.Write(provider.GenerateCompletions(RootCommand).ReplaceLineEndings("\n"));
+         return 0;
+      }
+
+      /// <summary>
+      /// The shell to write a completion script for when none is given: the package's default, but an unsupported
+      /// <c>SHELL</c> is a parse error rather than an exception thrown out of <see cref="Parse"/>.
+      /// </summary>
+      private static string ShellFromEnvironment(ArgumentResult result)
+      {
+         try
+         {
+            return ShellNames.GetShellNameFromEnvironment();
+         }
+         catch (InvalidOperationException ex)
+         {
+            result.AddError($"{ex.Message.Trim()}. Name the shell, as in 'completions script bash'.");
+            return null;
+         }
+      }
+#endif
 
       private bool IsUpgradeAlias(string token) => Upgrade.Name == token || Upgrade.Aliases.Contains(token);
 
