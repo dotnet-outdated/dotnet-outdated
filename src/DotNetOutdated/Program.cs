@@ -224,7 +224,16 @@ namespace DotNetOutdated
                   WriteProjectName(project.Description, console);
                }
 
-               upgrade = Prompt.GetYesNo(console, $"Do you wish to upgrade this {referenceNoun}?", true);
+               bool? answer = Prompt.GetYesNo(console, $"Do you wish to upgrade this {referenceNoun}?", true);
+               if (answer is null)
+               {
+                  // The input has ended, so no-one can confirm this or any later upgrade (#831).
+                  console.WriteLine();
+                  console.WriteLine("No input is available to answer the prompt, so the remaining upgrades were skipped.");
+                  break;
+               }
+
+               upgrade = answer.Value;
             }
 
             if (upgrade)
