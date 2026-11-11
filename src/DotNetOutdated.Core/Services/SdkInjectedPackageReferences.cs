@@ -75,17 +75,17 @@ namespace DotNetOutdated.Core.Services
         /// <paramref name="packageFolders"/>. A package with at least one item defined elsewhere, for example in the
         /// project or in a <c>Directory.Build.props</c> file, is referenced by the user and is not returned.
         /// </summary>
-        public static HashSet<string> GetPackageDefinedNames(IFileSystem fileSystem, IEnumerable<PackageReferenceItem> items, IEnumerable<string> packageFolders)
+        public static HashSet<string> GetPackageDefinedNames(IFileSystem fileSystem, IEnumerable<PackageReferenceItem> items, IEnumerable<string?> packageFolders)
         {
             var folders = packageFolders
                 .Where(folder => !string.IsNullOrEmpty(folder))
-                .Select(folder => fileSystem.Path.TrimEndingDirectorySeparator(fileSystem.Path.GetFullPath(folder)) + fileSystem.Path.DirectorySeparatorChar)
+                .Select(folder => fileSystem.Path.TrimEndingDirectorySeparator(fileSystem.Path.GetFullPath(folder!)) + fileSystem.Path.DirectorySeparatorChar)
                 .Distinct(PathComparer)
                 .ToList();
 
             return items
                 .Where(item => !string.IsNullOrEmpty(item.Name))
-                .GroupBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
+                .GroupBy(item => item.Name!, StringComparer.OrdinalIgnoreCase)
                 .Where(group => group.All(item => IsInFolder(fileSystem, item.DefiningProjectFullPath, folders)))
                 .Select(group => group.Key)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -108,7 +108,7 @@ namespace DotNetOutdated.Core.Services
             }
         }
 
-        private static bool IsInFolder(IFileSystem fileSystem, string path, List<string> folders) =>
+        private static bool IsInFolder(IFileSystem fileSystem, string? path, List<string> folders) =>
             !string.IsNullOrEmpty(path) &&
             folders.Any(folder => fileSystem.Path.GetFullPath(path).StartsWith(folder, PathComparison));
     }

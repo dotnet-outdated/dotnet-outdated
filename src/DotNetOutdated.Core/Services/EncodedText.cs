@@ -11,7 +11,7 @@ namespace DotNetOutdated.Core.Services
     /// </summary>
     internal sealed class EncodedText
     {
-        private EncodedText(string content, Encoding encoding, byte[] preamble)
+        private EncodedText(string content, Encoding? encoding, byte[] preamble)
         {
             Content = content;
             Encoding = encoding;
@@ -20,7 +20,7 @@ namespace DotNetOutdated.Core.Services
 
         public string Content { get; }
 
-        public Encoding Encoding { get; }
+        public Encoding? Encoding { get; }
 
         public byte[] Preamble { get; }
 
@@ -28,7 +28,7 @@ namespace DotNetOutdated.Core.Services
         /// Decodes <paramref name="bytes"/> using its byte order mark (UTF-8 when there is none).
         /// Returns null when re-encoding the text would not reproduce the original bytes.
         /// </summary>
-        public static EncodedText TryDecode(byte[] bytes)
+        public static EncodedText? TryDecode(byte[] bytes)
         {
             using var reader = new StreamReader(new MemoryStream(bytes), Encoding.UTF8);
             var content = reader.ReadToEnd();
@@ -52,7 +52,8 @@ namespace DotNetOutdated.Core.Services
             TryDecode(fileSystem.File.ReadAllBytes(path))
             ?? new EncodedText(fileSystem.File.ReadAllText(path), null, []);
 
-        public byte[] Encode(string content) => [.. Preamble, .. Encoding.GetBytes(content)];
+        // Without an encoding the text is written as File.WriteAllText would: UTF-8 without a byte order mark.
+        public byte[] Encode(string content) => [.. Preamble, .. (Encoding ?? new UTF8Encoding(false)).GetBytes(content)];
 
         /// <summary>Writes <paramref name="content"/> to <paramref name="path"/> with this text's encoding and byte order mark.</summary>
         public void Write(IFileSystem fileSystem, string path, string content)

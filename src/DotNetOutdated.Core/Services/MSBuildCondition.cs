@@ -15,7 +15,7 @@ internal static class MSBuildCondition
     /// <param name="condition">The raw <c>Condition</c> attribute value.</param>
     /// <param name="expand">Expands property references in a value, or returns <see langword="null"/> when it can't.</param>
     /// <param name="exists">Tests an expanded path for <c>Exists()</c>, or returns <see langword="null"/> when it can't.</param>
-    public static bool? Evaluate(string condition, Func<string, string> expand, Func<string, bool?> exists)
+    public static bool? Evaluate(string condition, Func<string, string?> expand, Func<string, bool?> exists)
     {
         if (string.IsNullOrWhiteSpace(condition))
         {
@@ -37,7 +37,7 @@ internal static class MSBuildCondition
 
     private readonly record struct Token(TokenKind Kind, string Text);
 
-    private static List<Token> Tokenize(string text)
+    private static List<Token>? Tokenize(string text)
     {
         var tokens = new List<Token>();
         var i = 0;
@@ -123,7 +123,7 @@ internal static class MSBuildCondition
         return tokens;
     }
 
-    private sealed class Parser(List<Token> tokens, Func<string, string> expand, Func<string, bool?> exists)
+    private sealed class Parser(List<Token> tokens, Func<string, string?> expand, Func<string, bool?> exists)
     {
         private int _position;
 
@@ -236,7 +236,7 @@ internal static class MSBuildCondition
             return exists(argument);
         }
 
-        private string ParseOperand()
+        private string? ParseOperand()
         {
             var token = Peek;
             if (token?.Kind is not (TokenKind.Quoted or TokenKind.Word))

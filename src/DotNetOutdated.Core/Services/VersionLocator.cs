@@ -13,7 +13,7 @@ internal abstract record VersionLocation;
 /// A literal version in the project file or a central <c>Directory.Packages.props</c>, which <c>dotnet add package</c>
 /// can rewrite. <see cref="Warning"/> is set when a version expression is replaced by the literal.
 /// </summary>
-internal sealed record LiteralVersion(string Warning = null) : VersionLocation;
+internal sealed record LiteralVersion(string? Warning = null) : VersionLocation;
 
 /// <summary>An MSBuild property behind a <c>PackageReference</c>, <c>PackageVersion</c> or <c>GlobalPackageReference</c>.</summary>
 /// <param name="DotNetAddCanUpdate">

@@ -33,7 +33,7 @@ namespace DotNetOutdated.Core.Models
 
         public NuGetFramework Name { get; set; }
 
-        public string TargetAlias { get; set; }
+        public string? TargetAlias { get; set; }
 
         public TargetFramework(NuGetFramework name)
         {
@@ -54,14 +54,15 @@ namespace DotNetOutdated.Core.Models
 
         public string Name { get; }
 
-        public NuGetVersion ResolvedVersion { get; }
+        /// <summary>The version restore resolved, or <see langword="null"/> when the package could not be resolved.</summary>
+        public NuGetVersion? ResolvedVersion { get; }
 
         public VersionRange VersionRange { get; }
 
         public Dependency(
             string name,
             VersionRange versionRange,
-            NuGetVersion resolvedVersion,
+            NuGetVersion? resolvedVersion,
             bool isAutoReferenced,
             bool isTransitive,
             bool isDevelopmentDependency,

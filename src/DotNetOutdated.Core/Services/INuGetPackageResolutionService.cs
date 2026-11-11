@@ -15,7 +15,7 @@ namespace DotNetOutdated.Core.Services
             VersionRange currentVersionRange,
             VersionLock versionLock,
             PrereleaseReporting prerelease,
-            string prereleaseLabel,
+            string? prereleaseLabel,
             NuGetFramework targetFrameworkName,
             string projectFilePath,
             bool isDevelopmentDependency);
@@ -27,7 +27,7 @@ namespace DotNetOutdated.Core.Services
             VersionRange currentVersionRange,
             VersionLock versionLock,
             PrereleaseReporting prerelease,
-            string prereleaseLabel,
+            string? prereleaseLabel,
             NuGetFramework targetFrameworkName,
             string projectFilePath,
             bool isDevelopmentDependency,

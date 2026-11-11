@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.IO.Abstractions;
 using System.Linq;
@@ -13,11 +14,11 @@ namespace DotNetOutdated.Core.Services;
 /// they declare, and how to change their versions. Properties come from the app's own <c>#:property</c> lines and
 /// from the Directory.* files MSBuild would import for it. Edits keep the file's encoding and byte order mark.
 /// </summary>
-internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, MSBuildEvaluator evaluator, Action<string> onWarning = null)
+internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, MSBuildEvaluator evaluator, Action<string>? onWarning = null)
 {
     private readonly IFileSystem _fileSystem = fileSystem;
     private readonly MSBuildEvaluator _evaluator = evaluator;
-    private readonly Action<string> _onWarning = onWarning;
+    private readonly Action<string>? _onWarning = onWarning;
 
     [GeneratedRegex(@"^[ \t]*#:[ \t]*package[ \t]+(.+?)\s*$")]
     private static partial Regex PackageDirectiveLineRegex();
@@ -62,7 +63,7 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, MSB
                 ResolvedVersion = resolvedVersion,
                 VersionRange = FileBasedAppReferenceHelper.CreateMinimumVersionRange(resolvedVersion),
                 Kind = variableInfo.ReferenceKind,
-                NameExpression = variableInfo.PackageReferenceName,
+                NameExpression = variableInfo.PackageReferenceName ?? string.Empty,
                 VersionExpression = variableInfo.PackageReferenceVersion,
                 VariableInfo = variableInfo
             });
@@ -300,7 +301,7 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, MSB
         Dictionary<string, (string Value, string FilePath)> propertyDefinitions)
     {
         using var reader = new StringReader(content);
-        string line;
+        string? line;
         while ((line = reader.ReadLine()) != null)
         {
             CollectPropertyFromLine(line, filePath, propertyDefinitions);
@@ -434,7 +435,7 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, MSB
         string directive,
         Dictionary<string, (string Value, string FilePath)> propertyDefinitions,
         ReferenceKind kind,
-        out FileBasedAppReference reference)
+        [NotNullWhen(true)] out FileBasedAppReference? reference)
     {
         reference = null;
         if (!TryParseDirective(directive, out var nameExpression, out var versionExpression) ||

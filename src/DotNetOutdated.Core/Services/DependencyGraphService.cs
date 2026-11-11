@@ -22,7 +22,7 @@ namespace DotNetOutdated.Core.Services
         private readonly IDotNetRunner _dotNetRunner = dotNetRunner;
         private readonly IFileSystem _fileSystem = fileSystem;
 
-        public async Task<DependencyGraphSpec> GenerateDependencyGraphAsync(string projectPath, string runtime)
+        public async Task<DependencyGraphSpec> GenerateDependencyGraphAsync(string projectPath, string? runtime)
         {
             var dgOutput = _fileSystem.Path.Combine(_fileSystem.Path.GetTempPath(), _fileSystem.Path.GetRandomFileName());
             var projectDirectory = _fileSystem.Path.GetDirectoryName(projectPath);
@@ -55,7 +55,7 @@ namespace DotNetOutdated.Core.Services
                                                 $"{Environment.NewLine}{Environment.NewLine}Here is the full error message returned from the Microsoft Build Engine:{Environment.NewLine}{Environment.NewLine}{runStatus.Output} - {runStatus.Errors} - exit code: {runStatus.ExitCode}");
         }
 
-        public IReadOnlyList<PackageReferenceItem> GetPackageReferenceItems(string projectPath, string targetFramework, string runtime = null)
+        public IReadOnlyList<PackageReferenceItem>? GetPackageReferenceItems(string projectPath, string targetFramework, string? runtime = null)
         {
             List<string> arguments =
             [
@@ -99,7 +99,7 @@ namespace DotNetOutdated.Core.Services
             }
         }
 
-        private RunStatus GenerateProjectDependencyGraph(string projectPath, string projectDirectory, string runtime, string dgOutput)
+        private RunStatus GenerateProjectDependencyGraph(string projectPath, string? projectDirectory, string? runtime, string dgOutput)
         {
             List<string> arguments =
             [
@@ -119,7 +119,7 @@ namespace DotNetOutdated.Core.Services
             return _dotNetRunner.Run(projectDirectory, arguments.ToArray());
         }
 
-        private RunStatus GenerateFileBasedAppDependencyGraph(string appPath, string projectDirectory, string runtime, string dgOutput)
+        private RunStatus GenerateFileBasedAppDependencyGraph(string appPath, string? projectDirectory, string? runtime, string dgOutput)
         {
             List<string> restoreArguments =
             [

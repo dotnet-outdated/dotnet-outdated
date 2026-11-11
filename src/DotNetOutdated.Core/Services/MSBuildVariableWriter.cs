@@ -13,10 +13,10 @@ namespace DotNetOutdated.Core.Services;
 /// replaced it with a literal. Edits are made to the text so the rest of each file keeps its formatting, encoding
 /// and byte order mark.
 /// </summary>
-internal sealed class MSBuildVariableWriter(IFileSystem fileSystem, Action<string> onWarning = null)
+internal sealed class MSBuildVariableWriter(IFileSystem fileSystem, Action<string>? onWarning = null)
 {
     private readonly IFileSystem _fileSystem = fileSystem;
-    private readonly Action<string> _onWarning = onWarning;
+    private readonly Action<string>? _onWarning = onWarning;
 
     /// <returns><see langword="true"/> when any file was changed.</returns>
     public bool TryUpdate(PackageVariableInfo variableInfo, VersionRange newRange)
@@ -63,7 +63,7 @@ internal sealed class MSBuildVariableWriter(IFileSystem fileSystem, Action<strin
         var isRangeExpression = !string.IsNullOrWhiteSpace(variableInfo.PackageReferenceVersion) &&
                                 VersionExpression.TryParse(variableInfo.PackageReferenceVersion, out _, out var isRange) &&
                                 isRange;
-        var propertyValueToWrite = isRangeExpression ? newRange.MinVersion.ToString() : newRange.ToVersionString();
+        var propertyValueToWrite = isRangeExpression ? newRange.MinVersion!.ToString() : newRange.ToVersionString();
 
         // Step 1: Update the property value in the file where it's defined (or insert it if implicit/SDK-defined)
         var propertyWrite = TryWriteProperty(variableInfo, propertyValueToWrite);
@@ -133,7 +133,7 @@ internal sealed class MSBuildVariableWriter(IFileSystem fileSystem, Action<strin
         else if (variableInfo.InsertProperty || variableInfo.PropertyElementIndex < 0)
         {
             var elements = PropertyElements(doc, variableInfo.VariableName);
-            var topLevel = elements.FindLastIndex(e => IsUnconditionalTopLevel(e.Parent) && e.Attribute("Condition") == null);
+            var topLevel = elements.FindLastIndex(e => e.Parent != null && IsUnconditionalTopLevel(e.Parent) && e.Attribute("Condition") == null);
             newContent = topLevel >= 0
                 // Already defined (for example by an earlier upgrade that inserted it): update that definition.
                 ? PackageVersionMarkup.ReplacePropertyValueAt(content, variableInfo.VariableName, topLevel, newValue)

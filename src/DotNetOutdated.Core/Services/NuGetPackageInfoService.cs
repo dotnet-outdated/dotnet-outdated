@@ -17,13 +17,13 @@ namespace DotNetOutdated.Core.Services
 
     public sealed class NuGetPackageInfoService : INuGetPackageInfoService, IDisposable
     {
-        private IEnumerable<PackageSource> _enabledSources;
+        private IEnumerable<PackageSource>? _enabledSources;
 
-        private PackageSourceMapping _packageSourceMapping;
+        private PackageSourceMapping? _packageSourceMapping;
 
         private readonly SourceCacheContext _context;
 
-        private readonly ConcurrentDictionary<string, Task<PackageMetadataResource>> _metadataResourceRequests = [];
+        private readonly ConcurrentDictionary<string, Task<PackageMetadataResource?>> _metadataResourceRequests = [];
 
         public NuGetPackageInfoService()
         {
@@ -46,7 +46,7 @@ namespace DotNetOutdated.Core.Services
         }
 
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "This method is supposed to fail silently")]
-        private async Task<PackageMetadataResource> FindMetadataResourceForSource(Uri source, string projectFilePath, string packageId)
+        private async Task<PackageMetadataResource?> FindMetadataResourceForSource(Uri source, string projectFilePath, string packageId)
         {
             try
             {
@@ -59,9 +59,9 @@ namespace DotNetOutdated.Core.Services
                 var enabledSource = enabledSources?.FirstOrDefault(s => s.SourceUri == source);
 
 
-                if (enabledSource != null && _packageSourceMapping.IsEnabled)
+                if (enabledSource != null && _packageSourceMapping?.IsEnabled == true)
                 {
-                    var mappedSources = _packageSourceMapping.GetConfiguredPackageSources(packageId);
+                    var mappedSources = _packageSourceMapping!.GetConfiguredPackageSources(packageId);
                     if (mappedSources != null && !mappedSources.Any(s => string.Equals(s, enabledSource.Name, StringComparison.OrdinalIgnoreCase)))
                     {
                         // Skip package sources that are not mapped to the package

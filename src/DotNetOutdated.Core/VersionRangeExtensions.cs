@@ -11,7 +11,7 @@ namespace DotNetOutdated.Core
         /// </summary>
         public static string ToVersionString(this VersionRange versionRange) =>
             versionRange.IsPlainVersion()
-                ? versionRange.MinVersion.ToString()
+                ? versionRange.MinVersion!.ToString()
                 : versionRange.ToShortString();
 
         /// <summary>

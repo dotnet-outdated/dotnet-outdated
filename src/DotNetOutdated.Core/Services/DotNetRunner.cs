@@ -16,7 +16,7 @@ namespace DotNetOutdated.Core.Services
     {
         public DotNetRunner() : this(new DotNetRunnerOptions()) { }
 
-        public RunStatus Run(string workingDirectory, string[] arguments)
+        public RunStatus Run(string? workingDirectory, string[] arguments)
         {
             var psi = new ProcessStartInfo(options.FileName, arguments)
             {
@@ -85,7 +85,7 @@ namespace DotNetOutdated.Core.Services
         {
             await Task.Yield();
 
-            string line;
+            string? line;
             while ((line = await reader.ReadLineAsync().ConfigureAwait(false)) != null)
             {
                 lock (timeSinceLastOutput) {

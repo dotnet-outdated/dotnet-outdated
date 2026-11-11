@@ -263,7 +263,7 @@ namespace DotNetOutdated
                 return;
             }
 
-            Dictionary<string, object> result = null;
+            Dictionary<string, object>? result = null;
 
             try
             {
@@ -316,7 +316,7 @@ namespace DotNetOutdated
             {
                 throw new ArgumentException("path is required");
             }
-            string path = pathProp.GetString();
+            string path = pathProp.GetString()!;
             bool recursive = false;
             if (arguments.TryGetProperty("recursive", out var recursiveProp))
             {
@@ -336,7 +336,7 @@ namespace DotNetOutdated
 
         private async Task<Dictionary<string, object>> HandleAnalyzeProject(JsonElement arguments)
         {
-            string projectPath = arguments.GetProperty("projectPath").GetString();
+            string projectPath = arguments.GetProperty("projectPath").GetString() ?? throw new ArgumentException("projectPath is required");
             bool includeTransitive = false;
             if (arguments.TryGetProperty("includeTransitive", out var includeTransitiveProp))
             {
@@ -344,7 +344,7 @@ namespace DotNetOutdated
             }
 
             int transitiveDepth = 1;
-            string runtime = null;
+            string? runtime = null;
 
             var projects = await _projectAnalysisService.AnalyzeProjectAsync(projectPath, false, includeTransitive, transitiveDepth, runtime);
             
@@ -358,7 +358,7 @@ namespace DotNetOutdated
                     foreach (var dep in tf.Dependencies.Values)
                     {
                         var referencedVersion = dep.ResolvedVersion;
-                        NuGetVersion latestVersion = null;
+                        NuGetVersion? latestVersion = null;
                         
                         if (referencedVersion != null)
                         {
@@ -401,7 +401,7 @@ namespace DotNetOutdated
             return CreateToolResult(JsonSerializer.Serialize(result));
         }
 
-        private string GetUpgradeSeverity(NuGetVersion resolved, NuGetVersion latest)
+        private string GetUpgradeSeverity(NuGetVersion? resolved, NuGetVersion? latest)
         {
             if (latest == null || resolved == null)
                 return "Unknown";
@@ -418,10 +418,10 @@ namespace DotNetOutdated
 
         private async Task<Dictionary<string, object>> HandleUpdatePackage(JsonElement arguments)
         {
-            string projectPath = arguments.GetProperty("projectPath").GetString();
-            string packageName = arguments.GetProperty("packageName").GetString();
-            string versionString = arguments.GetProperty("version").GetString();
-            string framework = null;
+            string projectPath = arguments.GetProperty("projectPath").GetString() ?? throw new ArgumentException("projectPath is required");
+            string packageName = arguments.GetProperty("packageName").GetString() ?? throw new ArgumentException("packageName is required");
+            string? versionString = arguments.GetProperty("version").GetString();
+            string? framework = null;
             if (arguments.TryGetProperty("framework", out var frameworkProp))
             {
                 framework = frameworkProp.GetString();
