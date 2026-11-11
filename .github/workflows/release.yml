@@ -36,9 +36,10 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v6.1.0
         with:
-          dotnet-version: | 
+          dotnet-version: |
             8.0.x
             9.0.x
+            11.0.x
 
       # The tests should have already been run during the PR workflow, so this is really just a sanity check
       - name: Tests
