@@ -2,6 +2,7 @@
 using DotNetOutdated.Core.Models;
 using NuGet.Common;
 using NuGet.Configuration;
+using NuGet.Frameworks;
 using NuGet.Packaging.Core;
 using NuGet.ProjectModel;
 using NuGet.Protocol;
@@ -69,7 +70,7 @@ namespace DotNetOutdated.Core.Services
 
             var isFileBasedApp = projectPath.IsCSharpFile();
             var fileBasedAppPath = isFileBasedApp ? _fileSystem.Path.GetFullPath(projectPath) : null;
-            var projects = new List<Project>();
+            var projects = new List<(Project Project, List<TargetFrameworkBuilder> TargetFrameworks)>();
             var sdkEvaluations = new List<SdkEvaluation>();
             foreach (var packageSpec in dependencyGraph.Projects.Where(p => p.RestoreMetadata.ProjectStyle == ProjectStyle.PackageReference))
             {
@@ -91,8 +92,15 @@ namespace DotNetOutdated.Core.Services
 
                 // Create a project
                 var projectName = isFileBasedApp ? _fileSystem.Path.GetFileName(projectPath) : packageSpec.Name;
-                var project = new Project(projectName, analyzedProjectPath, packageSpec.RestoreMetadata.Sources.Select(s => s.SourceUri).ToList(), packageSpec.Version);
-                projects.Add(project);
+                var project = new Project
+                {
+                    Name = projectName,
+                    FilePath = analyzedProjectPath,
+                    Sources = packageSpec.RestoreMetadata.Sources.Select(s => s.SourceUri).ToList(),
+                    Version = packageSpec.Version,
+                };
+                var targetFrameworks = new List<TargetFrameworkBuilder>();
+                projects.Add((project, targetFrameworks));
 
                 var projectSdkReferences = isFileBasedApp
                     ? []
@@ -104,11 +112,8 @@ namespace DotNetOutdated.Core.Services
                 // Get the target frameworks with their dependencies
                 foreach (var targetFrameworkInformation in packageSpec.TargetFrameworks)
                 {
-                    var targetFramework = new TargetFramework(targetFrameworkInformation.FrameworkName)
-                    {
-                        TargetAlias = targetFrameworkInformation.TargetAlias,
-                    };
-                    project.TargetFrameworks.Add(targetFramework);
+                    var targetFramework = new TargetFrameworkBuilder(targetFrameworkInformation.FrameworkName, targetFrameworkInformation.TargetAlias);
+                    targetFrameworks.Add(targetFramework);
 
                     var target = lockFile.Targets.FirstOrDefault(t => t.TargetFramework.Equals(targetFrameworkInformation.FrameworkName));
 
@@ -128,9 +133,14 @@ namespace DotNetOutdated.Core.Services
                                     isDevelopmentDependency = packageInfo.GetReader().GetDevelopmentDependency();
                             }
 
-                            var dependency = new Dependency(projectDependency.Name, projectDependency.LibraryRange.VersionRange!, projectLibrary?.Version,
-                                projectDependency.AutoReferenced, false, isDevelopmentDependency);
-                            targetFramework.Dependencies.TryAdd(dependency.Name, dependency);
+                            targetFramework.TryAdd(new Dependency
+                            {
+                                Name = projectDependency.Name,
+                                VersionRange = projectDependency.LibraryRange.VersionRange!,
+                                ResolvedVersion = projectLibrary?.Version,
+                                IsAutoReferenced = projectDependency.AutoReferenced,
+                                IsDevelopmentDependency = isDevelopmentDependency,
+                            });
 
                             // Process transitive dependencies for the library
                             if (options.IncludeTransitiveDependencies)
@@ -146,14 +156,13 @@ namespace DotNetOutdated.Core.Services
 
                         foreach (var sdkReference in projectSdkReferences)
                         {
-                            targetFramework.Dependencies[ProjectSdkReferenceHelper.GetDependencyDictionaryKey(sdkReference.Name)] = new Dependency(
-                                sdkReference.Name,
-                                sdkReference.VersionRange,
-                                sdkReference.ResolvedVersion,
-                                isAutoReferenced: false,
-                                isTransitive: false,
-                                isDevelopmentDependency: false,
-                                ReferenceKind.Sdk);
+                            targetFramework.Set(new Dependency
+                            {
+                                Name = sdkReference.Name,
+                                VersionRange = sdkReference.VersionRange,
+                                ResolvedVersion = sdkReference.ResolvedVersion,
+                                Kind = ReferenceKind.Sdk,
+                            });
                         }
 
                         if (packageFolders != null)
@@ -167,10 +176,12 @@ namespace DotNetOutdated.Core.Services
             // Each evaluation is a separate `dotnet msbuild` process, so run them side by side.
             await Task.WhenAll(sdkEvaluations.Select(evaluation => MarkPackageDefinedReferencesAsAutoReferencedAsync(evaluation, cancellationToken))).ConfigureAwait(false);
 
-            return projects;
+            return projects
+                .Select(pair => pair.Project with { TargetFrameworks = pair.TargetFrameworks.Select(builder => builder.Build()).ToList() })
+                .ToList();
         }
 
-        private void ApplyFileBasedAppDirectives(string projectPath, TargetFramework targetFramework)
+        private void ApplyFileBasedAppDirectives(string projectPath, TargetFrameworkBuilder targetFramework)
         {
             var fileBasedReferences = _fileBasedAppDirectives.References(projectPath);
             if (fileBasedReferences.Count == 0)
@@ -178,30 +189,19 @@ namespace DotNetOutdated.Core.Services
                 return;
             }
 
-            // The directives are the authoritative source of direct dependencies for a file-based app.
-            // Remove every non-transitive graph dependency (including graph entries for packages that are
-            // also declared as directives) and re-add the directive references below. Re-adding under the
-            // directive keys would otherwise leave a duplicate graph entry keyed by the plain package name.
-            var directDependencyKeys = targetFramework.Dependencies
-                .Where(pair => !pair.Value.IsTransitive)
-                .Select(pair => pair.Key)
-                .ToList();
-
-            foreach (var dependencyKey in directDependencyKeys)
-            {
-                targetFramework.Dependencies.Remove(dependencyKey);
-            }
+            // The directives are the authoritative source of direct dependencies for a file-based app: replace every
+            // non-transitive graph dependency with the directive references.
+            targetFramework.RemoveDirectDependencies();
 
             foreach (var reference in fileBasedReferences)
             {
-                targetFramework.Dependencies[FileBasedAppReferenceHelper.GetDependencyDictionaryKey(reference)] = new Dependency(
-                    reference.Name,
-                    reference.VersionRange,
-                    reference.ResolvedVersion,
-                    isAutoReferenced: false,
-                    isTransitive: false,
-                    isDevelopmentDependency: false,
-                    reference.Kind);
+                targetFramework.Set(new Dependency
+                {
+                    Name = reference.Name,
+                    VersionRange = reference.VersionRange,
+                    ResolvedVersion = reference.ResolvedVersion,
+                    Kind = reference.Kind,
+                });
             }
         }
 
@@ -223,7 +223,8 @@ namespace DotNetOutdated.Core.Services
                 }
 
                 var packageDefinedNames = SdkInjectedPackageReferences.GetPackageDefinedNames(_fileSystem, items, evaluation.PackageFolders);
-                SdkInjectedPackageReferences.MarkAsAutoReferenced(evaluation.TargetFramework, packageDefinedNames);
+                evaluation.TargetFramework.ReplaceAll(
+                    SdkInjectedPackageReferences.MarkAsAutoReferenced(evaluation.TargetFramework.Dependencies, packageDefinedNames));
             }
             finally
             {
@@ -252,9 +253,45 @@ namespace DotNetOutdated.Core.Services
             }
         }
 
-        private sealed record SdkEvaluation(string ProjectPath, string TargetAlias, string? Runtime, List<string?> PackageFolders, TargetFramework TargetFramework);
+        private sealed record SdkEvaluation(string ProjectPath, string TargetAlias, string? Runtime, List<string?> PackageFolders, TargetFrameworkBuilder TargetFramework);
 
-        private void AddDependencies(TargetFramework targetFramework, LockFileTargetLibrary? parentLibrary, LockFileTarget target, int level, int transitiveDepth)
+        /// <summary>
+        /// The dependencies of a target framework while its project is analyzed, keyed by name and kind, since a project
+        /// can reference a package and an SDK with the same id.
+        /// </summary>
+        private sealed class TargetFrameworkBuilder(NuGetFramework name, string? targetAlias)
+        {
+            private readonly Dictionary<(string Name, ReferenceKind Kind), Dependency> _dependencies = [];
+
+            public IReadOnlyList<Dependency> Dependencies => [.. _dependencies.Values];
+
+            public bool ContainsPackage(string name) => _dependencies.ContainsKey((name, ReferenceKind.Package));
+
+            public void TryAdd(Dependency dependency) => _dependencies.TryAdd((dependency.Name, dependency.Kind), dependency);
+
+            public void Set(Dependency dependency) => _dependencies[(dependency.Name, dependency.Kind)] = dependency;
+
+            public void RemoveDirectDependencies()
+            {
+                foreach (var key in _dependencies.Where(pair => !pair.Value.IsTransitive).Select(pair => pair.Key).ToList())
+                {
+                    _dependencies.Remove(key);
+                }
+            }
+
+            public void ReplaceAll(IEnumerable<Dependency> dependencies)
+            {
+                _dependencies.Clear();
+                foreach (var dependency in dependencies)
+                {
+                    Set(dependency);
+                }
+            }
+
+            public TargetFramework Build() => new() { Name = name, TargetAlias = targetAlias, Dependencies = Dependencies };
+        }
+
+        private void AddDependencies(TargetFrameworkBuilder targetFramework, LockFileTargetLibrary? parentLibrary, LockFileTarget target, int level, int transitiveDepth)
         {
             if (parentLibrary?.Dependencies != null)
             {
@@ -263,10 +300,15 @@ namespace DotNetOutdated.Core.Services
                     var childLibrary = target.Libraries.FirstOrDefault(library => string.Equals(library.Name, packageDependency.Id, StringComparison.OrdinalIgnoreCase));
 
                     // Only add library and process child dependencies if we have not come across this dependency before
-                    if (!targetFramework.Dependencies.ContainsKey(packageDependency.Id))
+                    if (!targetFramework.ContainsPackage(packageDependency.Id))
                     {
-                        var childDependency = new Dependency(packageDependency.Id, packageDependency.VersionRange, childLibrary?.Version, false, true, false);
-                        targetFramework.Dependencies.Add(childDependency.Name, childDependency);
+                        targetFramework.TryAdd(new Dependency
+                        {
+                            Name = packageDependency.Id,
+                            VersionRange = packageDependency.VersionRange,
+                            ResolvedVersion = childLibrary?.Version,
+                            IsTransitive = true,
+                        });
 
                         // Process the dependency for this project dependency
                         if (level < transitiveDepth)

@@ -78,13 +78,6 @@ internal static partial class ProjectSdkReferenceHelper
     private static partial Regex NonDeclarationTextRegex();
 
     /// <summary>
-    /// Gets the dictionary key for storing an SDK reference in <see cref="Models.TargetFramework.Dependencies"/>,
-    /// so an SDK and a package with the same id do not collide.
-    /// </summary>
-    public static string GetDependencyDictionaryKey(string name) =>
-        FileBasedAppReferenceHelper.GetDependencyDictionaryKey(name, ReferenceKind.Sdk);
-
-    /// <summary>
     /// Reads every MSBuild project SDK declared in a project file: the <c>Sdk</c> attribute of the root
     /// <c>&lt;Project&gt;</c>, <c>&lt;Sdk&gt;</c> elements and <c>&lt;Import Sdk="..."&gt;</c> elements, versioned or not.
     /// The file is parsed as XML, so SDKs inside comments are ignored, as is anything inside <c>&lt;ProjectExtensions&gt;</c>.

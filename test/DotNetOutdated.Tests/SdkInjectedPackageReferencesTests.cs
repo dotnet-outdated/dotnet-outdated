@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.IO.Abstractions.TestingHelpers;
 using DotNetOutdated.Core.Models;
 using DotNetOutdated.Core.Services;
@@ -157,43 +158,52 @@ namespace DotNetOutdated.Tests
         [Fact]
         public void MarksOnlyNamedDirectDependencies()
         {
-            var targetFramework = new TargetFramework(NuGetFramework.Parse("net8.0"));
-            targetFramework.Dependencies["Cake.Generator"] = CreateDependency("Cake.Generator", isTransitive: false, isDevelopmentDependency: true);
-            targetFramework.Dependencies["Newtonsoft.Json"] = CreateDependency("Newtonsoft.Json", isTransitive: false);
-            targetFramework.Dependencies["Microsoft.CodeCoverage"] = CreateDependency("Microsoft.CodeCoverage", isTransitive: true);
+            Dependency[] dependencies =
+            [
+                CreateDependency("Cake.Generator", isTransitive: false, isDevelopmentDependency: true),
+                CreateDependency("Newtonsoft.Json", isTransitive: false),
+                CreateDependency("Microsoft.CodeCoverage", isTransitive: true),
+            ];
 
-            SdkInjectedPackageReferences.MarkAsAutoReferenced(
-                targetFramework,
+            var marked = SdkInjectedPackageReferences.MarkAsAutoReferenced(
+                dependencies,
                 new HashSet<string>(["cake.generator", "Microsoft.CodeCoverage"], StringComparer.OrdinalIgnoreCase));
 
-            var cakeGenerator = targetFramework.Dependencies["Cake.Generator"];
-            Assert.True(cakeGenerator.IsAutoReferenced);
-            Assert.False(cakeGenerator.IsTransitive);
-            Assert.True(cakeGenerator.IsDevelopmentDependency);
-            Assert.Equal(NuGetVersion.Parse("6.0.0"), cakeGenerator.ResolvedVersion);
-            Assert.False(targetFramework.Dependencies["Newtonsoft.Json"].IsAutoReferenced);
-            Assert.False(targetFramework.Dependencies["Microsoft.CodeCoverage"].IsAutoReferenced);
+            Assert.Equal(dependencies.Select(d => d.Name), marked.Select(d => d.Name));
+            Assert.Equal(dependencies[0] with { IsAutoReferenced = true }, marked[0]);
+            Assert.Equal(dependencies[1], marked[1]);
+            Assert.Equal(dependencies[2], marked[2]);
         }
 
         [Fact]
         public void DeclaredSdkWithTheSameIdAsAnInjectedPackageIsNotMarked()
         {
-            var targetFramework = new TargetFramework(NuGetFramework.Parse("net8.0"));
-            targetFramework.Dependencies["Cake.Sdk"] = CreateDependency("Cake.Sdk", isTransitive: false);
-            targetFramework.Dependencies[ProjectSdkReferenceHelper.GetDependencyDictionaryKey("Cake.Sdk")] = CreateDependency("Cake.Sdk", isTransitive: false, kind: ReferenceKind.Sdk);
+            Dependency[] dependencies =
+            [
+                CreateDependency("Cake.Sdk", isTransitive: false),
+                CreateDependency("Cake.Sdk", isTransitive: false, kind: ReferenceKind.Sdk),
+            ];
 
-            SdkInjectedPackageReferences.MarkAsAutoReferenced(
-                targetFramework,
+            var marked = SdkInjectedPackageReferences.MarkAsAutoReferenced(
+                dependencies,
                 new HashSet<string>(["Cake.Sdk"], StringComparer.OrdinalIgnoreCase));
 
-            Assert.True(targetFramework.Dependencies["Cake.Sdk"].IsAutoReferenced);
-            Assert.False(targetFramework.Dependencies[ProjectSdkReferenceHelper.GetDependencyDictionaryKey("Cake.Sdk")].IsAutoReferenced);
+            Assert.True(marked.Single(d => d.Kind == ReferenceKind.Package).IsAutoReferenced);
+            Assert.False(marked.Single(d => d.Kind == ReferenceKind.Sdk).IsAutoReferenced);
         }
 
         private static HashSet<string> GetPackageDefinedNames(params PackageReferenceItem[] items) =>
             SdkInjectedPackageReferences.GetPackageDefinedNames(new MockFileSystem(), items, [PackagesFolder + System.IO.Path.DirectorySeparatorChar, FallbackFolder]);
 
         private static Dependency CreateDependency(string name, bool isTransitive, bool isDevelopmentDependency = false, ReferenceKind kind = ReferenceKind.Package) =>
-            new(name, VersionRange.Parse("6.0.0"), NuGetVersion.Parse("6.0.0"), isAutoReferenced: false, isTransitive, isDevelopmentDependency, kind);
+            new()
+            {
+                Name = name,
+                VersionRange = VersionRange.Parse("6.0.0"),
+                ResolvedVersion = NuGetVersion.Parse("6.0.0"),
+                IsTransitive = isTransitive,
+                IsDevelopmentDependency = isDevelopmentDependency,
+                Kind = kind,
+            };
     }
 }

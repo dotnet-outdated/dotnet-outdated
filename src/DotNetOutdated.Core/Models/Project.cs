@@ -6,75 +6,66 @@ using System.Collections.Generic;
 
 namespace DotNetOutdated.Core.Models
 {
-    public class Project
+    /// <summary>A project (or file-based app) and the dependencies of each of its target frameworks.</summary>
+    public sealed record Project
     {
-        public string FilePath { get; }
+        public required string Name { get; init; }
 
-        public string Name { get; }
+        /// <summary>The full path of the project file or file-based app.</summary>
+        public required string FilePath { get; init; }
 
-        public IList<Uri> Sources { get; }
+        /// <summary>The package sources the project restores from.</summary>
+        public IReadOnlyList<Uri> Sources { get => _sources; init => _sources = ReadOnlySnapshot.Of(value); }
 
-        public IList<TargetFramework> TargetFrameworks { get; } = new List<TargetFramework>();
+        public required NuGetVersion Version { get; init; }
 
-        public NuGetVersion Version { get; }
-
-        public Project(string name, string filePath, IEnumerable<Uri> sources, NuGetVersion version)
+        public IReadOnlyList<TargetFramework> TargetFrameworks
         {
-            FilePath = filePath;
-            Name = name;
-            Sources = new List<Uri>(sources);
-            Version = version;
+            get => _targetFrameworks;
+            init => _targetFrameworks = ReadOnlySnapshot.Of(value);
         }
+
+        private readonly IReadOnlyList<Uri> _sources = [];
+        private readonly IReadOnlyList<TargetFramework> _targetFrameworks = [];
     }
 
-    public class TargetFramework
+    /// <summary>A target framework of a project and the dependencies it resolves.</summary>
+    public sealed record TargetFramework
     {
-        public Dictionary<string, Dependency> Dependencies { get; } = [];
+        public required NuGetFramework Name { get; init; }
 
-        public NuGetFramework Name { get; set; }
+        /// <summary>The alias the project uses for the framework in <c>TargetFrameworks</c>, if any.</summary>
+        public string? TargetAlias { get; init; }
 
-        public string? TargetAlias { get; set; }
+        /// <summary>
+        /// The references and transitive packages of the framework. A package and an SDK can have the same
+        /// <see cref="Dependency.Name"/>; <see cref="Dependency.Kind"/> tells them apart.
+        /// </summary>
+        public IReadOnlyList<Dependency> Dependencies { get => _dependencies; init => _dependencies = ReadOnlySnapshot.Of(value); }
 
-        public TargetFramework(NuGetFramework name)
-        {
-            Name = name;
-        }
+        private readonly IReadOnlyList<Dependency> _dependencies = [];
     }
 
-    public class Dependency
+    /// <summary>A package or SDK that a project resolves for one target framework.</summary>
+    public sealed record Dependency
     {
-        public bool IsAutoReferenced { get; }
+        public required string Name { get; init; }
 
-        public bool IsDevelopmentDependency { get; }
-
-        public bool IsTransitive { get; }
-
-        /// <summary>Whether this is a package or an SDK reference.</summary>
-        public ReferenceKind Kind { get; }
-
-        public string Name { get; }
+        /// <summary>The version range the project declares (or a transitive package's parent requires).</summary>
+        public required VersionRange VersionRange { get; init; }
 
         /// <summary>The version restore resolved, or <see langword="null"/> when the package could not be resolved.</summary>
-        public NuGetVersion? ResolvedVersion { get; }
+        public NuGetVersion? ResolvedVersion { get; init; }
 
-        public VersionRange VersionRange { get; }
+        /// <summary>Whether the SDK, rather than the user, added the reference.</summary>
+        public bool IsAutoReferenced { get; init; }
 
-        public Dependency(
-            string name,
-            VersionRange versionRange,
-            NuGetVersion? resolvedVersion,
-            bool isAutoReferenced,
-            bool isTransitive,
-            bool isDevelopmentDependency,
-            ReferenceKind kind = ReferenceKind.Package)
-        {
-            Kind = kind;
-            Name = name;
-            VersionRange = versionRange;
-            ResolvedVersion = resolvedVersion;
-            IsAutoReferenced = isAutoReferenced;
-            IsTransitive = isTransitive;
-            IsDevelopmentDependency = isDevelopmentDependency;
-        }
+        /// <summary>Whether a reference brings the package in, rather than the project declaring it.</summary>
+        public bool IsTransitive { get; init; }
+
+        public bool IsDevelopmentDependency { get; init; }
+
+        /// <summary>Whether this is a package or an SDK reference.</summary>
+        public ReferenceKind Kind { get; init; } = ReferenceKind.Package;
     }
 }

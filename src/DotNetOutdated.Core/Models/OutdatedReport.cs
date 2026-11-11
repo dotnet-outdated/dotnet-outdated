@@ -22,7 +22,13 @@ namespace DotNetOutdated.Core.Models
         public required string FilePath { get; init; }
 
         /// <summary>The target frameworks with at least one reported dependency, ordered by framework.</summary>
-        public required IReadOnlyList<OutdatedTargetFramework> TargetFrameworks { get; init; }
+        public required IReadOnlyList<OutdatedTargetFramework> TargetFrameworks
+        {
+            get => _targetFrameworks;
+            init => _targetFrameworks = ReadOnlySnapshot.Of(value);
+        }
+
+        private readonly IReadOnlyList<OutdatedTargetFramework> _targetFrameworks = [];
     }
 
     /// <summary>A target framework of a project and its reported dependencies.</summary>
@@ -34,7 +40,13 @@ namespace DotNetOutdated.Core.Models
         public string? TargetAlias { get; init; }
 
         /// <summary>The reported dependencies, ordered by name.</summary>
-        public required IReadOnlyList<OutdatedDependency> Dependencies { get; init; }
+        public required IReadOnlyList<OutdatedDependency> Dependencies
+        {
+            get => _dependencies;
+            init => _dependencies = ReadOnlySnapshot.Of(value);
+        }
+
+        private readonly IReadOnlyList<OutdatedDependency> _dependencies = [];
     }
 
     /// <summary>A dependency and the newest version it may move to.</summary>

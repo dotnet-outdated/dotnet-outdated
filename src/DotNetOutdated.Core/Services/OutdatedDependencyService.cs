@@ -63,7 +63,7 @@ internal sealed class OutdatedDependencyService(INuGetPackageResolutionService r
         OutdatedOptions options,
         CancellationToken cancellationToken)
     {
-        var dependencies = targetFramework.Dependencies.Values
+        var dependencies = targetFramework.Dependencies
             .Where(dependency => options.IncludeAutoReferences || !dependency.IsAutoReferenced)
             .Where(dependency => options.IncludeFilters.Count == 0 || options.IncludeFilters.Any(filter => NameContains(dependency, filter)))
             .Where(dependency => !options.ExcludeFilters.Any(filter => NameContains(dependency, filter)));

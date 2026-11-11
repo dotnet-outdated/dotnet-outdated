@@ -23,8 +23,8 @@ public class CsvFormatterTests
             {
                 new AnalyzedTargetFramework(NuGetFramework.Parse("net9.0"), new List<AnalyzedDependency>
                 {
-                    new AnalyzedDependency(new Dependency("Alpha", new VersionRange(resolved), resolved, false, false, false), new NuGetVersion("2.0.0")),
-                    new AnalyzedDependency(new Dependency("Beta", new VersionRange(resolved), resolved, false, false, false)),
+                    new AnalyzedDependency(new Dependency { Name = "Alpha", VersionRange = new VersionRange(resolved), ResolvedVersion = resolved }, new NuGetVersion("2.0.0")),
+                    new AnalyzedDependency(new Dependency { Name = "Beta", VersionRange = new VersionRange(resolved), ResolvedVersion = resolved }),
                 })
             })
         ];

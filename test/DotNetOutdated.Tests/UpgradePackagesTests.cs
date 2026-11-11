@@ -100,8 +100,8 @@ public class UpgradePackagesTests
     {
         // Arrange
         UpgradeReturns(new RunStatus(string.Empty, string.Empty, exitCode: 0));
-        var package = new Dependency("Cake.Sdk", VersionRange.Parse("1.0.0"), new NuGetVersion("1.0.0"), isAutoReferenced: false, isTransitive: false, isDevelopmentDependency: false);
-        var sdk = new Dependency("Cake.Sdk", VersionRange.Parse("1.0.0"), new NuGetVersion("1.0.0"), isAutoReferenced: false, isTransitive: false, isDevelopmentDependency: false, ReferenceKind.Sdk);
+        var package = new Dependency { Name = "Cake.Sdk", VersionRange = VersionRange.Parse("1.0.0"), ResolvedVersion = new NuGetVersion("1.0.0") };
+        var sdk = new Dependency { Name = "Cake.Sdk", VersionRange = VersionRange.Parse("1.0.0"), ResolvedVersion = new NuGetVersion("1.0.0"), Kind = ReferenceKind.Sdk };
 
         // Act
         (bool success, string written) = RunUpgrade(package, sdk);
@@ -122,8 +122,8 @@ public class UpgradePackagesTests
     {
         // Arrange
         UpgradeReturns(new RunStatus(string.Empty, string.Empty, exitCode: 0));
-        var package = new Dependency("Cake.Sdk", VersionRange.Parse("1.0.0"), new NuGetVersion("1.0.0"), isAutoReferenced: false, isTransitive: false, isDevelopmentDependency: false);
-        var sdk = new Dependency("Cake.Sdk", VersionRange.Parse("1.0.0"), new NuGetVersion("1.0.0"), isAutoReferenced: false, isTransitive: false, isDevelopmentDependency: false, ReferenceKind.Sdk);
+        var package = new Dependency { Name = "Cake.Sdk", VersionRange = VersionRange.Parse("1.0.0"), ResolvedVersion = new NuGetVersion("1.0.0") };
+        var sdk = new Dependency { Name = "Cake.Sdk", VersionRange = VersionRange.Parse("1.0.0"), ResolvedVersion = new NuGetVersion("1.0.0"), Kind = ReferenceKind.Sdk };
 
         // Act
         (_, string written) = RunUpgrade(UpgradeType.Prompt, "n\nn\n", package, sdk);
@@ -141,7 +141,7 @@ public class UpgradePackagesTests
         _packageService.Upgrade(Arg.Any<ReferenceUpgrade>()).Returns(status);
 
     private (bool Success, string Written) RunUpgrade() =>
-        RunUpgrade(new Dependency(PackageName, VersionRange.Parse("1.0.0"), new NuGetVersion("1.0.0"), isAutoReferenced: false, isTransitive: false, isDevelopmentDependency: false));
+        RunUpgrade(new Dependency { Name = PackageName, VersionRange = VersionRange.Parse("1.0.0"), ResolvedVersion = new NuGetVersion("1.0.0") });
 
     private (bool Success, string Written) RunUpgrade(params Dependency[] dependencies) =>
         RunUpgrade(UpgradeType.Auto, input: null, dependencies);
