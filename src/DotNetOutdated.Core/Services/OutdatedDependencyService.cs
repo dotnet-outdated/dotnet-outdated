@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -10,7 +11,8 @@ namespace DotNetOutdated.Core.Services;
 
 /// <summary>
 /// Reports which dependencies of analyzed projects have newer versions, applying the filters and version settings of
-/// <see cref="OutdatedOptions"/>. Projects, target frameworks and dependencies are looked up concurrently.
+/// <see cref="OutdatedOptions"/>. Up to one project per processor is looked up at a time, with the target frameworks and
+/// dependencies of each project looked up concurrently.
 /// </summary>
 public sealed class OutdatedDependencyService(INuGetPackageResolutionService resolutionService) : IOutdatedDependencyService
 {
@@ -23,11 +25,18 @@ public sealed class OutdatedDependencyService(INuGetPackageResolutionService res
     {
         ArgumentNullException.ThrowIfNull(projects);
         options ??= OutdatedOptions.Default;
+        cancellationToken.ThrowIfCancellationRequested();
 
-        var results = await Task.WhenAll(projects.Select(project => FindOutdatedAsync(project, options, cancellationToken))).ConfigureAwait(false);
+        var results = new ConcurrentBag<OutdatedProject>();
+        await Parallel.ForEachAsync(projects, cancellationToken, async (project, token) =>
+        {
+            if (await FindOutdatedAsync(project, options, token).ConfigureAwait(false) is { } outdated)
+            {
+                results.Add(outdated);
+            }
+        }).ConfigureAwait(false);
 
         return results
-            .OfType<OutdatedProject>()
             .OrderBy(project => project.Name)
             .ThenBy(project => project.FilePath)
             .ToList();

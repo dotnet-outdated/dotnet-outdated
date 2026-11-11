@@ -153,6 +153,53 @@ namespace DotNetOutdated.Tests
             await _resolution.DidNotReceiveWithAnyArgs().ResolveLatestVersionAsync(default!, default);
         }
 
+        [Fact]
+        public async Task ACancelledRequest_StartsNoLookups()
+        {
+            using var cancellation = new CancellationTokenSource();
+            cancellation.Cancel();
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                Service().FindOutdatedAsync([Project("App", Dependency("Package", "1.0.0"))], cancellationToken: cancellation.Token));
+
+            await _resolution.DidNotReceiveWithAnyArgs().ResolveLatestVersionAsync(default!, default);
+        }
+
+        [Fact]
+        public async Task LooksUpAtMostOneProjectPerProcessorAtATime()
+        {
+            var inFlight = 0;
+            var maxInFlight = 0;
+            var resolution = Substitute.For<INuGetPackageResolutionService>();
+            resolution.ResolveLatestVersionAsync(Arg.Any<LatestVersionQuery>(), Arg.Any<CancellationToken>())
+                .Returns(async call =>
+                {
+                    var current = Interlocked.Increment(ref inFlight);
+                    InterlockedMax(ref maxInFlight, current);
+                    await Task.Delay(20);
+                    Interlocked.Decrement(ref inFlight);
+                    return call.Arg<LatestVersionQuery>().CurrentVersion;
+                });
+
+            // One dependency per project, so lookups in flight are projects in flight.
+            var projects = Enumerable.Range(0, (Environment.ProcessorCount * 2) + 1)
+                .Select(index => Project($"App{index}", Dependency($"Package{index}", "1.0.0")))
+                .ToList();
+
+            await new OutdatedDependencyService(resolution).FindOutdatedAsync(projects);
+
+            Assert.InRange(maxInFlight, 1, Environment.ProcessorCount);
+            await resolution.ReceivedWithAnyArgs(projects.Count).ResolveLatestVersionAsync(default!, default);
+        }
+
+        private static void InterlockedMax(ref int target, int value)
+        {
+            int current;
+            while ((current = Volatile.Read(ref target)) < value && Interlocked.CompareExchange(ref target, value, current) != current)
+            {
+            }
+        }
+
         private OutdatedDependencyService Service() => new(_resolution);
 
         private static Dependency Dependency(string name, string version, bool isAutoReferenced = false, bool isDevelopmentDependency = false)
