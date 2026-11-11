@@ -360,7 +360,13 @@ namespace DotNetOutdated
                 IncludeUpToDate = true,
             });
 
-            var result = outdatedProjects.Select(project => new
+            // FindOutdatedAsync leaves out projects and target frameworks with no dependencies, but every analyzed one is
+            // reported here so a client can tell "analyzed, nothing referenced" apart from "nothing found".
+            var outdatedDependencies = outdatedProjects
+                .SelectMany(project => project.TargetFrameworks.Select(tf => (project.FilePath, tf.Name, tf.TargetAlias, tf.Dependencies)))
+                .ToDictionary(entry => (entry.FilePath, entry.Name, entry.TargetAlias), entry => entry.Dependencies);
+
+            var result = projects.Select(project => new
             {
                 name = project.Name,
                 filePath = project.FilePath,
@@ -368,7 +374,7 @@ namespace DotNetOutdated
                 {
                     // The string update_package takes as its framework, as the CLI passes to dotnet add package.
                     name = string.IsNullOrEmpty(tf.TargetAlias) ? tf.Name.GetShortFolderName() : tf.TargetAlias,
-                    dependencies = tf.Dependencies.Select(outdated => new
+                    dependencies = outdatedDependencies.GetValueOrDefault((project.FilePath, tf.Name, tf.TargetAlias), []).Select(outdated => new
                     {
                         name = outdated.Dependency.Name,
                         version = outdated.Dependency.ResolvedVersion?.ToString(),
