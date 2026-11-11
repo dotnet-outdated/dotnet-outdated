@@ -6,6 +6,7 @@ using System.Linq;
 using System.IO.Abstractions.TestingHelpers;
 using System.Threading.Tasks;
 using DotNetOutdated.Core.Services;
+using NSubstitute;
 using NuGet.Versioning;
 using Xunit;
 using XFS = System.IO.Abstractions.TestingHelpers.MockUnixSupport;
@@ -14,11 +15,11 @@ namespace DotNetOutdated.Tests
 {
     public class VersionVariableTests
     {
-        // The version-variable modules composed as DotNetPackageService composes them: discovery through the MSBuild
+        // The version-variable modules composed as DotNetPackageService composes them: discovery through the project
         // evaluator or the file-based app directives, writes through the variable writer or the directives.
         private sealed class VersionVariables(IFileSystem fileSystem, Action<string> onWarning = null)
         {
-            private readonly MSBuildEvaluator _evaluator = new(fileSystem);
+            private readonly DotNetProjectEvaluator _evaluator = new(Substitute.For<IDotNetRunner>(), fileSystem);
             private readonly MSBuildVariableWriter _writer = new(fileSystem, onWarning);
             private FileBasedAppDirectives Directives => new(fileSystem, _evaluator, onWarning);
 
@@ -27,7 +28,7 @@ namespace DotNetOutdated.Tests
             {
                 if (!projectFilePath.IsCSharpFile())
                 {
-                    return _evaluator.PackageVariables(projectFilePath);
+                    return new Dictionary<string, PackageVariableInfo>(_evaluator.GetVersionVariables(projectFilePath), StringComparer.OrdinalIgnoreCase);
                 }
 
                 var variables = Directives.PackageVariables(projectFilePath, ReferenceKind.Package);

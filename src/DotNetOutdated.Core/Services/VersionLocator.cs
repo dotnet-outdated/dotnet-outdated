@@ -39,10 +39,10 @@ internal sealed record NotEditable(string Message) : VersionLocation;
 /// file it imports, an MSBuild property, its <c>Sdk</c> declarations, or the directives of a file-based app.
 /// Files are read on every call, so the answer reflects edits made by earlier upgrades.
 /// </summary>
-internal sealed class VersionLocator(IFileSystem fileSystem, MSBuildEvaluator evaluator, FileBasedAppDirectives fileBasedAppDirectives)
+internal sealed class VersionLocator(IFileSystem fileSystem, IProjectEvaluator evaluator, FileBasedAppDirectives fileBasedAppDirectives)
 {
     private readonly IFileSystem _fileSystem = fileSystem;
-    private readonly MSBuildEvaluator _evaluator = evaluator;
+    private readonly IProjectEvaluator _evaluator = evaluator;
     private readonly FileBasedAppDirectives _fileBasedAppDirectives = fileBasedAppDirectives;
 
     public VersionLocation Locate(string projectPath, string name, ReferenceKind kind) =>
@@ -104,7 +104,7 @@ internal sealed class VersionLocator(IFileSystem fileSystem, MSBuildEvaluator ev
 
     private VersionLocation LocatePackage(string projectPath, string name)
     {
-        if (!_evaluator.PackageVariables(projectPath).TryGetValue(name, out var variableInfo))
+        if (!_evaluator.GetVersionVariables(projectPath).TryGetValue(name, out var variableInfo))
         {
             return new LiteralVersion();
         }

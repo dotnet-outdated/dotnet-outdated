@@ -30,12 +30,16 @@ namespace DotNetOutdated.Core.Services
             new(StringComparer.OrdinalIgnoreCase);
 
         public DotNetPackageService(IDotNetRunner dotNetRunner, IFileSystem fileSystem, Action<string>? onWarning = null)
+            : this(dotNetRunner, fileSystem, new DotNetProjectEvaluator(dotNetRunner, fileSystem), onWarning)
+        {
+        }
+
+        internal DotNetPackageService(IDotNetRunner dotNetRunner, IFileSystem fileSystem, IProjectEvaluator evaluator, Action<string>? onWarning = null)
         {
             _dotNetRunner = dotNetRunner;
             _fileSystem = fileSystem;
             _onWarning = onWarning;
 
-            var evaluator = new MSBuildEvaluator(fileSystem);
             _fileBasedAppDirectives = new FileBasedAppDirectives(fileSystem, evaluator, onWarning);
             _versionLocator = new VersionLocator(fileSystem, evaluator, _fileBasedAppDirectives);
             _variableWriter = new MSBuildVariableWriter(fileSystem, onWarning);
