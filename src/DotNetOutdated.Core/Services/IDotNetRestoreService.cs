@@ -1,6 +1,6 @@
 ﻿namespace DotNetOutdated.Core.Services
 {
-    public interface IDotNetRestoreService
+    internal interface IDotNetRestoreService
     {
         RunStatus Restore(string projectPath);
     }

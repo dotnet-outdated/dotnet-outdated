@@ -7,7 +7,7 @@ namespace DotNetOutdated.Core.Services;
 /// <summary>
 /// A package or SDK reference declared in a .NET file-based app source file via <c>#:package</c> or <c>#:sdk</c>.
 /// </summary>
-public sealed class FileBasedAppReference
+internal sealed class FileBasedAppReference
 {
     /// <summary>
     /// Gets the NuGet package or SDK package id.

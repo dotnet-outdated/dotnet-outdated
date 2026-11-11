@@ -15,7 +15,7 @@ namespace DotNetOutdated.Core.Services
     /// <c>dotnet add package</c> (with <c>Directory.Packages.props</c> formatting kept), and versions that it can't
     /// update or would lose (MSBuild properties, SDK declarations, file-based app directives) are rewritten directly.
     /// </summary>
-    public class DotNetPackageService : IDotNetPackageService
+    internal class DotNetPackageService : IDotNetPackageService
     {
         private readonly Action<string>? _onWarning;
         private readonly IDotNetRunner _dotNetRunner;
@@ -30,34 +30,33 @@ namespace DotNetOutdated.Core.Services
             new(StringComparer.OrdinalIgnoreCase);
 
         public DotNetPackageService(IDotNetRunner dotNetRunner, IFileSystem fileSystem, Action<string>? onWarning = null)
+            : this(dotNetRunner, fileSystem, new DotNetProjectEvaluator(dotNetRunner, fileSystem), onWarning)
+        {
+        }
+
+        internal DotNetPackageService(IDotNetRunner dotNetRunner, IFileSystem fileSystem, IProjectEvaluator evaluator, Action<string>? onWarning = null)
         {
             _dotNetRunner = dotNetRunner;
             _fileSystem = fileSystem;
             _onWarning = onWarning;
 
-            var evaluator = new MSBuildEvaluator(fileSystem);
             _fileBasedAppDirectives = new FileBasedAppDirectives(fileSystem, evaluator, onWarning);
             _versionLocator = new VersionLocator(fileSystem, evaluator, _fileBasedAppDirectives);
             _variableWriter = new MSBuildVariableWriter(fileSystem, onWarning);
         }
 
-        public RunStatus AddPackage(
-            string projectPath,
-            string packageName,
-            string frameworkName,
-            VersionRange versionRange,
-            bool noRestore = false,
-            bool ignoreFailedSources = false,
-            ReferenceKind kind = ReferenceKind.Package)
+        public RunStatus Upgrade(ReferenceUpgrade upgrade)
         {
-            ArgumentNullException.ThrowIfNull(versionRange);
-            if (!versionRange.HasLowerBound)
+            ArgumentNullException.ThrowIfNull(upgrade);
+            ArgumentNullException.ThrowIfNull(upgrade.Version);
+            if (!upgrade.Version.HasLowerBound)
             {
-                throw new ArgumentException($"Version range '{versionRange}' must have a lower bound.", nameof(versionRange));
+                throw new ArgumentException($"Version range '{upgrade.Version}' must have a lower bound.", nameof(upgrade));
             }
 
-            var options = new UpgradeOptions(projectPath, packageName, frameworkName, versionRange, noRestore, ignoreFailedSources);
-            return _versionLocator.Locate(projectPath, packageName, kind) switch
+            var noRestore = upgrade.NoRestore;
+            var options = new UpgradeOptions(upgrade.ProjectPath, upgrade.Name, upgrade.TargetFramework, upgrade.Version, noRestore, upgrade.IgnoreFailedSources);
+            return _versionLocator.Locate(upgrade.ProjectPath, upgrade.Name, upgrade.Kind) switch
             {
                 NotEditable notEditable => Failure(notEditable.Message),
                 FileBasedVariableVersion location => UpdateFileBasedVariable(location.Variable, options),
@@ -80,7 +79,7 @@ namespace DotNetOutdated.Core.Services
             bool IgnoreFailedSources)
         {
             // Locations that can only hold a single version (file-based app directives, SDKs) take the lower bound.
-            public NuGetVersion Version => VersionRange.MinVersion!; // AddPackage rejects ranges without a lower bound.
+            public NuGetVersion Version => VersionRange.MinVersion!; // Upgrade rejects ranges without a lower bound.
         }
 
         private RunStatus UpdateFileBasedVariable(PackageVariableInfo variableInfo, UpgradeOptions options)

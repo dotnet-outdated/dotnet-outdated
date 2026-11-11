@@ -6,10 +6,12 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using DotNetOutdated.Core.Models;
 using DotNetOutdated.Core.Services;
 using DotNetOutdated.Models;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
+using NuGet.Frameworks;
 using NuGet.Versioning;
 using Xunit;
 
@@ -21,7 +23,7 @@ namespace DotNetOutdated.Tests
         private readonly IProjectDiscoveryService _projectDiscoveryService;
         private readonly IProjectAnalysisService _projectAnalysisService;
         private readonly IDotNetPackageService _dotNetPackageService;
-        private readonly INuGetPackageResolutionService _nugetService;
+        private readonly IOutdatedDependencyService _outdatedDependencyService;
 
         public McpServerTests()
         {
@@ -29,7 +31,7 @@ namespace DotNetOutdated.Tests
             _projectDiscoveryService = Substitute.For<IProjectDiscoveryService>();
             _projectAnalysisService = Substitute.For<IProjectAnalysisService>();
             _dotNetPackageService = Substitute.For<IDotNetPackageService>();
-            _nugetService = Substitute.For<INuGetPackageResolutionService>();
+            _outdatedDependencyService = Substitute.For<IOutdatedDependencyService>();
         }
 
         private async Task<string> RunServerAsync(string input)
@@ -42,7 +44,7 @@ namespace DotNetOutdated.Tests
                 _projectDiscoveryService,
                 _projectAnalysisService,
                 _dotNetPackageService,
-                _nugetService,
+                _outdatedDependencyService,
                 inputStream,
                 outputStream
             );
@@ -163,6 +165,36 @@ namespace DotNetOutdated.Tests
             Assert.Contains("\"resultType\":\"complete\"", output);
         }
 
+        [Fact]
+        public async Task AnalyzeProject_ReportsEveryDependencyWithItsLatestVersion()
+        {
+            // Arrange
+            var input = "{\"jsonrpc\": \"2.0\", \"method\": \"tools/call\", \"params\": { \"name\": \"analyze_project\", \"arguments\": { \"projectPath\": \"/test/p.csproj\" } }, \"id\": 3}\n";
+            var projects = new List<Project> { new("p", "/test/p.csproj", [], new NuGetVersion("1.0.0")) };
+            _projectAnalysisService.AnalyzeProjectAsync("/test/p.csproj", Arg.Any<ProjectAnalysisOptions>(), Arg.Any<CancellationToken>()).Returns(projects);
+            var dependency = new Dependency("Contoso.Widgets", VersionRange.Parse("1.0.0"), new NuGetVersion("1.0.0"), false, false, false);
+            _outdatedDependencyService
+                .FindOutdatedAsync(projects, Arg.Is<OutdatedOptions>(o => o.IncludeUpToDate && o.IncludeAutoReferences), Arg.Any<CancellationToken>())
+                .Returns([new OutdatedProject
+                {
+                    Name = "p",
+                    FilePath = "/test/p.csproj",
+                    TargetFrameworks = [new OutdatedTargetFramework
+                    {
+                        Name = NuGetFramework.Parse("net9.0"),
+                        Dependencies = [new OutdatedDependency { Dependency = dependency, LatestVersion = new NuGetVersion("1.2.0") }],
+                    }],
+                }]);
+
+            // Act
+            var output = await RunServerAsync(input);
+
+            // Assert
+            Assert.Contains("Contoso.Widgets", output);
+            Assert.Contains("1.2.0", output);
+            Assert.Contains("Minor", output);
+        }
+
         [Theory]
         [InlineData("(,14.0.0)")]
         [InlineData("*")]
@@ -176,7 +208,7 @@ namespace DotNetOutdated.Tests
             var output = await RunServerAsync(input);
 
             Assert.Contains("Invalid version", output);
-            _dotNetPackageService.ReceivedCalls().ToList().ForEach(call => Assert.NotEqual("AddPackage", call.GetMethodInfo().Name));
+            _dotNetPackageService.ReceivedCalls().ToList().ForEach(call => Assert.NotEqual(nameof(IDotNetPackageService.Upgrade), call.GetMethodInfo().Name));
         }
 
         [Fact]
@@ -184,7 +216,7 @@ namespace DotNetOutdated.Tests
         {
             var input = "{\"jsonrpc\": \"2.0\", \"method\": \"tools/call\", \"params\": { \"name\": \"update_package\", \"arguments\": " +
                 "{ \"projectPath\": \"/test/p.csproj\", \"packageName\": \"Newtonsoft.Json\", \"version\": \"13.0.1\", \"framework\": \"net8.0\" } }, \"id\": 5}\n";
-            _dotNetPackageService.AddPackage("/test/p.csproj", "Newtonsoft.Json", "net8.0", new VersionRange(new NuGetVersion("13.0.1")))
+            _dotNetPackageService.Upgrade(new ReferenceUpgrade { ProjectPath = "/test/p.csproj", Name = "Newtonsoft.Json", TargetFramework = "net8.0", Version = new VersionRange(new NuGetVersion("13.0.1")) })
                 .Returns(new RunStatus("", "", 0));
 
             var output = await RunServerAsync(input);
@@ -197,7 +229,7 @@ namespace DotNetOutdated.Tests
         {
             var input = "{\"jsonrpc\": \"2.0\", \"method\": \"tools/call\", \"params\": { \"name\": \"update_package\", \"arguments\": " +
                 "{ \"projectPath\": \"/test/p.csproj\", \"packageName\": \"Aspire.AppHost.Sdk\", \"version\": \"9.1.0\", \"framework\": \"net8.0\", \"kind\": \"sdk\" } }, \"id\": 6}\n";
-            _dotNetPackageService.AddPackage("/test/p.csproj", "Aspire.AppHost.Sdk", "net8.0", new VersionRange(new NuGetVersion("9.1.0")), kind: ReferenceKind.Sdk)
+            _dotNetPackageService.Upgrade(new ReferenceUpgrade { ProjectPath = "/test/p.csproj", Name = "Aspire.AppHost.Sdk", TargetFramework = "net8.0", Version = new VersionRange(new NuGetVersion("9.1.0")), Kind = ReferenceKind.Sdk })
                 .Returns(new RunStatus("", "", 0));
 
             var output = await RunServerAsync(input);
@@ -218,7 +250,7 @@ namespace DotNetOutdated.Tests
             var output = await RunServerAsync(input);
 
             Assert.Contains("Invalid kind", output);
-            _dotNetPackageService.DidNotReceiveWithAnyArgs().AddPackage(default, default, default, default(VersionRange));
+            _dotNetPackageService.DidNotReceiveWithAnyArgs().Upgrade(default!);
         }
 
         [Fact]
@@ -226,7 +258,7 @@ namespace DotNetOutdated.Tests
         {
             var input = "{\"jsonrpc\": \"2.0\", \"method\": \"tools/call\", \"params\": { \"name\": \"update_package\", \"arguments\": " +
                 "{ \"projectPath\": \"/test/p.csproj\", \"packageName\": \"Newtonsoft.Json\", \"version\": \"13.0.1\", \"framework\": \"net8.0\", \"kind\": null } }, \"id\": 8}\n";
-            _dotNetPackageService.AddPackage("/test/p.csproj", "Newtonsoft.Json", "net8.0", new VersionRange(new NuGetVersion("13.0.1")), kind: ReferenceKind.Package)
+            _dotNetPackageService.Upgrade(new ReferenceUpgrade { ProjectPath = "/test/p.csproj", Name = "Newtonsoft.Json", TargetFramework = "net8.0", Version = new VersionRange(new NuGetVersion("13.0.1")), Kind = ReferenceKind.Package })
                 .Returns(new RunStatus("", "", 0));
 
             var output = await RunServerAsync(input);
@@ -235,14 +267,13 @@ namespace DotNetOutdated.Tests
         }
 
         [Fact]
-        public async Task UpdatePackage_WhenAddPackageFails_ReturnsOutputAndErrors()
+        public async Task UpdatePackage_WhenUpgradeFails_ReturnsOutputAndErrors()
         {
             // Arrange
             // dotnet add package reports NuGet failures on stdout, so the tool result must include it.
             var input = "{\"jsonrpc\": \"2.0\", \"method\": \"tools/call\", \"params\": { \"name\": \"update_package\", \"arguments\": { \"projectPath\": \"/test/project1.csproj\", \"packageName\": \"Contoso.Widgets\", \"version\": \"2.0.0\", \"framework\": \"net8.0\" } }, \"id\": 4}\n";
 
-            _dotNetPackageService
-                .AddPackage("/test/project1.csproj", "Contoso.Widgets", "net8.0", new VersionRange(new NuGetVersion("2.0.0")))
+            _dotNetPackageService.Upgrade(new ReferenceUpgrade { ProjectPath = "/test/project1.csproj", Name = "Contoso.Widgets", TargetFramework = "net8.0", Version = new VersionRange(new NuGetVersion("2.0.0")) })
                 .Returns(new RunStatus("error: Cannot edit items in imported files", "stderr detail", 1));
 
             // Act

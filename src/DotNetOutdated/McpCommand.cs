@@ -3,7 +3,6 @@ using DotNetOutdated.Services;
 using Microsoft.Extensions.DependencyInjection;
 using NuGet.Common;
 using System;
-using System.IO.Abstractions;
 using System.Threading.Tasks;
 
 namespace DotNetOutdated
@@ -16,20 +15,9 @@ namespace DotNetOutdated
             var services = new ServiceCollection()
                  .AddSingleton<IConsole>(McpConsole.Singleton)
                  .AddSingleton<IReporter>(provider => new ConsoleReporter(provider.GetService<IConsole>()))
-                 .AddSingleton<IFileSystem, FileSystem>()
+                 .AddSingleton<IWarningReporter>(provider => provider.GetRequiredService<IReporter>())
                  .AddSingleton<ILogger>(provider => new ConsoleLogger(provider.GetService<IConsole>(), LogLevel.Warning))
-                 .AddSingleton<IProjectDiscoveryService, ProjectDiscoveryService>()
-                 .AddSingleton<IProjectAnalysisService, ProjectAnalysisService>()
-                 .AddSingleton<IDotNetRunner, DotNetRunner>()
-                 .AddSingleton<IDependencyGraphService, DependencyGraphService>()
-                 .AddSingleton<IDotNetRestoreService, DotNetRestoreService>()
-                 .AddSingleton<IDotNetPackageService>(provider =>
-                     new DotNetPackageService(
-                         provider.GetService<IDotNetRunner>(),
-                         provider.GetService<IFileSystem>(),
-                         msg => provider.GetService<IReporter>().Warn(msg)))
-                 .AddSingleton<INuGetPackageInfoService, NuGetPackageInfoService>()
-                 .AddSingleton<INuGetPackageResolutionService, NuGetPackageResolutionService>()
+                 .AddDotNetOutdated()
                  .BuildServiceProvider();
 
             var server = new McpServer(
@@ -37,7 +25,7 @@ namespace DotNetOutdated
                 services.GetRequiredService<IProjectDiscoveryService>(),
                 services.GetRequiredService<IProjectAnalysisService>(),
                 services.GetRequiredService<IDotNetPackageService>(),
-                services.GetRequiredService<INuGetPackageResolutionService>(),
+                services.GetRequiredService<IOutdatedDependencyService>(),
                 Console.OpenStandardInput(),
                 Console.OpenStandardOutput()
             );

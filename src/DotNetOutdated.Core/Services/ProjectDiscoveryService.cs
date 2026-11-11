@@ -9,7 +9,7 @@ using System.Linq;
 
 namespace DotNetOutdated.Core.Services
 {
-    public sealed class ProjectDiscoveryService : IProjectDiscoveryService
+    internal sealed class ProjectDiscoveryService : IProjectDiscoveryService
     {
         private readonly IFileSystem _fileSystem;
 

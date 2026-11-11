@@ -32,7 +32,7 @@ namespace DotNetOutdated
         private readonly IProjectDiscoveryService _projectDiscoveryService;
         private readonly IProjectAnalysisService _projectAnalysisService;
         private readonly IDotNetPackageService _dotNetPackageService;
-        private readonly INuGetPackageResolutionService _nugetService;
+        private readonly IOutdatedDependencyService _outdatedDependencyService;
         private readonly Stream _inputStream;
         private readonly Stream _outputStream;
 
@@ -41,7 +41,7 @@ namespace DotNetOutdated
             IProjectDiscoveryService projectDiscoveryService,
             IProjectAnalysisService projectAnalysisService,
             IDotNetPackageService dotNetPackageService,
-            INuGetPackageResolutionService nugetService,
+            IOutdatedDependencyService outdatedDependencyService,
             Stream inputStream,
             Stream outputStream)
         {
@@ -49,7 +49,7 @@ namespace DotNetOutdated
             _projectDiscoveryService = projectDiscoveryService;
             _projectAnalysisService = projectAnalysisService;
             _dotNetPackageService = dotNetPackageService;
-            _nugetService = nugetService;
+            _outdatedDependencyService = outdatedDependencyService;
             _inputStream = inputStream;
             _outputStream = outputStream;
         }
@@ -346,74 +346,41 @@ namespace DotNetOutdated
             int transitiveDepth = 1;
             string? runtime = null;
 
-            var projects = await _projectAnalysisService.AnalyzeProjectAsync(projectPath, false, includeTransitive, transitiveDepth, runtime);
-            
-            var result = new List<object>();
-            foreach (var project in projects)
+            var projects = await _projectAnalysisService.AnalyzeProjectAsync(projectPath, new ProjectAnalysisOptions
             {
-                var frameworks = new List<object>();
-                foreach (var tf in project.TargetFrameworks)
-                {
-                    var dependencies = new List<object>();
-                    foreach (var dep in tf.Dependencies.Values)
-                    {
-                        var referencedVersion = dep.ResolvedVersion;
-                        NuGetVersion? latestVersion = null;
-                        
-                        if (referencedVersion != null)
-                        {
-                            try 
-                            {
-                                latestVersion = await _nugetService.ResolvePackageVersions(
-                                    dep.Name,
-                                    referencedVersion,
-                                    project.Sources,
-                                    dep.VersionRange,
-                                    VersionLock.None,
-                                    PrereleaseReporting.Auto,
-                                    null,
-                                    tf.Name,
-                                    project.FilePath,
-                                    dep.IsDevelopmentDependency);
-                            }
-                            catch (Exception ex)
-                            {
-                                Console.Error.WriteLine($"Error resolving version for {dep.Name}: {ex.Message}");
-                            }
-                        }
+                IncludeTransitiveDependencies = includeTransitive,
+                TransitiveDepth = transitiveDepth,
+                Runtime = runtime,
+            });
+            
+            // Every dependency is reported, with its latest version, so the client can decide what to upgrade.
+            var outdatedProjects = await _outdatedDependencyService.FindOutdatedAsync(projects, new OutdatedOptions
+            {
+                IncludeAutoReferences = true,
+                IncludeUpToDate = true,
+            });
 
-                        dependencies.Add(new
-                        {
-                            name = dep.Name,
-                            version = dep.ResolvedVersion?.ToString(),
-                            latestVersion = latestVersion?.ToString(),
-                            isAutoReferenced = dep.IsAutoReferenced,
-                            isTransitive = dep.IsTransitive,
-                            kind = dep.Kind == ReferenceKind.Sdk ? "sdk" : "package",
-                            upgradeSeverity = GetUpgradeSeverity(dep.ResolvedVersion, latestVersion)
-                        });
-                    }
-                    frameworks.Add(new { name = tf.Name, dependencies });
-                }
-                result.Add(new { name = project.Name, filePath = project.FilePath, targetFrameworks = frameworks });
-            }
+            var result = outdatedProjects.Select(project => new
+            {
+                name = project.Name,
+                filePath = project.FilePath,
+                targetFrameworks = project.TargetFrameworks.Select(tf => new
+                {
+                    name = tf.Name,
+                    dependencies = tf.Dependencies.Select(outdated => new
+                    {
+                        name = outdated.Dependency.Name,
+                        version = outdated.Dependency.ResolvedVersion?.ToString(),
+                        latestVersion = outdated.LatestVersion?.ToString(),
+                        isAutoReferenced = outdated.Dependency.IsAutoReferenced,
+                        isTransitive = outdated.Dependency.IsTransitive,
+                        kind = outdated.Dependency.Kind == ReferenceKind.Sdk ? "sdk" : "package",
+                        upgradeSeverity = outdated.UpgradeSeverity.ToString(),
+                    }),
+                }),
+            });
 
             return CreateToolResult(JsonSerializer.Serialize(result));
-        }
-
-        private string GetUpgradeSeverity(NuGetVersion? resolved, NuGetVersion? latest)
-        {
-            if (latest == null || resolved == null)
-                return "Unknown";
-
-            if (latest.Major > resolved.Major || resolved.IsPrerelease)
-                return "Major";
-            if (latest.Minor > resolved.Minor)
-                return "Minor";
-            if (latest.Patch > resolved.Patch || latest.Revision > resolved.Revision)
-                return "Patch";
-
-            return "None";
         }
 
         private async Task<Dictionary<string, object>> HandleUpdatePackage(JsonElement arguments)
@@ -448,7 +415,14 @@ namespace DotNetOutdated
                 };
             }
 
-            RunStatus status = _dotNetPackageService.AddPackage(projectPath, packageName, framework, new VersionRange(version), kind: kind);
+            RunStatus status = _dotNetPackageService.Upgrade(new ReferenceUpgrade
+            {
+                ProjectPath = projectPath,
+                Name = packageName,
+                Kind = kind,
+                TargetFramework = framework,
+                Version = new VersionRange(version),
+            });
 
             if (status.IsSuccess)
             {

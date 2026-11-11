@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Abstractions;
@@ -79,16 +80,16 @@ public class TargetFrameworkAliasTests
             var discoveryService = Substitute.For<IProjectDiscoveryService>();
             discoveryService.DiscoverProjects(projectPath, false, false).Returns(new List<string> { projectPath });
             var resolutionService = Substitute.For<INuGetPackageResolutionService>();
-            resolutionService.ResolvePackageVersions(
-                packageName, installedVersion, Arg.Any<IEnumerable<Uri>>(), Arg.Any<VersionRange>(),
-                Arg.Any<VersionLock>(), Arg.Any<PrereleaseReporting>(), Arg.Any<string>(), framework,
-                projectPath, false, 0, false).Returns(latestVersion);
+            resolutionService.ResolveLatestVersionAsync(
+                Arg.Is<LatestVersionQuery>(query =>
+                    query.PackageId == packageName && query.CurrentVersion == installedVersion &&
+                    query.TargetFramework == framework && query.ProjectFilePath == projectPath),
+                Arg.Any<CancellationToken>()).Returns(latestVersion);
             var packageService = Substitute.For<IDotNetPackageService>();
-            packageService.AddPackage(
-                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<VersionRange>(), false, false)
+            packageService.Upgrade(Arg.Any<ReferenceUpgrade>())
                 .Returns(new RunStatus(string.Empty, string.Empty, exitCode: 0));
             var program = new Program(
-                fileSystem, Substitute.For<IReporter>(), resolutionService, analysisService,
+                fileSystem, Substitute.For<IReporter>(), new OutdatedDependencyService(resolutionService), analysisService,
                 discoveryService, packageService, new DotNetRunnerOptions())
             {
                 Path = projectPath,
@@ -99,9 +100,9 @@ public class TargetFrameworkAliasTests
             int exitCode = await program.OnExecute(console);
 
             Assert.Equal(0, exitCode);
-            packageService.Received(1).AddPackage(
-                projectPath, packageName, expectedAlias,
-                Arg.Is<VersionRange>(range => range.MinVersion == latestVersion), false, false);
+            packageService.Received(1).Upgrade(Arg.Is<ReferenceUpgrade>(upgrade =>
+                upgrade.ProjectPath == projectPath && upgrade.Name == packageName && upgrade.TargetFramework == expectedAlias &&
+                upgrade.Version.MinVersion == latestVersion && !upgrade.NoRestore && !upgrade.IgnoreFailedSources));
         }
         finally
         {

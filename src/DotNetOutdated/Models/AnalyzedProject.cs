@@ -21,6 +21,13 @@ namespace DotNetOutdated.Models
         [JsonPropertyOrder(1)]
         public string FilePath { get; set; }
 
+        public static AnalyzedProject From(OutdatedProject project) =>
+            new(project.Name, project.FilePath, project.TargetFrameworks.Select(targetFramework =>
+                new AnalyzedTargetFramework(targetFramework.Name, targetFramework.Dependencies.Select(dependency => new AnalyzedDependency(dependency)))
+                {
+                    TargetAlias = targetFramework.TargetAlias,
+                }));
+
         public AnalyzedProject(string name, string filePath, IEnumerable<AnalyzedTargetFramework> targetFrameworks)
         {
             Name = name;
@@ -93,23 +100,7 @@ namespace DotNetOutdated.Models
 
         [JsonPropertyOrder(3)]
         [JsonConverter(typeof(JsonStringEnumConverter))]
-        public DependencyUpgradeSeverity UpgradeSeverity
-        {
-            get
-            {
-                if (LatestVersion == null || ResolvedVersion == null)
-                    return DependencyUpgradeSeverity.Unknown;
-
-                if (LatestVersion.Major > ResolvedVersion.Major || ResolvedVersion.IsPrerelease)
-                    return DependencyUpgradeSeverity.Major;
-                if (LatestVersion.Minor > ResolvedVersion.Minor)
-                    return DependencyUpgradeSeverity.Minor;
-                if (LatestVersion.Patch > ResolvedVersion.Patch || LatestVersion.Revision > ResolvedVersion.Revision)
-                    return DependencyUpgradeSeverity.Patch;
-
-                return DependencyUpgradeSeverity.None;
-            }
-        }
+        public DependencyUpgradeSeverity UpgradeSeverity => OutdatedDependency.GetUpgradeSeverity(ResolvedVersion, LatestVersion);
 
         public AnalyzedDependency(Dependency dependency)
         {
@@ -119,6 +110,10 @@ namespace DotNetOutdated.Models
         public AnalyzedDependency(Dependency dependency, NuGetVersion latestVersion) : this(dependency)
         {
             LatestVersion = latestVersion;
+        }
+
+        public AnalyzedDependency(OutdatedDependency dependency) : this(dependency.Dependency, dependency.LatestVersion)
+        {
         }
     }
 

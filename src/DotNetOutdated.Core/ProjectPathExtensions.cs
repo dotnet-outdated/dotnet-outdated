@@ -3,7 +3,7 @@ using System.IO;
 
 namespace DotNetOutdated.Core
 {
-    public static class ProjectPathExtensions
+    internal static class ProjectPathExtensions
     {
         public static bool IsCSharpFile(this string path)
         {

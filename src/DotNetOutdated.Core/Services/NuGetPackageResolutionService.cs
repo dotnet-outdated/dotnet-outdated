@@ -2,62 +2,34 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
-using NuGet.Frameworks;
 using NuGet.Versioning;
 
 namespace DotNetOutdated.Core.Services
 {
-    public class NuGetPackageResolutionService(INuGetPackageInfoService nugetService) : INuGetPackageResolutionService
+    internal class NuGetPackageResolutionService(INuGetPackageInfoService nugetService) : INuGetPackageResolutionService
     {
         private readonly INuGetPackageInfoService _nugetService = nugetService;
         private readonly ConcurrentDictionary<string, Lazy<Task<IReadOnlyList<NuGetVersion>>>> _cache = [];
 
-        public async Task<NuGetVersion> ResolvePackageVersions(
-            string packageName,
-            NuGetVersion referencedVersion,
-            IEnumerable<Uri> sources,
-            VersionRange currentVersionRange,
-            VersionLock versionLock,
-            PrereleaseReporting prerelease,
-            string? prereleaseLabel,
-            NuGetFramework targetFrameworkName,
-            string projectFilePath,
-            bool isDevelopmentDependency)
+        public async Task<NuGetVersion> ResolveLatestVersionAsync(LatestVersionQuery query, CancellationToken cancellationToken = default)
         {
-            return await ResolvePackageVersions(
-                packageName,
-                referencedVersion,
-                sources,
-                currentVersionRange,
-                versionLock,
-                prerelease,
-                prereleaseLabel,
-                targetFrameworkName,
-                projectFilePath,
-                isDevelopmentDependency,
-                0).ConfigureAwait(false);
-        }
+            ArgumentNullException.ThrowIfNull(query);
+            var packageName = query.PackageId;
+            var referencedVersion = query.CurrentVersion;
+            var currentVersionRange = query.AllowedRange;
+            var versionLock = query.VersionLock;
+            var prerelease = query.Prerelease;
+            var prereleaseLabel = query.PrereleaseLabel;
+            var targetFrameworkName = query.TargetFramework;
+            var olderThanDays = query.OlderThanDays;
 
-        public async Task<NuGetVersion> ResolvePackageVersions(
-            string packageName,
-            NuGetVersion referencedVersion,
-            IEnumerable<Uri> sources,
-            VersionRange currentVersionRange,
-            VersionLock versionLock,
-            PrereleaseReporting prerelease,
-            string? prereleaseLabel,
-            NuGetFramework targetFrameworkName,
-            string projectFilePath,
-            bool isDevelopmentDependency,
-            int olderThanDays,
-            bool ignoreFailedSources = false)
-        {
             ArgumentNullException.ThrowIfNull(referencedVersion);
             ArgumentNullException.ThrowIfNull(currentVersionRange);
 
             if (currentVersionRange.MinVersion is null)
-                throw new ArgumentException($"No minimum version specified for package {packageName}.", nameof(currentVersionRange));
+                throw new ArgumentException($"No minimum version specified for package {packageName}.", nameof(query));
 
             // Determine whether we are interested in pre-releases
             bool includePrerelease = referencedVersion.IsPrerelease;
@@ -69,8 +41,21 @@ namespace DotNetOutdated.Core.Services
             string cacheKey = (packageName + "-" + includePrerelease + "-" + targetFrameworkName + "-" + olderThanDays).ToUpperInvariant();
 
             // Get all the available versions
-            var allVersionsRequest = new Lazy<Task<IReadOnlyList<NuGetVersion>>>(() => this._nugetService.GetAllVersions(packageName, sources, includePrerelease, targetFrameworkName, projectFilePath, isDevelopmentDependency, olderThanDays, ignoreFailedSources));
-            var allVersions = await _cache.GetOrAdd(cacheKey, allVersionsRequest).Value.ConfigureAwait(false);
+            // The request is shared by every caller with the same key, so it doesn't take one caller's cancellation token.
+            var allVersionsRequest = new Lazy<Task<IReadOnlyList<NuGetVersion>>>(() => _nugetService.GetAllVersionsAsync(
+                new PackageVersionsQuery
+                {
+                    PackageId = packageName,
+                    Sources = query.Sources,
+                    TargetFramework = targetFrameworkName,
+                    ProjectFilePath = query.ProjectFilePath,
+                    IncludePrerelease = includePrerelease,
+                    IsDevelopmentDependency = query.IsDevelopmentDependency,
+                    OlderThanDays = olderThanDays,
+                    IgnoreFailedSources = query.IgnoreFailedSources,
+                },
+                CancellationToken.None));
+            var allVersions = await _cache.GetOrAdd(cacheKey, allVersionsRequest).Value.WaitAsync(cancellationToken).ConfigureAwait(false);
 
             // Determine the floating behaviour
             var floatingBehaviour = includePrerelease ? NuGetVersionFloatBehavior.AbsoluteLatest : NuGetVersionFloatBehavior.Major;

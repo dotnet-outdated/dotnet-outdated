@@ -28,7 +28,7 @@ public class UpgradePackagesTests
             $"info : Adding PackageReference for package '{PackageName}' into project 'MyProject.csproj'.\n" +
             $"error: Error while performing Update for package '{PackageName}'. Cannot edit items in imported files -\n" +
             $"error:   Item 'PackageReference' for '{PackageName}' in Imported file 'Directory.Build.props'.";
-        AddPackageReturns(new RunStatus(failureOutput, string.Empty, exitCode: 1));
+        UpgradeReturns(new RunStatus(failureOutput, string.Empty, exitCode: 1));
 
         // Act
         (bool success, string written) = RunUpgrade();
@@ -42,7 +42,7 @@ public class UpgradePackagesTests
     public void WhenUpgradeFails_OutputIsWrittenBeforeErrors_WithoutBlankLines()
     {
         // Arrange
-        AddPackageReturns(new RunStatus("info : Restoring packages...\n", "error: it went wrong\n", exitCode: 1));
+        UpgradeReturns(new RunStatus("info : Restoring packages...\n", "error: it went wrong\n", exitCode: 1));
 
         // Act
         (_, string written) = RunUpgrade();
@@ -65,7 +65,7 @@ public class UpgradePackagesTests
     public void WhenUpgradeFailsWithNoOutput_OnlyTheHeaderIsWritten()
     {
         // Arrange
-        AddPackageReturns(new RunStatus("  \n", string.Empty, exitCode: 1));
+        UpgradeReturns(new RunStatus("  \n", string.Empty, exitCode: 1));
 
         // Act
         (_, string written) = RunUpgrade();
@@ -85,7 +85,7 @@ public class UpgradePackagesTests
     public void WhenUpgradeSucceeds_TheProcessOutputIsNotWritten()
     {
         // Arrange
-        AddPackageReturns(new RunStatus("info : restore log", string.Empty, exitCode: 0));
+        UpgradeReturns(new RunStatus("info : restore log", string.Empty, exitCode: 0));
 
         // Act
         (bool success, string written) = RunUpgrade();
@@ -99,7 +99,7 @@ public class UpgradePackagesTests
     public void SdkAndPackageWithTheSameId_AreUpgradedSeparatelyByKind()
     {
         // Arrange
-        AddPackageReturns(new RunStatus(string.Empty, string.Empty, exitCode: 0));
+        UpgradeReturns(new RunStatus(string.Empty, string.Empty, exitCode: 0));
         var package = new Dependency("Cake.Sdk", VersionRange.Parse("1.0.0"), new NuGetVersion("1.0.0"), isAutoReferenced: false, isTransitive: false, isDevelopmentDependency: false);
         var sdk = new Dependency("Cake.Sdk", VersionRange.Parse("1.0.0"), new NuGetVersion("1.0.0"), isAutoReferenced: false, isTransitive: false, isDevelopmentDependency: false, ReferenceKind.Sdk);
 
@@ -113,8 +113,7 @@ public class UpgradePackagesTests
         Assert.Contains("Upgrading SDK Cake.Sdk...", lines);
         foreach (var kind in new[] { ReferenceKind.Package, ReferenceKind.Sdk })
         {
-            _packageService.Received(1).AddPackage(
-                Arg.Any<string>(), "Cake.Sdk", Arg.Any<string>(), Arg.Any<VersionRange>(), Arg.Any<bool>(), Arg.Any<bool>(), kind);
+            _packageService.Received(1).Upgrade(Arg.Is<ReferenceUpgrade>(upgrade => upgrade.Name == "Cake.Sdk" && upgrade.Kind == kind));
         }
     }
 
@@ -122,7 +121,7 @@ public class UpgradePackagesTests
     public void Prompt_NamesWhetherTheUpgradeIsAnSdkOrAPackage()
     {
         // Arrange
-        AddPackageReturns(new RunStatus(string.Empty, string.Empty, exitCode: 0));
+        UpgradeReturns(new RunStatus(string.Empty, string.Empty, exitCode: 0));
         var package = new Dependency("Cake.Sdk", VersionRange.Parse("1.0.0"), new NuGetVersion("1.0.0"), isAutoReferenced: false, isTransitive: false, isDevelopmentDependency: false);
         var sdk = new Dependency("Cake.Sdk", VersionRange.Parse("1.0.0"), new NuGetVersion("1.0.0"), isAutoReferenced: false, isTransitive: false, isDevelopmentDependency: false, ReferenceKind.Sdk);
 
@@ -135,13 +134,11 @@ public class UpgradePackagesTests
         Assert.Contains(lines, line => line.StartsWith("The SDK Cake.Sdk can be upgraded from 1.0.0 to 2.0.0."));
         Assert.Contains(lines, line => line.Contains("Do you wish to upgrade this package?"));
         Assert.Contains(lines, line => line.Contains("Do you wish to upgrade this SDK?"));
-        _packageService.DidNotReceiveWithAnyArgs().AddPackage(default, default, default, default(VersionRange));
+        _packageService.DidNotReceiveWithAnyArgs().Upgrade(default!);
     }
 
-    private void AddPackageReturns(RunStatus status) =>
-        _packageService
-            .AddPackage(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<VersionRange>(), Arg.Any<bool>(), Arg.Any<bool>(), Arg.Any<ReferenceKind>())
-            .Returns(status);
+    private void UpgradeReturns(RunStatus status) =>
+        _packageService.Upgrade(Arg.Any<ReferenceUpgrade>()).Returns(status);
 
     private (bool Success, string Written) RunUpgrade() =>
         RunUpgrade(new Dependency(PackageName, VersionRange.Parse("1.0.0"), new NuGetVersion("1.0.0"), isAutoReferenced: false, isTransitive: false, isDevelopmentDependency: false));
@@ -154,7 +151,7 @@ public class UpgradePackagesTests
         var program = new Program(
             Substitute.For<System.IO.Abstractions.IFileSystem>(),
             Substitute.For<IReporter>(),
-            Substitute.For<INuGetPackageResolutionService>(),
+            Substitute.For<IOutdatedDependencyService>(),
             Substitute.For<IProjectAnalysisService>(),
             Substitute.For<IProjectDiscoveryService>(),
             _packageService,

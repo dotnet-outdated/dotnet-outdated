@@ -12,7 +12,7 @@ namespace DotNetOutdated.Core.Services
     /// <remarks>
     /// Credit for the stuff happening in here goes to the https://github.com/jaredcnance/dotnet-status project
     /// </remarks>
-    public class DotNetRunner(DotNetRunnerOptions options) : IDotNetRunner
+    internal class DotNetRunner(DotNetRunnerOptions options) : IDotNetRunner
     {
         public DotNetRunner() : this(new DotNetRunnerOptions()) { }
 
