@@ -581,9 +581,12 @@ public static class EndToEndTests
     public static void Recursive_Reports_Each_Project_Once_When_Reached_Through_A_Symbolic_Link()
     {
         // The project is analyzed through the link, but MSBuild reports a referenced project by its real path (issue #830).
+        // The link's target is itself under a link, as on macOS where /var/folders/... is under /private/var.
         using var directory = TestSetup("recursive-solution");
+        var parentLinkPath = directory.Path + "-parent";
+        Directory.CreateSymbolicLink(parentLinkPath, Path.GetDirectoryName(directory.Path)!);
         var linkPath = directory.Path + "-link";
-        Directory.CreateSymbolicLink(linkPath, directory.Path);
+        Directory.CreateSymbolicLink(linkPath, Path.Combine(parentLinkPath, Path.GetFileName(directory.Path)));
 
         try
         {
@@ -603,6 +606,7 @@ public static class EndToEndTests
         finally
         {
             Directory.Delete(linkPath);
+            Directory.Delete(parentLinkPath);
         }
     }
 

@@ -300,8 +300,13 @@ namespace DotNetOutdated
       /// The full path of <paramref name="path"/> with every symbolic link along it resolved, so two paths to the same
       /// file compare equal. A part that can't be resolved is kept as it is.
       /// </summary>
-      private string CanonicalPath(string path)
+      private string CanonicalPath(string path) => CanonicalPath(path, linksFollowed: 0);
+
+      private string CanonicalPath(string path, int linksFollowed)
       {
+         // As many links as the OS follows before it gives up (MAXSYMLINKS on Linux), so a loop of links ends.
+         const int MaxLinksFollowed = 40;
+
          var fullPath = _fileSystem.Path.GetFullPath(path);
          var root = _fileSystem.Path.GetPathRoot(fullPath) ?? string.Empty;
          var current = root;
@@ -314,9 +319,11 @@ namespace DotNetOutdated
 
             try
             {
-               if (_fileSystem.FileInfo.New(current).ResolveLinkTarget(returnFinalTarget: true) is { } target)
+               if (linksFollowed < MaxLinksFollowed &&
+                   _fileSystem.FileInfo.New(current).ResolveLinkTarget(returnFinalTarget: true) is { } target)
                {
-                  current = target.FullName;
+                  // The target can itself be under a link (on macOS a link to /var/folders/... is under /private/var).
+                  current = CanonicalPath(target.FullName, linksFollowed + 1);
                }
             }
             catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException)
