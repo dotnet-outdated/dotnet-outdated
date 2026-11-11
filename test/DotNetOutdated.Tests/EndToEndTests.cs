@@ -573,9 +573,37 @@ public static class EndToEndTests
             .Order(StringComparer.Ordinal)
             .ToList();
 
-        Assert.Equal(
-            [Path.Combine(directory.Path, "A", "A.csproj"), Path.Combine(directory.Path, "B", "B.csproj")],
-            reportedPaths);
+        // Compare file names: which of the equivalent paths is reported (e.g. /var or /private/var on macOS) is not fixed.
+        Assert.Equal(["A.csproj", "B.csproj"], reportedPaths.Select(Path.GetFileName));
+    }
+
+    [Fact]
+    public static void Recursive_Reports_Each_Project_Once_When_Reached_Through_A_Symbolic_Link()
+    {
+        // The project is analyzed through the link, but MSBuild reports a referenced project by its real path (issue #830).
+        using var directory = TestSetup("recursive-solution");
+        var linkPath = directory.Path + "-link";
+        Directory.CreateSymbolicLink(linkPath, directory.Path);
+
+        try
+        {
+            var outputPath = Path.Combine(directory.Path, "output.json");
+
+            var actual = Program.Main([linkPath, "--recursive", "--output", outputPath, "--output-format:json"]);
+            Assert.Equal(0, actual);
+
+            using var output = JsonDocument.Parse(File.ReadAllText(outputPath));
+            var reportedNames = output.RootElement.GetProperty("Projects").EnumerateArray()
+                .Select(project => Path.GetFileName(project.GetProperty("FilePath").GetString()))
+                .Order(StringComparer.Ordinal)
+                .ToList();
+
+            Assert.Equal(["A.csproj", "B.csproj"], reportedNames);
+        }
+        finally
+        {
+            Directory.Delete(linkPath);
+        }
     }
 
     [Fact]

@@ -151,10 +151,11 @@ namespace DotNetOutdated
 
             // The restore graph of a project holds the projects it references too, so with --recursive a referenced
             // project is analyzed both on its own and as part of each project that references it (issue #830).
-            // Report and upgrade each project file once.
+            // Report and upgrade each project file once. The paths are compared with symbolic links resolved, because MSBuild
+            // reports a referenced project by its real path (on macOS the temp folder /var is a link to /private/var).
             var projects = projectLists
                .SelectMany(p => p)
-               .DistinctBy(p => _fileSystem.Path.GetFullPath(p.FilePath), OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+               .DistinctBy(p => CanonicalPath(p.FilePath), OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
                .ToList();
 
             // Analyze the dependencies
@@ -293,6 +294,38 @@ namespace DotNetOutdated
          }
 
          return success;
+      }
+
+      /// <summary>
+      /// The full path of <paramref name="path"/> with every symbolic link along it resolved, so two paths to the same
+      /// file compare equal. A part that can't be resolved is kept as it is.
+      /// </summary>
+      private string CanonicalPath(string path)
+      {
+         var fullPath = _fileSystem.Path.GetFullPath(path);
+         var root = _fileSystem.Path.GetPathRoot(fullPath) ?? string.Empty;
+         var current = root;
+
+         foreach (var segment in fullPath[root.Length..].Split(
+            [_fileSystem.Path.DirectorySeparatorChar, _fileSystem.Path.AltDirectorySeparatorChar],
+            StringSplitOptions.RemoveEmptyEntries))
+         {
+            current = _fileSystem.Path.Combine(current, segment);
+
+            try
+            {
+               if (_fileSystem.FileInfo.New(current).ResolveLinkTarget(returnFinalTarget: true) is { } target)
+               {
+                  current = target.FullName;
+               }
+            }
+            catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException)
+            {
+               // Not resolvable (e.g. a broken link or no permission): compare this part as written.
+            }
+         }
+
+         return current;
       }
 
       private static void PrintColorLegend(IConsole console)
