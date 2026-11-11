@@ -274,6 +274,7 @@ public class CommandLineTests
     [InlineData("zsh", ":_files' \\\n", 3)] // the path argument, --output and -o
     [InlineData("fish", "\ncomplete -c {0} -f -a '(_{1}_or_files)'", 1)]
     [InlineData("fish", "__fish_complete_path $token", 1)]
+    [InlineData("fish", "if contains -- (string lower -- $token) ", 1)] // "-of j" completes to Json, not to a file name
     [InlineData("nushell", " | lines | compact --empty | if ($in | is-empty) {{ null }} else {{ $in }}\n", 1)]
     public void CompletionsScript_FallsBackToFileNames(string shell, string expectedFormat, int expectedCount)
     {
@@ -285,6 +286,42 @@ public class CommandLineTests
 
         var expected = string.Format(expectedFormat, name, name.Replace('-', '_'));
         Assert.Equal(expectedCount, output.ToString().Split(expected).Length - 1);
+    }
+
+    /// <summary>
+    /// The value of -u / --upgrade can only be attached (-u:Prompt), and the word after it is the path, so the scripts
+    /// complete it as a flag rather than offering Auto and Prompt as the next word.
+    /// </summary>
+    [Theory]
+    [InlineData("bash", "--upgrade|-u)", "--upgrade ")]
+    [InlineData("zsh", "'-u=[", "'-u[")]
+    [InlineData("fish", "'Prompt'", "'-u'")]
+    [InlineData("pwsh", "'Prompt'", "'-u'")]
+    public void CompletionsScript_CompletesUpgradeAsAFlag(string shell, string unexpected, string expected)
+    {
+        var commandLine = CreateCommandLine();
+        var output = new System.IO.StringWriter();
+
+        commandLine.Parse(["completions", "script", shell]).Invoke(new System.CommandLine.InvocationConfiguration { Output = output });
+
+        Assert.DoesNotContain(unexpected, output.ToString());
+        Assert.Contains(expected, output.ToString());
+
+        // Only the script is generated that way: the option still takes its attached value.
+        Assert.Equal(UpgradeType.Prompt, commandLine.Parse(["-u:prompt"]).GetValue(commandLine.Upgrade));
+    }
+
+    /// <summary>
+    /// The package's bash script would offer "(bash" and "zsh)".
+    /// </summary>
+    [Fact]
+    public void CompletionsScript_ForBash_CompletesShellNamesWithoutBrackets()
+    {
+        var output = new System.IO.StringWriter();
+
+        CreateCommandLine().Parse(["completions", "script", "bash"]).Invoke(new System.CommandLine.InvocationConfiguration { Output = output });
+
+        Assert.Contains("opts=\"$opts bash fish nushell pwsh zsh\"", output.ToString());
     }
 
     [Fact]
@@ -333,6 +370,7 @@ public class CommandLineTests
     [Theory]
     [InlineData("dotnet-outdated --tr", "--transitive|--transitive-depth")]
     [InlineData("dotnet-outdated -vl Ma", "Major")]
+    [InlineData("dotnet-outdated -u ", "")] // the word after -u is the path, not Auto or Prompt
     public void SuggestDirective_CompletesOptionsAndValues(string commandLineText, string expected)
     {
         var output = new System.IO.StringWriter();

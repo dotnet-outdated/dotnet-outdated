@@ -212,7 +212,7 @@ dotnet-outdated completions script <bash|zsh|fish|pwsh|nushell>
 
 Without a shell name, it uses the shell named in the `SHELL` environment variable (PowerShell on Windows).
 
-Shell completions require the .NET 10 runtime or later. On older runtimes the tool runs without the `completions` command. Completion is registered for the `dotnet-outdated` command, which `dotnet tool install --global` puts on your `PATH`. It does not work with `dotnet outdated`, which the `dotnet` command's own completion handles. The scripts list the tool's options, so generate them again after you update the tool.
+Shell completions require the .NET 10 runtime or later. On older runtimes the tool runs without the `completions` command. Completion is registered for the `dotnet-outdated` command, which `dotnet tool install --global` puts on your `PATH`. It does not work with `dotnet outdated`, which the `dotnet` command's own completion handles. A script saved to a file lists the tool's options, so generate it again after you update the tool.
 
 ### Bash
 
@@ -253,12 +253,13 @@ dotnet-outdated completions script fish > ~/.config/fish/completions/dotnet-outd
 
 ### PowerShell
 
-Append the script to your PowerShell profile:
+Add this line to your PowerShell profile, which is the file `$PROFILE` names:
 
 ```powershell
-if (-not (Test-Path $PROFILE)) { New-Item -ItemType File -Force -Path $PROFILE | Out-Null }
-dotnet-outdated completions script pwsh >> $PROFILE
+dotnet-outdated completions script pwsh | Out-String | Invoke-Expression
 ```
+
+It generates the script each time PowerShell starts, so it stays current after you update the tool. Don't append the script itself to your profile: it starts with `using` statements, which PowerShell only allows at the top of a file.
 
 ### Nushell
 

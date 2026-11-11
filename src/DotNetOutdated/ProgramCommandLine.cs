@@ -193,6 +193,10 @@ namespace DotNetOutdated
 
          Path.Validators.Add(RejectOptionLikePath);
 
+         // The [suggest] directive would offer Auto and Prompt as the word after -u, which is the path: the value of
+         // -u can only be attached. See NormalizeLegacySyntax.
+         Upgrade.CompletionSources.Clear();
+
          RootCommand = new RootCommand("A .NET Core global tool to list outdated Nuget packages.")
          {
             Path,
@@ -366,9 +370,33 @@ namespace DotNetOutdated
             return 1;
          }
 
-         var script = provider.GenerateCompletions(RootCommand).ReplaceLineEndings("\n");
-         parseResult.InvocationConfiguration.Output.Write(CompleteFileNames(shell, script));
+         var script = CompleteFileNames(shell, GenerateScript(provider).ReplaceLineEndings("\n"));
+
+         // Again, as the fish function below is a raw string, which has the line endings of this source file.
+         parseResult.InvocationConfiguration.Output.Write(script.ReplaceLineEndings("\n"));
          return 0;
+      }
+
+      /// <summary>
+      /// Generates the package's completion script, with <c>-u</c> / <c>--upgrade</c> as a flag.
+      /// </summary>
+      /// <remarks>
+      /// The option is declared with a required value, so the scripts would offer <c>Auto</c> and <c>Prompt</c> as the
+      /// next word, but its value can only be attached (<c>-u:Prompt</c>): the next word is the path. See
+      /// <see cref="NormalizeLegacySyntax"/>.
+      /// </remarks>
+      private string GenerateScript(System.CommandLine.StaticCompletions.Shells.IShellProvider provider)
+      {
+         var arity = Upgrade.Arity;
+         Upgrade.Arity = ArgumentArity.Zero;
+         try
+         {
+            return provider.GenerateCompletions(RootCommand);
+         }
+         finally
+         {
+            Upgrade.Arity = arity;
+         }
       }
 
       /// <summary>
@@ -385,12 +413,16 @@ namespace DotNetOutdated
          switch (shell)
          {
             case ShellNames.Bash:
+               // The package wraps an argument's values in brackets, which bash reads as part of the first and last
+               // value: "(bash" and "zsh)" for the shell names.
+               script = Regex.Replace(script, @"(?<=^\s*opts=""\$opts )\((?<values>[^()""]*)\)(?="")", "${values}", RegexOptions.Multiline);
+
                // -o default: readline's file name completion when the function returns no matches.
                return script.Replace("\ncomplete -F ", "\ncomplete -o bashdefault -o default -F ");
 
             case ShellNames.Fish:
                // The function's candidates when one starts with the token, else file names; a plain `complete` without
-               // -f would list file names beside option values too.
+               // -f would list file names beside option values too. Case is ignored, as fish completes "-of j" to "Json".
                return Regex.Replace(script, @"^complete -c (?<command>\S+) -f -a '\((?<function>\w+)\)'$", match =>
                {
                   var function = match.Groups["function"].Value;
@@ -398,7 +430,8 @@ namespace DotNetOutdated
                      function {{function}}_or_files
                          set -l token (commandline -ct)
                          set -l candidates ({{function}})
-                         if contains -- $token (string sub -l (string length -- $token) -- (string replace -r '\t.*' '' -- $candidates))
+                         set -l names (string lower -- (string replace -r '\t.*' '' -- $candidates))
+                         if contains -- (string lower -- $token) (string sub -l (string length -- $token) -- $names)
                              printf '%s\n' $candidates
                          else
                              __fish_complete_path $token
