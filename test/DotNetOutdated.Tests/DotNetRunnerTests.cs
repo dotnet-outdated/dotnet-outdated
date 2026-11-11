@@ -33,11 +33,12 @@ public class DotNetRunnerTests
     [Fact]
     public void AProcessThatKeepsWriting_IsNotStoppedAfterTheIdleTimeout()
     {
-        // Runs for about twice the idle timeout, but never stays silent for as long as the timeout.
+        // Runs for well over the idle timeout, but never stays silent for as long as the timeout. The timeout leaves
+        // room for a slow shell start (PowerShell on a loaded CI agent) before the first line.
         (string fileName, string[] arguments) = OperatingSystem.IsWindows()
-            ? ("powershell", new[] { "-NoProfile", "-NonInteractive", "-Command", "1..8 | ForEach-Object { Write-Output $_; Start-Sleep -Milliseconds 250 }" })
-            : ("sh", new[] { "-c", "for i in 1 2 3 4 5 6 7 8; do echo $i; sleep 0.25; done" });
-        var runner = new DotNetRunner(new DotNetRunnerOptions { IdleTimeout = TimeSpan.FromSeconds(1), FileName = fileName });
+            ? ("powershell", new[] { "-NoProfile", "-NonInteractive", "-Command", "1..8 | ForEach-Object { Write-Output $_; Start-Sleep -Milliseconds 750 }" })
+            : ("sh", new[] { "-c", "for i in 1 2 3 4 5 6 7 8; do echo $i; sleep 0.75; done" });
+        var runner = new DotNetRunner(new DotNetRunnerOptions { IdleTimeout = TimeSpan.FromSeconds(3), FileName = fileName });
 
         RunStatus status = runner.Run(Path.GetTempPath(), arguments);
 
