@@ -139,9 +139,10 @@ namespace DotNetOutdated.Tests
         }
 
         [Theory]
-        [InlineData(null, "1.0.0")]
-        [InlineData("1.0.0", "(, 2.0.0)")]
-        public async Task UnresolvedOrUnboundedDependencies_AreReportedWithAnUnknownLatestVersion(string? resolvedVersion, string range)
+        [InlineData(null, "1.0.0", LatestVersionUnknownReason.Unresolved)]
+        [InlineData(null, "(, 2.0.0)", LatestVersionUnknownReason.Unresolved)]
+        [InlineData("1.0.0", "(, 2.0.0)", LatestVersionUnknownReason.NoLowerBound)]
+        public async Task UnresolvedOrUnboundedDependencies_AreReportedWithAnUnknownLatestVersion(string? resolvedVersion, string range, LatestVersionUnknownReason reason)
         {
             var dependency = new Dependency { Name = "Package", VersionRange = VersionRange.Parse(range), ResolvedVersion = resolvedVersion == null ? null : NuGetVersion.Parse(resolvedVersion) };
 
@@ -150,7 +151,44 @@ namespace DotNetOutdated.Tests
             var outdated = Assert.Single(Assert.Single(Assert.Single(result).TargetFrameworks).Dependencies);
             Assert.Null(outdated.LatestVersion);
             Assert.Equal(DependencyUpgradeSeverity.Unknown, outdated.UpgradeSeverity);
+            Assert.Equal(reason, outdated.LatestVersionUnknownReason);
             await _resolution.DidNotReceiveWithAnyArgs().ResolveLatestVersionAsync(default!, default);
+        }
+
+        [Fact]
+        public async Task AnUnboundedRangeCappedAtTheMaximumVersion_IsStillNotLookedUp()
+        {
+            var dependency = new Dependency { Name = "Package", VersionRange = VersionRange.Parse("(, 2.0.0)"), ResolvedVersion = NuGetVersion.Parse("1.0.0") };
+
+            var result = await Service().FindOutdatedAsync([Project("App", dependency)], new OutdatedOptions { MaximumVersion = NuGetVersion.Parse("1.5.0") });
+
+            var outdated = Assert.Single(Assert.Single(Assert.Single(result).TargetFrameworks).Dependencies);
+            Assert.Equal(LatestVersionUnknownReason.NoLowerBound, outdated.LatestVersionUnknownReason);
+            await _resolution.DidNotReceiveWithAnyArgs().ResolveLatestVersionAsync(default!, default);
+        }
+
+        [Fact]
+        public async Task ALookupThatFindsNoVersion_IsReportedAsAFailedLookup()
+        {
+            _resolution.ResolveLatestVersionAsync(Arg.Any<LatestVersionQuery>(), Arg.Any<CancellationToken>()).Returns(Task.FromResult<NuGetVersion>(null!));
+
+            var result = await Service().FindOutdatedAsync([Project("App", Dependency("Package", "1.0.0"))]);
+
+            var outdated = Assert.Single(Assert.Single(Assert.Single(result).TargetFrameworks).Dependencies);
+            Assert.Null(outdated.LatestVersion);
+            Assert.Equal(LatestVersionUnknownReason.LookupFailed, outdated.LatestVersionUnknownReason);
+        }
+
+        [Fact]
+        public void AKnownLatestVersion_HasNoUnknownReason()
+        {
+            var outdated = new OutdatedDependency
+            {
+                Dependency = new Dependency { Name = "Package", VersionRange = VersionRange.Parse("(, 2.0.0)"), ResolvedVersion = NuGetVersion.Parse("1.0.0") },
+                LatestVersion = NuGetVersion.Parse("1.5.0"),
+            };
+
+            Assert.Equal(LatestVersionUnknownReason.None, outdated.LatestVersionUnknownReason);
         }
 
         [Fact]

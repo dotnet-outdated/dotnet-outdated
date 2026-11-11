@@ -596,6 +596,22 @@ public static class EndToEndTests
         Assert.Equal("[6.0.1, 7.0.0)", packageVersions["DotNetOutdated.Fake.TextJson"]);
     }
 
+    [Fact]
+    public static void Reports_Version_Range_Without_Lower_Bound_Instead_Of_Connectivity_Error()
+    {
+        using var directory = TestSetup("version-range-no-lower-bound");
+
+        var (exitCode, output) = RunAndCaptureOutput(directory.Path);
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains(
+            "The latest version of DotNetOutdated.Fake.Json can't be determined because its version range (, 12.0.1] has no lower bound.",
+            output,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("NuGet servers", output, StringComparison.Ordinal);
+        Assert.DoesNotContain("DOTNET_HOST_PATH", output, StringComparison.Ordinal);
+    }
+
     private static (int ExitCode, string Output) RunAndCaptureOutput(string path)
     {
         var originalOut = Console.Out;

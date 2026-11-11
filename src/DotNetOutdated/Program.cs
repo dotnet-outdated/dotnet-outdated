@@ -366,7 +366,25 @@ namespace DotNetOutdated
             console.WriteLine();
          }
 
-         if (projects.SelectMany(p => p.TargetFrameworks).SelectMany(f => f.Dependencies).Any(d => d.UpgradeSeverity == DependencyUpgradeSeverity.Unknown))
+         var allDependencies = projects.SelectMany(p => p.TargetFrameworks).SelectMany(f => f.Dependencies).ToList();
+
+         // A range without a lower bound is never looked up, so it says nothing about the NuGet sources.
+         var unboundedDependencies = allDependencies
+            .Where(d => d.LatestVersionUnknownReason == LatestVersionUnknownReason.NoLowerBound)
+            .DistinctBy(d => (d.Name, d.OriginalVersionRange))
+            .OrderBy(d => d.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+         foreach (var dependency in unboundedDependencies)
+         {
+            console.WriteLine($"The latest version of {dependency.Name} can't be determined because its version range {dependency.OriginalVersionRange} has no lower bound.", ConsoleColor.Yellow);
+         }
+
+         if (unboundedDependencies.Count != 0)
+         {
+            console.WriteLine();
+         }
+
+         if (allDependencies.Any(d => d.LatestVersionUnknownReason is LatestVersionUnknownReason.LookupFailed or LatestVersionUnknownReason.Unresolved))
          {
             console.WriteLine("Errors occurred while analyzing dependencies for some of your projects. Are you sure you can connect to all your configured NuGet servers?", ConsoleColor.Red);
             if (String.IsNullOrEmpty(Environment.GetEnvironmentVariable("DOTNET_HOST_PATH")))
