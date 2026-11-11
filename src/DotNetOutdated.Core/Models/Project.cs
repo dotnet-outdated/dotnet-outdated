@@ -15,11 +15,18 @@ namespace DotNetOutdated.Core.Models
         public required string FilePath { get; init; }
 
         /// <summary>The package sources the project restores from.</summary>
-        public IReadOnlyList<Uri> Sources { get; init; } = [];
+        public IReadOnlyList<Uri> Sources { get => _sources; init => _sources = ReadOnlySnapshot.Of(value); }
 
         public required NuGetVersion Version { get; init; }
 
-        public IReadOnlyList<TargetFramework> TargetFrameworks { get; init; } = [];
+        public IReadOnlyList<TargetFramework> TargetFrameworks
+        {
+            get => _targetFrameworks;
+            init => _targetFrameworks = ReadOnlySnapshot.Of(value);
+        }
+
+        private readonly IReadOnlyList<Uri> _sources = [];
+        private readonly IReadOnlyList<TargetFramework> _targetFrameworks = [];
     }
 
     /// <summary>A target framework of a project and the dependencies it resolves.</summary>
@@ -34,7 +41,9 @@ namespace DotNetOutdated.Core.Models
         /// The references and transitive packages of the framework. A package and an SDK can have the same
         /// <see cref="Dependency.Name"/>; <see cref="Dependency.Kind"/> tells them apart.
         /// </summary>
-        public IReadOnlyList<Dependency> Dependencies { get; init; } = [];
+        public IReadOnlyList<Dependency> Dependencies { get => _dependencies; init => _dependencies = ReadOnlySnapshot.Of(value); }
+
+        private readonly IReadOnlyList<Dependency> _dependencies = [];
     }
 
     /// <summary>A package or SDK that a project resolves for one target framework.</summary>
