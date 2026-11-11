@@ -16,7 +16,7 @@ namespace DotNetOutdated.Tests;
 
 /// <summary>
 /// The console report explains a dependency whose latest version is unknown by its cause, and only suggests a
-/// connectivity problem when a lookup actually failed.
+/// connectivity problem when a package is unresolved or has no latest version for another reason.
 /// </summary>
 public class UnknownLatestVersionReportTests
 {
@@ -32,20 +32,22 @@ public class UnknownLatestVersionReportTests
         Assert.DoesNotContain("DOTNET_HOST_PATH", output, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public async Task AFailedLookup_ShowsTheConnectivityHint()
+    [Theory]
+    [InlineData(null)]
+    [InlineData("1.0.4")]
+    public async Task AnUnresolvedOrNotProvidedLatestVersion_ShowsTheConnectivityHint(string? resolvedVersion)
     {
-        var output = await Report(new OutdatedDependency { Dependency = Dependency("Contoso.Http", "1.0.4", "1.0.4") });
+        var output = await Report(new OutdatedDependency { Dependency = Dependency("Contoso.Http", "1.0.4", resolvedVersion) });
 
         Assert.Contains(ConnectivityHint, output, StringComparison.Ordinal);
         Assert.DoesNotContain("has no lower bound", output, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task AFailedLookupAlongsideAnUnboundedRange_ShowsBothMessages()
+    public async Task AnUnresolvedPackageAlongsideAnUnboundedRange_ShowsBothMessages()
     {
         var output = await Report(
-            new OutdatedDependency { Dependency = Dependency("Contoso.Http", "1.0.4", "1.0.4") },
+            new OutdatedDependency { Dependency = Dependency("Contoso.Http", "1.0.4", null) },
             new OutdatedDependency { Dependency = Dependency("Contoso.Json", "(, 12.0.1]", "11.0.1") });
 
         Assert.Contains(ConnectivityHint, output, StringComparison.Ordinal);
@@ -61,11 +63,11 @@ public class UnknownLatestVersionReportTests
         Assert.DoesNotContain("has no lower bound", output, StringComparison.Ordinal);
     }
 
-    private static Dependency Dependency(string name, string range, string resolvedVersion) => new()
+    private static Dependency Dependency(string name, string range, string? resolvedVersion) => new()
     {
         Name = name,
         VersionRange = VersionRange.Parse(range),
-        ResolvedVersion = NuGetVersion.Parse(resolvedVersion),
+        ResolvedVersion = resolvedVersion == null ? null : NuGetVersion.Parse(resolvedVersion),
     };
 
     private static async Task<string> Report(params OutdatedDependency[] dependencies)

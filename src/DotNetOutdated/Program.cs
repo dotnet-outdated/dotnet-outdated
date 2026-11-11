@@ -384,7 +384,9 @@ namespace DotNetOutdated
             console.WriteLine();
          }
 
-         if (allDependencies.Any(d => d.LatestVersionUnknownReason is LatestVersionUnknownReason.LookupFailed or LatestVersionUnknownReason.Unresolved))
+         // Restore failing to resolve a package is the usual way a source problem shows up here: a lookup that can't
+         // reach a source reports the resolved version instead.
+         if (allDependencies.Any(d => d.LatestVersionUnknownReason is LatestVersionUnknownReason.Unresolved or LatestVersionUnknownReason.NotProvided))
          {
             console.WriteLine("Errors occurred while analyzing dependencies for some of your projects. Are you sure you can connect to all your configured NuGet servers?", ConsoleColor.Red);
             if (String.IsNullOrEmpty(Environment.GetEnvironmentVariable("DOTNET_HOST_PATH")))

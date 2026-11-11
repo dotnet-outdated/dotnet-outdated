@@ -26,8 +26,12 @@ namespace DotNetOutdated.Core.Models
         /// <summary>The version range has no lower bound (such as <c>(, 2.0.0]</c>), so it isn't looked up.</summary>
         NoLowerBound,
 
-        /// <summary>The package's sources were asked, but no version was found.</summary>
-        LookupFailed
+        /// <summary>
+        /// The dependency can be looked up, but no latest version was given. The built-in lookup always gives one (the
+        /// resolved version when nothing newer is found, including when a source can't be reached), so only a model or
+        /// <see cref="Services.INuGetPackageResolutionService"/> built elsewhere produces this.
+        /// </summary>
+        NotProvided
     }
 
     /// <summary>A project with the dependencies of each target framework that have a newer version.</summary>
@@ -71,9 +75,8 @@ namespace DotNetOutdated.Core.Models
         public required Dependency Dependency { get; init; }
 
         /// <summary>
-        /// The newest allowed version; <see langword="null"/> when it couldn't be determined, for example because the
-        /// package isn't resolved or no version is older than the requested number of days.
-        /// <see cref="LatestVersionUnknownReason"/> says why.
+        /// The newest allowed version, or the resolved version when nothing newer is allowed; <see langword="null"/>
+        /// when it couldn't be determined, and <see cref="LatestVersionUnknownReason"/> says why.
         /// </summary>
         public NuGetVersion? LatestVersion { get; init; }
 
@@ -95,7 +98,7 @@ namespace DotNetOutdated.Core.Models
             if (!CanLookUpLatestVersion(dependency))
                 return LatestVersionUnknownReason.NoLowerBound;
 
-            return LatestVersionUnknownReason.LookupFailed;
+            return LatestVersionUnknownReason.NotProvided;
         }
 
         /// <summary>

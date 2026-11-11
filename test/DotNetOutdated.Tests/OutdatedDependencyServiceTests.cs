@@ -168,7 +168,7 @@ namespace DotNetOutdated.Tests
         }
 
         [Fact]
-        public async Task ALookupThatFindsNoVersion_IsReportedAsAFailedLookup()
+        public async Task ALookupThatGivesNoVersion_IsReportedAsNotProvided()
         {
             _resolution.ResolveLatestVersionAsync(Arg.Any<LatestVersionQuery>(), Arg.Any<CancellationToken>()).Returns(Task.FromResult<NuGetVersion>(null!));
 
@@ -176,7 +176,7 @@ namespace DotNetOutdated.Tests
 
             var outdated = Assert.Single(Assert.Single(Assert.Single(result).TargetFrameworks).Dependencies);
             Assert.Null(outdated.LatestVersion);
-            Assert.Equal(LatestVersionUnknownReason.LookupFailed, outdated.LatestVersionUnknownReason);
+            Assert.Equal(LatestVersionUnknownReason.NotProvided, outdated.LatestVersionUnknownReason);
         }
 
         [Fact]
