@@ -238,6 +238,151 @@ public class CommandLineTests
         Assert.Contains(expectedError, parseResult.Errors.Select(e => e.Message));
     }
 
+#if NET10_0_OR_GREATER
+    /// <summary>
+    /// The root command is named after the running executable: dotnet-outdated for the tool, testhost here.
+    /// The nushell script lists no options; it asks the tool for them, see <see cref="SuggestDirective_CompletesOptionsAndValues"/>.
+    /// </summary>
+    [Theory]
+    [InlineData("bash", "-F _{1} {0}")]
+    [InlineData("zsh", "#compdef {0}")]
+    [InlineData("pwsh", "Register-ArgumentCompleter -Native -CommandName '{0}'")]
+    [InlineData("fish", "complete -c {0}")]
+    [InlineData("nushell", "^{0} $\"[suggest:")]
+    public void CompletionsScript_WritesAScriptForTheShell(string shell, string expectedFormat)
+    {
+        var commandLine = CreateCommandLine();
+        var name = commandLine.RootCommand.Name;
+        var output = new System.IO.StringWriter();
+
+        var exitCode = commandLine.Parse(["completions", "script", shell])
+            .Invoke(new System.CommandLine.InvocationConfiguration { Output = output });
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains(string.Format(expectedFormat, name, name.Replace('-', '_')), output.ToString());
+        Assert.DoesNotContain('\r', output.ToString());
+        if (shell != "nushell")
+            Assert.Contains("--transitive-depth", output.ToString());
+    }
+
+    /// <summary>
+    /// Where no option, subcommand or value matches, the scripts fall back to file names, so the path argument and
+    /// the --output file name still complete. PowerShell falls back on its own.
+    /// </summary>
+    [Theory]
+    [InlineData("bash", "\ncomplete -o bashdefault -o default -F _{1} {0}", 1)]
+    [InlineData("zsh", ":_files' \\\n", 3)] // the path argument, --output and -o
+    [InlineData("fish", "\ncomplete -c {0} -f -a '(_{1}_or_files)'", 1)]
+    [InlineData("fish", "__fish_complete_path $token", 1)]
+    [InlineData("fish", "if contains -- (string lower -- $token) ", 1)] // "-of j" completes to Json, not to a file name
+    [InlineData("nushell", " | lines | compact --empty | if ($in | is-empty) {{ null }} else {{ $in }}\n", 1)]
+    public void CompletionsScript_FallsBackToFileNames(string shell, string expectedFormat, int expectedCount)
+    {
+        var commandLine = CreateCommandLine();
+        var name = commandLine.RootCommand.Name;
+        var output = new System.IO.StringWriter();
+
+        commandLine.Parse(["completions", "script", shell]).Invoke(new System.CommandLine.InvocationConfiguration { Output = output });
+
+        var expected = string.Format(expectedFormat, name, name.Replace('-', '_'));
+        Assert.Equal(expectedCount, output.ToString().Split(expected).Length - 1);
+    }
+
+    /// <summary>
+    /// The value of -u / --upgrade can only be attached (-u:Prompt), and the word after it is the path, so the scripts
+    /// complete it as a flag rather than offering Auto and Prompt as the next word.
+    /// </summary>
+    [Theory]
+    [InlineData("bash", "--upgrade|-u)", "--upgrade ")]
+    [InlineData("zsh", "'-u=[", "'-u[")]
+    [InlineData("fish", "'Prompt'", "'-u'")]
+    [InlineData("pwsh", "'Prompt'", "'-u'")]
+    public void CompletionsScript_CompletesUpgradeAsAFlag(string shell, string unexpected, string expected)
+    {
+        var commandLine = CreateCommandLine();
+        var output = new System.IO.StringWriter();
+
+        commandLine.Parse(["completions", "script", shell]).Invoke(new System.CommandLine.InvocationConfiguration { Output = output });
+
+        Assert.DoesNotContain(unexpected, output.ToString());
+        Assert.Contains(expected, output.ToString());
+
+        // Only the script is generated that way: the option still takes its attached value.
+        Assert.Equal(UpgradeType.Prompt, commandLine.Parse(["-u:prompt"]).GetValue(commandLine.Upgrade));
+    }
+
+    /// <summary>
+    /// The package's bash script would offer "(bash" and "zsh)".
+    /// </summary>
+    [Fact]
+    public void CompletionsScript_ForBash_CompletesShellNamesWithoutBrackets()
+    {
+        var output = new System.IO.StringWriter();
+
+        CreateCommandLine().Parse(["completions", "script", "bash"]).Invoke(new System.CommandLine.InvocationConfiguration { Output = output });
+
+        Assert.Contains("opts=\"$opts bash fish nushell pwsh zsh\"", output.ToString());
+    }
+
+    [Fact]
+    public void CompletionsScript_RejectsAnUnknownShell()
+    {
+        var error = new System.IO.StringWriter();
+
+        var exitCode = CreateCommandLine().Parse(["completions", "script", "tcsh"])
+            .Invoke(new System.CommandLine.InvocationConfiguration { Output = new System.IO.StringWriter(), Error = error });
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("Shell 'tcsh' is not supported. Supported shells: bash, fish, nushell, pwsh, zsh.", error.ToString());
+    }
+
+    /// <summary>
+    /// Without a shell name, the shell comes from SHELL, and an unsupported one is a parse error. Windows ignores
+    /// SHELL and always defaults to PowerShell.
+    /// </summary>
+    [Fact]
+    public void CompletionsScript_WithoutAShell_UsesTheShellFromTheEnvironment()
+    {
+        var shell = Environment.GetEnvironmentVariable("SHELL");
+        try
+        {
+            Environment.SetEnvironmentVariable("SHELL", "/bin/tcsh");
+
+            var commandLine = CreateCommandLine();
+            var parseResult = commandLine.Parse(["completions", "script"]);
+
+            if (OperatingSystem.IsWindows())
+            {
+                Assert.Empty(parseResult.Errors);
+                Assert.Equal(System.CommandLine.StaticCompletions.ShellNames.PowerShell, parseResult.GetValue(commandLine.CompletionsCommand.GenerateScriptCommand.ShellArgument));
+            }
+            else
+            {
+                Assert.NotEmpty(parseResult.Errors);
+            }
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("SHELL", shell);
+        }
+    }
+
+    [Theory]
+    [InlineData("dotnet-outdated --tr", "--transitive|--transitive-depth")]
+    [InlineData("dotnet-outdated -vl Ma", "Major")]
+    [InlineData("dotnet-outdated -u ", "")] // the word after -u is the path, not Auto or Prompt
+    public void SuggestDirective_CompletesOptionsAndValues(string commandLineText, string expected)
+    {
+        var output = new System.IO.StringWriter();
+
+        var exitCode = CreateCommandLine().Parse([$"[suggest:{commandLineText.Length}]", commandLineText])
+            .Invoke(new System.CommandLine.InvocationConfiguration { Output = output });
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(expected, string.Join("|", output.ToString().Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)));
+    }
+
+#endif
     private static ProgramCommandLine CreateCommandLine() => new(
         run: (_, _) => throw new InvalidOperationException("Only parsed."),
         runMcp: _ => throw new InvalidOperationException("Only parsed."));

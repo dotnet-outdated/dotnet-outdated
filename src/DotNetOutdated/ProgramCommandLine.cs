@@ -3,7 +3,12 @@ using NuGet.Common;
 using System;
 using System.Collections.Generic;
 using System.CommandLine;
+using System.Linq;
 using System.CommandLine.Parsing;
+using System.Text.RegularExpressions;
+#if NET10_0_OR_GREATER
+using System.CommandLine.StaticCompletions;
+#endif
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -165,6 +170,14 @@ namespace DotNetOutdated
 
       public Command McpCommand { get; } = new("mcp", "Runs the Model Context Protocol (MCP) server.");
 
+#if NET10_0_OR_GREATER
+      /// <summary>
+      /// The <c>completions script [shell]</c> subcommand, which prints a shell completion script for this command line.
+      /// </summary>
+      /// <remarks>Only in the net10.0 build, as System.CommandLine.StaticCompletions only targets net10.0.</remarks>
+      public CompletionsCommandDefinition CompletionsCommand { get; } = new();
+#endif
+
       public ParserConfiguration ParserConfiguration { get; } = new()
       {
          EnablePosixBundling = false,
@@ -179,6 +192,10 @@ namespace DotNetOutdated
          ArgumentNullException.ThrowIfNull(runMcp);
 
          Path.Validators.Add(RejectOptionLikePath);
+
+         // The [suggest] directive would offer Auto and Prompt as the word after -u, which is the path: the value of
+         // -u can only be attached. See NormalizeLegacySyntax.
+         Upgrade.CompletionSources.Clear();
 
          RootCommand = new RootCommand("A .NET Core global tool to list outdated Nuget packages.")
          {
@@ -207,6 +224,13 @@ namespace DotNetOutdated
             IdleTimeout,
             McpCommand,
          };
+
+#if NET10_0_OR_GREATER
+         CompletionsCommandParser.ConfigureCommand(CompletionsCommand);
+         CompletionsCommand.GenerateScriptCommand.ShellArgument.DefaultValueFactory = ShellFromEnvironment;
+         CompletionsCommand.GenerateScriptCommand.SetAction(WriteCompletionScript);
+         RootCommand.Subcommands.Add(CompletionsCommand);
+#endif
 
          RootCommand.Validators.Add(RejectFlagsWithAttachedValues);
          RootCommand.SetAction(run);
@@ -327,6 +351,140 @@ namespace DotNetOutdated
 
          return result;
       }
+
+#if NET10_0_OR_GREATER
+      /// <summary>
+      /// Writes the completion script for the requested shell, as the package's own action does, but with LF line endings.
+      /// </summary>
+      /// <remarks>
+      /// System.CommandLine.StaticCompletions 3.0.0 mixes CRLF into the bash, zsh, pwsh and nushell scripts, and bash
+      /// fails on the stray carriage returns (<c>return\r: command not found</c>), so option values never complete.
+      /// </remarks>
+      private int WriteCompletionScript(ParseResult parseResult)
+      {
+         var shell = parseResult.GetValue(CompletionsCommand.GenerateScriptCommand.ShellArgument);
+         if (!CompletionsCommandParser.ShellProviders.TryGetValue(shell, out var provider))
+         {
+            parseResult.InvocationConfiguration.Error.WriteLine(
+               $"Shell '{shell}' is not supported. Supported shells: {string.Join(", ", CompletionsCommandParser.ShellProviders.Keys.Order())}.");
+            return 1;
+         }
+
+         var script = CompleteFileNames(shell, GenerateScript(provider).ReplaceLineEndings("\n"));
+
+         // Again, as the fish function below is a raw string, which has the line endings of this source file.
+         parseResult.InvocationConfiguration.Output.Write(script.ReplaceLineEndings("\n"));
+         return 0;
+      }
+
+      /// <summary>
+      /// Generates the package's completion script, with <c>-u</c> / <c>--upgrade</c> as a flag.
+      /// </summary>
+      /// <remarks>
+      /// The option is declared with a required value, so the scripts would offer <c>Auto</c> and <c>Prompt</c> as the
+      /// next word, but its value can only be attached (<c>-u:Prompt</c>): the next word is the path. See
+      /// <see cref="NormalizeLegacySyntax"/>.
+      /// </remarks>
+      private string GenerateScript(System.CommandLine.StaticCompletions.Shells.IShellProvider provider)
+      {
+         var arity = Upgrade.Arity;
+         Upgrade.Arity = ArgumentArity.Zero;
+         try
+         {
+            return provider.GenerateCompletions(RootCommand);
+         }
+         finally
+         {
+            Upgrade.Arity = arity;
+         }
+      }
+
+      /// <summary>
+      /// Makes a completion script fall back to file names, as the shell does for a command without one, so the path
+      /// argument and the <c>--output</c> file name still complete.
+      /// </summary>
+      /// <remarks>
+      /// System.CommandLine.StaticCompletions 3.0.0 only completes option names, subcommands and listed values. Where
+      /// none match, its bash, fish and nushell scripts offer nothing, and its zsh script gives the path argument and
+      /// <c>--output</c> no completion. PowerShell already falls back to file names when a native completer returns none.
+      /// </remarks>
+      private string CompleteFileNames(string shell, string script)
+      {
+         switch (shell)
+         {
+            case ShellNames.Bash:
+               // The package wraps an argument's values in brackets, which bash reads as part of the first and last
+               // value: "(bash" and "zsh)" for the shell names.
+               script = Regex.Replace(script, @"(?<=^\s*opts=""\$opts )\((?<values>[^()""]*)\)(?="")", "${values}", RegexOptions.Multiline);
+
+               // -o default: readline's file name completion when the function returns no matches.
+               return script.Replace("\ncomplete -F ", "\ncomplete -o bashdefault -o default -F ");
+
+            case ShellNames.Fish:
+               // The function's candidates when one starts with the token, else file names; a plain `complete` without
+               // -f would list file names beside option values too. Case is ignored, as fish completes "-of j" to "Json".
+               return Regex.Replace(script, @"^complete -c (?<command>\S+) -f -a '\((?<function>\w+)\)'$", match =>
+               {
+                  var function = match.Groups["function"].Value;
+                  return $$"""
+                     function {{function}}_or_files
+                         set -l token (commandline -ct)
+                         set -l candidates ({{function}})
+                         set -l names (string lower -- (string replace -r '\t.*' '' -- $candidates))
+                         if contains -- (string lower -- $token) (string sub -l (string length -- $token) -- $names)
+                             printf '%s\n' $candidates
+                         else
+                             __fish_complete_path $token
+                         end
+                     end
+
+                     complete -c {{match.Groups["command"].Value}} -f -a '({{function}}_or_files)'
+                     """;
+               }, RegexOptions.Multiline);
+
+            case ShellNames.Zsh:
+               // An empty action (": ") completes nothing; _files completes file names.
+               var lines = script.Split('\n');
+               for (var i = 0; i < lines.Length; i++)
+               {
+                  var spec = lines[i].TrimStart();
+                  if ((spec.StartsWith($"'::{Path.Name} -- ", StringComparison.Ordinal) ||
+                       OutputFilename.Aliases.Prepend(OutputFilename.Name).Any(name => spec.StartsWith($"'{name}=[", StringComparison.Ordinal))) &&
+                      spec.EndsWith(": ' \\", StringComparison.Ordinal))
+                  {
+                     lines[i] = $"{lines[i][..^": ' \\".Length]}:_files' \\";
+                  }
+               }
+
+               return string.Join('\n', lines);
+
+            case ShellNames.Nushell:
+               // A completer that returns null, rather than an empty list, falls back to file names. With no
+               // suggestions the tool still writes a newline, which `lines` reads as one empty suggestion.
+               return script.Replace(" | lines\n", " | lines | compact --empty | if ($in | is-empty) { null } else { $in }\n");
+
+            default:
+               return script;
+         }
+      }
+
+      /// <summary>
+      /// The shell to write a completion script for when none is given: the package's default, but an unsupported
+      /// <c>SHELL</c> is a parse error rather than an exception thrown out of <see cref="Parse"/>.
+      /// </summary>
+      private static string ShellFromEnvironment(ArgumentResult result)
+      {
+         try
+         {
+            return ShellNames.GetShellNameFromEnvironment();
+         }
+         catch (InvalidOperationException ex)
+         {
+            result.AddError($"{ex.Message.Trim()}. Name the shell, as in 'completions script bash'.");
+            return null;
+         }
+      }
+#endif
 
       private bool IsUpgradeAlias(string token) => Upgrade.Name == token || Upgrade.Aliases.Contains(token);
 
