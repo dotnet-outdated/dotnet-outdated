@@ -25,7 +25,12 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        framework: ['net8.0', 'net9.0']
+        framework: ['net8.0', 'net9.0', 'net11.0']
+        include:
+          # The tool ships net8.0 and net9.0 builds only; on .NET 11 its net9.0 build rolls forward.
+          - framework: net11.0
+            tool-framework: net9.0
+            tool-args: -p:RollForward=LatestMajor
     timeout-minutes: 30
 
     steps:
@@ -34,13 +39,14 @@ jobs:
     - name: Setup .NET
       uses: actions/setup-dotnet@v6.1.0
       with:
-        dotnet-version: | 
+        dotnet-version: |
             8.0.x
             9.0.x
+            11.0.x
 
     - name: Smoke test
       run: |
-        dotnet run --configuration Release --framework ${{ matrix.framework }} --project src/DotNetOutdated test-projects/nuget-org
+        dotnet run --configuration Release --framework ${{ matrix.tool-framework || matrix.framework }} ${{ matrix.tool-args }} --project src/DotNetOutdated test-projects/nuget-org
 
     - name: Tests
       run: dotnet test --configuration Release --framework ${{ matrix.framework }}
@@ -64,5 +70,6 @@ jobs:
             9.0.x
             10.0.300
 
+    # SDK 10.0.300 can't target net11.0, so build only the net9.0 target.
     - name: File-based app tests
-      run: dotnet test --configuration Release --framework net9.0 --filter "FullyQualifiedName~FileBasedApp|FullyQualifiedName~File_Based_App"
+      run: dotnet test --configuration Release --framework net9.0 -p:TargetFrameworks=net9.0 --filter "FullyQualifiedName~FileBasedApp|FullyQualifiedName~File_Based_App"

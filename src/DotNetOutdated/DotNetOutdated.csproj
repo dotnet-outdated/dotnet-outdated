@@ -3,6 +3,9 @@
     <LangVersion>latest</LangVersion>
     <OutputType>Exe</OutputType>
     <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
+    <!-- net8.0 and net9.0 are out of support, but people use this tool to upgrade off them, so keep
+         targeting them and silence the SDK's end-of-life warning (NETSDK1138). -->
+    <CheckEolTargetFramework>false</CheckEolTargetFramework>
     <IsPackable>true</IsPackable>
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>dotnet-outdated</ToolCommandName>
