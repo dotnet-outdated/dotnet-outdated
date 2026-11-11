@@ -58,8 +58,10 @@ namespace DotNetOutdated.Core.Services
             _logger = logger;
         }
 
-        public async Task<List<Project>> AnalyzeProjectAsync(string projectPath, bool runRestore, bool includeTransitiveDependencies, int transitiveDepth, string? runtime)
+        public async Task<IReadOnlyList<Project>> AnalyzeProjectAsync(string projectPath, ProjectAnalysisOptions? options = null, CancellationToken cancellationToken = default)
         {
+            options ??= ProjectAnalysisOptions.Default;
+            var runtime = options.Runtime;
             var dependencyGraph = await _evaluator.GetRestoreGraphAsync(projectPath, runtime).ConfigureAwait(false);
 
             var isFileBasedApp = projectPath.IsCSharpFile();
@@ -71,7 +73,9 @@ namespace DotNetOutdated.Core.Services
                 var analyzedProjectPath = fileBasedAppPath ?? packageSpec.FilePath!;
 
                 // Restore the packages
-                if (runRestore)
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (options.RunRestore)
                 {
                     _dotNetRestoreService.Restore(analyzedProjectPath);
                 }
@@ -126,8 +130,8 @@ namespace DotNetOutdated.Core.Services
                             targetFramework.Dependencies.TryAdd(dependency.Name, dependency);
 
                             // Process transitive dependencies for the library
-                            if (includeTransitiveDependencies)
-                                AddDependencies(targetFramework, projectLibrary, target, 1, transitiveDepth);
+                            if (options.IncludeTransitiveDependencies)
+                                AddDependencies(targetFramework, projectLibrary, target, 1, options.TransitiveDepth);
                         }
 
                         if (isFileBasedApp)
@@ -158,7 +162,7 @@ namespace DotNetOutdated.Core.Services
             }
 
             // Each evaluation is a separate `dotnet msbuild` process, so run them side by side.
-            await Task.WhenAll(sdkEvaluations.Select(MarkPackageDefinedReferencesAsAutoReferencedAsync)).ConfigureAwait(false);
+            await Task.WhenAll(sdkEvaluations.Select(evaluation => MarkPackageDefinedReferencesAsAutoReferencedAsync(evaluation, cancellationToken))).ConfigureAwait(false);
 
             return projects;
         }
@@ -202,12 +206,12 @@ namespace DotNetOutdated.Core.Services
         /// Marks direct dependencies as auto-referenced when every <c>PackageReference</c> item for them is defined inside
         /// a NuGet package, such as the props or targets of an SDK like <c>Cake.Sdk</c> or <c>MSTest.Sdk</c>.
         /// </summary>
-        private async Task MarkPackageDefinedReferencesAsAutoReferencedAsync(SdkEvaluation evaluation)
+        private async Task MarkPackageDefinedReferencesAsAutoReferencedAsync(SdkEvaluation evaluation, CancellationToken cancellationToken)
         {
-            await _evaluationThrottle.WaitAsync().ConfigureAwait(false);
+            await _evaluationThrottle.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                var items = await Task.Run(() => _evaluator.GetPackageReferenceItems(evaluation.ProjectPath, evaluation.TargetAlias, evaluation.Runtime)).ConfigureAwait(false);
+                var items = await Task.Run(() => _evaluator.GetPackageReferenceItems(evaluation.ProjectPath, evaluation.TargetAlias, evaluation.Runtime), cancellationToken).ConfigureAwait(false);
                 if (items == null)
                 {
                     _logger.LogVerbose($"Could not evaluate the package references of '{evaluation.ProjectPath}' for {evaluation.TargetAlias}. " +

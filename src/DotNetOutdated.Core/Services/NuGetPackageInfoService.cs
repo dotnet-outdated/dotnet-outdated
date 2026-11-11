@@ -35,7 +35,7 @@ namespace DotNetOutdated.Core.Services
 
         private sealed record SourceSettings(IEnumerable<PackageSource> EnabledSources, PackageSourceMapping PackageSourceMapping);
 
-        private SourceSettings GetSourceSettings(string root)
+        private SourceSettings GetSourceSettings(string? root)
         {
             if (_sourceSettings == null)
             {
@@ -49,7 +49,7 @@ namespace DotNetOutdated.Core.Services
         }
 
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "This method is supposed to fail silently")]
-        private async Task<PackageMetadataResource?> FindMetadataResourceForSource(Uri source, string projectFilePath, string packageId)
+        private async Task<PackageMetadataResource?> FindMetadataResourceForSource(Uri source, string? projectFilePath, string packageId)
         {
             try
             {
@@ -86,16 +86,17 @@ namespace DotNetOutdated.Core.Services
             }
         }
 
-        public async Task<IReadOnlyList<NuGetVersion>> GetAllVersions(string package, IEnumerable<Uri> sources, bool includePrerelease, NuGetFramework targetFramework,
-            string projectFilePath, bool isDevelopmentDependency)
+        public async Task<IReadOnlyList<NuGetVersion>> GetAllVersionsAsync(PackageVersionsQuery query, CancellationToken cancellationToken = default)
         {
-            return await GetAllVersions(package, sources, includePrerelease, targetFramework, projectFilePath, isDevelopmentDependency, 0).ConfigureAwait(false);
-        }
-
-        public async Task<IReadOnlyList<NuGetVersion>> GetAllVersions(string package, IEnumerable<Uri> sources, bool includePrerelease, NuGetFramework targetFramework,
-            string projectFilePath, bool isDevelopmentDependency, int olderThanDays, bool ignoreFailedSources = false)
-        {
-            ArgumentNullException.ThrowIfNull(sources);
+            ArgumentNullException.ThrowIfNull(query);
+            var package = query.PackageId;
+            var sources = query.Sources;
+            var includePrerelease = query.IncludePrerelease;
+            var targetFramework = query.TargetFramework;
+            var projectFilePath = query.ProjectFilePath;
+            var isDevelopmentDependency = query.IsDevelopmentDependency;
+            var olderThanDays = query.OlderThanDays;
+            var ignoreFailedSources = query.IgnoreFailedSources;
 
             var allVersions = new List<NuGetVersion>();
             foreach (var source in sources)
@@ -105,7 +106,7 @@ namespace DotNetOutdated.Core.Services
                     var metadata = await FindMetadataResourceForSource(source, projectFilePath, package).ConfigureAwait(false);
                     if (metadata != null)
                     {
-                        var compatibleMetadataList = await metadata.GetMetadataAsync(package, includePrerelease, false, _context, NullLogger.Instance, CancellationToken.None).ConfigureAwait(false);
+                        var compatibleMetadataList = await metadata.GetMetadataAsync(package, includePrerelease, false, _context, NullLogger.Instance, cancellationToken).ConfigureAwait(false);
 
                         if (olderThanDays > 0)
                         {
@@ -144,6 +145,10 @@ namespace DotNetOutdated.Core.Services
                             }
                         }
                     }
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
                 }
                 catch (HttpRequestException)
                 {

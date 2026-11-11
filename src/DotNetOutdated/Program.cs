@@ -150,10 +150,15 @@ namespace DotNetOutdated
             // Analyze the projects
             console.WriteLine("Analyzing project(s)...");
 
-            var projectLists = new ConcurrentBag<List<Project>>();
+            var projectLists = new ConcurrentBag<IReadOnlyList<Project>>();
             await Parallel.ForEachAsync(projectPaths, async (path, _) =>
             {
-                projectLists.Add(await _projectAnalysisService.AnalyzeProjectAsync(path, false, Transitive, TransitiveDepth, Runtime));
+                projectLists.Add(await _projectAnalysisService.AnalyzeProjectAsync(path, new ProjectAnalysisOptions
+                {
+                    IncludeTransitiveDependencies = Transitive,
+                    TransitiveDepth = TransitiveDepth,
+                    Runtime = Runtime,
+                }));
             });
 
             var projects = projectLists.SelectMany(p => p).ToList();
@@ -258,7 +263,16 @@ namespace DotNetOutdated
                          ? project.Framework.GetShortFolderName()
                          : project.TargetAlias;
 
-                     status = _dotNetPackageService.AddPackage(project.ProjectFilePath, package.Name, frameworkName, newVersionRange, NoRestore, IgnoreFailedSources, package.Kind);
+                     status = _dotNetPackageService.Upgrade(new ReferenceUpgrade
+                     {
+                        ProjectPath = project.ProjectFilePath,
+                        Name = package.Name,
+                        Kind = package.Kind,
+                        TargetFramework = frameworkName,
+                        Version = newVersionRange,
+                        NoRestore = NoRestore,
+                        IgnoreFailedSources = IgnoreFailedSources,
+                     });
                   }
 
                   if (status.IsSuccess)
@@ -510,21 +524,25 @@ namespace DotNetOutdated
                 versionRange.OriginalString);
         }
 
+         LatestVersionQuery query = null;
          if (referencedVersion != null)
          {
-            latestVersion = await _nugetService.ResolvePackageVersions(
-                dependency.Name,
-                referencedVersion,
-                project.Sources,
-                versionRange,
-                VersionLock,
-                Prerelease,
-                PrereleaseLabel,
-                targetFramework.Name,
-                project.FilePath,
-                dependency.IsDevelopmentDependency,
-                OlderThanDays,
-                IgnoreFailedSources).ConfigureAwait(false);
+            query = new LatestVersionQuery
+            {
+                PackageId = dependency.Name,
+                CurrentVersion = referencedVersion,
+                AllowedRange = versionRange,
+                Sources = project.Sources.ToList(),
+                TargetFramework = targetFramework.Name,
+                ProjectFilePath = project.FilePath,
+                IsDevelopmentDependency = dependency.IsDevelopmentDependency,
+                VersionLock = VersionLock,
+                Prerelease = Prerelease,
+                PrereleaseLabel = PrereleaseLabel,
+                OlderThanDays = OlderThanDays,
+                IgnoreFailedSources = IgnoreFailedSources,
+            };
+            latestVersion = await _nugetService.ResolveLatestVersionAsync(query).ConfigureAwait(false);
          }
 
          if (referencedVersion == null || latestVersion == null || referencedVersion != latestVersion || IncludeUpToDate)
@@ -532,17 +550,9 @@ namespace DotNetOutdated
             // special case when there is version installed which is not older than "OlderThan" days makes "latestVersion" to be null
             if (OlderThanDays > 0 && latestVersion == null)
             {
-               NuGetVersion absoluteLatestVersion = await _nugetService.ResolvePackageVersions(
-                   dependency.Name,
-                   referencedVersion,
-                   project.Sources,
-                   versionRange,
-                   VersionLock,
-                   Prerelease,
-                   PrereleaseLabel,
-                   targetFramework.Name,
-                   project.FilePath,
-                   dependency.IsDevelopmentDependency).ConfigureAwait(false);
+               NuGetVersion absoluteLatestVersion = query == null
+                   ? null
+                   : await _nugetService.ResolveLatestVersionAsync(query with { OlderThanDays = 0, IgnoreFailedSources = false }).ConfigureAwait(false);
 
                if (absoluteLatestVersion == null || referencedVersion > absoluteLatestVersion)
                {

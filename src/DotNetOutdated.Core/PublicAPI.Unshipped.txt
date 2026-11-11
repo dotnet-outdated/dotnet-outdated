@@ -1,1 +1,120 @@
 #nullable enable
+DotNetOutdated.Core.Services.DotNetPackageService.Upgrade(DotNetOutdated.Core.Services.ReferenceUpgrade! upgrade) -> DotNetOutdated.Core.Services.RunStatus!
+DotNetOutdated.Core.Services.IDotNetPackageService.Upgrade(DotNetOutdated.Core.Services.ReferenceUpgrade! upgrade) -> DotNetOutdated.Core.Services.RunStatus!
+DotNetOutdated.Core.Services.INuGetPackageInfoService.GetAllVersionsAsync(DotNetOutdated.Core.Services.PackageVersionsQuery! query, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<NuGet.Versioning.NuGetVersion!>!>!
+DotNetOutdated.Core.Services.INuGetPackageResolutionService.ResolveLatestVersionAsync(DotNetOutdated.Core.Services.LatestVersionQuery! query, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<NuGet.Versioning.NuGetVersion!>!
+DotNetOutdated.Core.Services.IProjectAnalysisService.AnalyzeProjectAsync(string! projectPath, DotNetOutdated.Core.Services.ProjectAnalysisOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<DotNetOutdated.Core.Models.Project!>!>!
+DotNetOutdated.Core.Services.LatestVersionQuery
+DotNetOutdated.Core.Services.LatestVersionQuery.<Clone>$() -> DotNetOutdated.Core.Services.LatestVersionQuery!
+DotNetOutdated.Core.Services.LatestVersionQuery.AllowedRange.get -> NuGet.Versioning.VersionRange!
+DotNetOutdated.Core.Services.LatestVersionQuery.AllowedRange.init -> void
+DotNetOutdated.Core.Services.LatestVersionQuery.CurrentVersion.get -> NuGet.Versioning.NuGetVersion!
+DotNetOutdated.Core.Services.LatestVersionQuery.CurrentVersion.init -> void
+DotNetOutdated.Core.Services.LatestVersionQuery.Equals(DotNetOutdated.Core.Services.LatestVersionQuery? other) -> bool
+DotNetOutdated.Core.Services.LatestVersionQuery.IgnoreFailedSources.get -> bool
+DotNetOutdated.Core.Services.LatestVersionQuery.IgnoreFailedSources.init -> void
+DotNetOutdated.Core.Services.LatestVersionQuery.IsDevelopmentDependency.get -> bool
+DotNetOutdated.Core.Services.LatestVersionQuery.IsDevelopmentDependency.init -> void
+DotNetOutdated.Core.Services.LatestVersionQuery.LatestVersionQuery() -> void
+DotNetOutdated.Core.Services.LatestVersionQuery.OlderThanDays.get -> int
+DotNetOutdated.Core.Services.LatestVersionQuery.OlderThanDays.init -> void
+DotNetOutdated.Core.Services.LatestVersionQuery.PackageId.get -> string!
+DotNetOutdated.Core.Services.LatestVersionQuery.PackageId.init -> void
+DotNetOutdated.Core.Services.LatestVersionQuery.Prerelease.get -> DotNetOutdated.Core.PrereleaseReporting
+DotNetOutdated.Core.Services.LatestVersionQuery.Prerelease.init -> void
+DotNetOutdated.Core.Services.LatestVersionQuery.PrereleaseLabel.get -> string?
+DotNetOutdated.Core.Services.LatestVersionQuery.PrereleaseLabel.init -> void
+DotNetOutdated.Core.Services.LatestVersionQuery.ProjectFilePath.get -> string?
+DotNetOutdated.Core.Services.LatestVersionQuery.ProjectFilePath.init -> void
+DotNetOutdated.Core.Services.LatestVersionQuery.Sources.get -> System.Collections.Generic.IReadOnlyList<System.Uri!>!
+DotNetOutdated.Core.Services.LatestVersionQuery.Sources.init -> void
+DotNetOutdated.Core.Services.LatestVersionQuery.TargetFramework.get -> NuGet.Frameworks.NuGetFramework!
+DotNetOutdated.Core.Services.LatestVersionQuery.TargetFramework.init -> void
+DotNetOutdated.Core.Services.LatestVersionQuery.VersionLock.get -> DotNetOutdated.Core.VersionLock
+DotNetOutdated.Core.Services.LatestVersionQuery.VersionLock.init -> void
+DotNetOutdated.Core.Services.NuGetPackageInfoService.GetAllVersionsAsync(DotNetOutdated.Core.Services.PackageVersionsQuery! query, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<NuGet.Versioning.NuGetVersion!>!>!
+DotNetOutdated.Core.Services.NuGetPackageResolutionService.ResolveLatestVersionAsync(DotNetOutdated.Core.Services.LatestVersionQuery! query, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<NuGet.Versioning.NuGetVersion!>!
+DotNetOutdated.Core.Services.PackageVersionsQuery
+DotNetOutdated.Core.Services.PackageVersionsQuery.<Clone>$() -> DotNetOutdated.Core.Services.PackageVersionsQuery!
+DotNetOutdated.Core.Services.PackageVersionsQuery.Equals(DotNetOutdated.Core.Services.PackageVersionsQuery? other) -> bool
+DotNetOutdated.Core.Services.PackageVersionsQuery.IgnoreFailedSources.get -> bool
+DotNetOutdated.Core.Services.PackageVersionsQuery.IgnoreFailedSources.init -> void
+DotNetOutdated.Core.Services.PackageVersionsQuery.IncludePrerelease.get -> bool
+DotNetOutdated.Core.Services.PackageVersionsQuery.IncludePrerelease.init -> void
+DotNetOutdated.Core.Services.PackageVersionsQuery.IsDevelopmentDependency.get -> bool
+DotNetOutdated.Core.Services.PackageVersionsQuery.IsDevelopmentDependency.init -> void
+DotNetOutdated.Core.Services.PackageVersionsQuery.OlderThanDays.get -> int
+DotNetOutdated.Core.Services.PackageVersionsQuery.OlderThanDays.init -> void
+DotNetOutdated.Core.Services.PackageVersionsQuery.PackageId.get -> string!
+DotNetOutdated.Core.Services.PackageVersionsQuery.PackageId.init -> void
+DotNetOutdated.Core.Services.PackageVersionsQuery.PackageVersionsQuery() -> void
+DotNetOutdated.Core.Services.PackageVersionsQuery.ProjectFilePath.get -> string?
+DotNetOutdated.Core.Services.PackageVersionsQuery.ProjectFilePath.init -> void
+DotNetOutdated.Core.Services.PackageVersionsQuery.Sources.get -> System.Collections.Generic.IReadOnlyList<System.Uri!>!
+DotNetOutdated.Core.Services.PackageVersionsQuery.Sources.init -> void
+DotNetOutdated.Core.Services.PackageVersionsQuery.TargetFramework.get -> NuGet.Frameworks.NuGetFramework!
+DotNetOutdated.Core.Services.PackageVersionsQuery.TargetFramework.init -> void
+DotNetOutdated.Core.Services.ProjectAnalysisOptions
+DotNetOutdated.Core.Services.ProjectAnalysisOptions.<Clone>$() -> DotNetOutdated.Core.Services.ProjectAnalysisOptions!
+DotNetOutdated.Core.Services.ProjectAnalysisOptions.Equals(DotNetOutdated.Core.Services.ProjectAnalysisOptions? other) -> bool
+DotNetOutdated.Core.Services.ProjectAnalysisOptions.IncludeTransitiveDependencies.get -> bool
+DotNetOutdated.Core.Services.ProjectAnalysisOptions.IncludeTransitiveDependencies.init -> void
+DotNetOutdated.Core.Services.ProjectAnalysisOptions.ProjectAnalysisOptions() -> void
+DotNetOutdated.Core.Services.ProjectAnalysisOptions.RunRestore.get -> bool
+DotNetOutdated.Core.Services.ProjectAnalysisOptions.RunRestore.init -> void
+DotNetOutdated.Core.Services.ProjectAnalysisOptions.Runtime.get -> string?
+DotNetOutdated.Core.Services.ProjectAnalysisOptions.Runtime.init -> void
+DotNetOutdated.Core.Services.ProjectAnalysisOptions.TransitiveDepth.get -> int
+DotNetOutdated.Core.Services.ProjectAnalysisOptions.TransitiveDepth.init -> void
+DotNetOutdated.Core.Services.ProjectAnalysisService.AnalyzeProjectAsync(string! projectPath, DotNetOutdated.Core.Services.ProjectAnalysisOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<DotNetOutdated.Core.Models.Project!>!>!
+DotNetOutdated.Core.Services.ReferenceUpgrade
+DotNetOutdated.Core.Services.ReferenceUpgrade.<Clone>$() -> DotNetOutdated.Core.Services.ReferenceUpgrade!
+DotNetOutdated.Core.Services.ReferenceUpgrade.Equals(DotNetOutdated.Core.Services.ReferenceUpgrade? other) -> bool
+DotNetOutdated.Core.Services.ReferenceUpgrade.IgnoreFailedSources.get -> bool
+DotNetOutdated.Core.Services.ReferenceUpgrade.IgnoreFailedSources.init -> void
+DotNetOutdated.Core.Services.ReferenceUpgrade.Kind.get -> DotNetOutdated.Core.Services.ReferenceKind
+DotNetOutdated.Core.Services.ReferenceUpgrade.Kind.init -> void
+DotNetOutdated.Core.Services.ReferenceUpgrade.Name.get -> string!
+DotNetOutdated.Core.Services.ReferenceUpgrade.Name.init -> void
+DotNetOutdated.Core.Services.ReferenceUpgrade.NoRestore.get -> bool
+DotNetOutdated.Core.Services.ReferenceUpgrade.NoRestore.init -> void
+DotNetOutdated.Core.Services.ReferenceUpgrade.ProjectPath.get -> string!
+DotNetOutdated.Core.Services.ReferenceUpgrade.ProjectPath.init -> void
+DotNetOutdated.Core.Services.ReferenceUpgrade.ReferenceUpgrade() -> void
+DotNetOutdated.Core.Services.ReferenceUpgrade.TargetFramework.get -> string!
+DotNetOutdated.Core.Services.ReferenceUpgrade.TargetFramework.init -> void
+DotNetOutdated.Core.Services.ReferenceUpgrade.Version.get -> NuGet.Versioning.VersionRange!
+DotNetOutdated.Core.Services.ReferenceUpgrade.Version.init -> void
+override DotNetOutdated.Core.Services.LatestVersionQuery.Equals(object? obj) -> bool
+override DotNetOutdated.Core.Services.LatestVersionQuery.GetHashCode() -> int
+override DotNetOutdated.Core.Services.LatestVersionQuery.ToString() -> string!
+override DotNetOutdated.Core.Services.PackageVersionsQuery.Equals(object? obj) -> bool
+override DotNetOutdated.Core.Services.PackageVersionsQuery.GetHashCode() -> int
+override DotNetOutdated.Core.Services.PackageVersionsQuery.ToString() -> string!
+override DotNetOutdated.Core.Services.ProjectAnalysisOptions.Equals(object? obj) -> bool
+override DotNetOutdated.Core.Services.ProjectAnalysisOptions.GetHashCode() -> int
+override DotNetOutdated.Core.Services.ProjectAnalysisOptions.ToString() -> string!
+override DotNetOutdated.Core.Services.ReferenceUpgrade.Equals(object? obj) -> bool
+override DotNetOutdated.Core.Services.ReferenceUpgrade.GetHashCode() -> int
+override DotNetOutdated.Core.Services.ReferenceUpgrade.ToString() -> string!
+static DotNetOutdated.Core.Services.LatestVersionQuery.operator !=(DotNetOutdated.Core.Services.LatestVersionQuery? left, DotNetOutdated.Core.Services.LatestVersionQuery? right) -> bool
+static DotNetOutdated.Core.Services.LatestVersionQuery.operator ==(DotNetOutdated.Core.Services.LatestVersionQuery? left, DotNetOutdated.Core.Services.LatestVersionQuery? right) -> bool
+static DotNetOutdated.Core.Services.PackageVersionsQuery.operator !=(DotNetOutdated.Core.Services.PackageVersionsQuery? left, DotNetOutdated.Core.Services.PackageVersionsQuery? right) -> bool
+static DotNetOutdated.Core.Services.PackageVersionsQuery.operator ==(DotNetOutdated.Core.Services.PackageVersionsQuery? left, DotNetOutdated.Core.Services.PackageVersionsQuery? right) -> bool
+static DotNetOutdated.Core.Services.ProjectAnalysisOptions.Default.get -> DotNetOutdated.Core.Services.ProjectAnalysisOptions!
+static DotNetOutdated.Core.Services.ProjectAnalysisOptions.operator !=(DotNetOutdated.Core.Services.ProjectAnalysisOptions? left, DotNetOutdated.Core.Services.ProjectAnalysisOptions? right) -> bool
+static DotNetOutdated.Core.Services.ProjectAnalysisOptions.operator ==(DotNetOutdated.Core.Services.ProjectAnalysisOptions? left, DotNetOutdated.Core.Services.ProjectAnalysisOptions? right) -> bool
+static DotNetOutdated.Core.Services.ReferenceUpgrade.operator !=(DotNetOutdated.Core.Services.ReferenceUpgrade? left, DotNetOutdated.Core.Services.ReferenceUpgrade? right) -> bool
+static DotNetOutdated.Core.Services.ReferenceUpgrade.operator ==(DotNetOutdated.Core.Services.ReferenceUpgrade? left, DotNetOutdated.Core.Services.ReferenceUpgrade? right) -> bool
+*REMOVED*DotNetOutdated.Core.Services.DotNetPackageService.AddPackage(string! projectPath, string! packageName, string! frameworkName, NuGet.Versioning.VersionRange! versionRange, bool noRestore = false, bool ignoreFailedSources = false, DotNetOutdated.Core.Services.ReferenceKind kind = DotNetOutdated.Core.Services.ReferenceKind.Package) -> DotNetOutdated.Core.Services.RunStatus!
+*REMOVED*DotNetOutdated.Core.Services.IDotNetPackageService.AddPackage(string! projectPath, string! packageName, string! frameworkName, NuGet.Versioning.VersionRange! versionRange, bool noRestore = false, bool ignoreFailedSources = false, DotNetOutdated.Core.Services.ReferenceKind kind = DotNetOutdated.Core.Services.ReferenceKind.Package) -> DotNetOutdated.Core.Services.RunStatus!
+*REMOVED*DotNetOutdated.Core.Services.INuGetPackageInfoService.GetAllVersions(string! package, System.Collections.Generic.IEnumerable<System.Uri!>! sources, bool includePrerelease, NuGet.Frameworks.NuGetFramework! targetFramework, string! projectFilePath, bool isDevelopmentDependency) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<NuGet.Versioning.NuGetVersion!>!>!
+*REMOVED*DotNetOutdated.Core.Services.INuGetPackageInfoService.GetAllVersions(string! package, System.Collections.Generic.IEnumerable<System.Uri!>! sources, bool includePrerelease, NuGet.Frameworks.NuGetFramework! targetFramework, string! projectFilePath, bool isDevelopmentDependency, int olderThanDays, bool ignoreFailedSources) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<NuGet.Versioning.NuGetVersion!>!>!
+*REMOVED*DotNetOutdated.Core.Services.INuGetPackageResolutionService.ResolvePackageVersions(string! packageName, NuGet.Versioning.NuGetVersion! referencedVersion, System.Collections.Generic.IEnumerable<System.Uri!>! sources, NuGet.Versioning.VersionRange! currentVersionRange, DotNetOutdated.Core.VersionLock versionLock, DotNetOutdated.Core.PrereleaseReporting prerelease, string? prereleaseLabel, NuGet.Frameworks.NuGetFramework! targetFrameworkName, string! projectFilePath, bool isDevelopmentDependency) -> System.Threading.Tasks.Task<NuGet.Versioning.NuGetVersion!>!
+*REMOVED*DotNetOutdated.Core.Services.INuGetPackageResolutionService.ResolvePackageVersions(string! packageName, NuGet.Versioning.NuGetVersion! referencedVersion, System.Collections.Generic.IEnumerable<System.Uri!>! sources, NuGet.Versioning.VersionRange! currentVersionRange, DotNetOutdated.Core.VersionLock versionLock, DotNetOutdated.Core.PrereleaseReporting prerelease, string? prereleaseLabel, NuGet.Frameworks.NuGetFramework! targetFrameworkName, string! projectFilePath, bool isDevelopmentDependency, int olderThanDays, bool ignoreFailedSources) -> System.Threading.Tasks.Task<NuGet.Versioning.NuGetVersion!>!
+*REMOVED*DotNetOutdated.Core.Services.IProjectAnalysisService.AnalyzeProjectAsync(string! projectPath, bool runRestore, bool includeTransitiveDependencies, int transitiveDepth, string? runtime) -> System.Threading.Tasks.Task<System.Collections.Generic.List<DotNetOutdated.Core.Models.Project!>!>!
+*REMOVED*DotNetOutdated.Core.Services.NuGetPackageInfoService.GetAllVersions(string! package, System.Collections.Generic.IEnumerable<System.Uri!>! sources, bool includePrerelease, NuGet.Frameworks.NuGetFramework! targetFramework, string! projectFilePath, bool isDevelopmentDependency) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<NuGet.Versioning.NuGetVersion!>!>!
+*REMOVED*DotNetOutdated.Core.Services.NuGetPackageInfoService.GetAllVersions(string! package, System.Collections.Generic.IEnumerable<System.Uri!>! sources, bool includePrerelease, NuGet.Frameworks.NuGetFramework! targetFramework, string! projectFilePath, bool isDevelopmentDependency, int olderThanDays, bool ignoreFailedSources = false) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<NuGet.Versioning.NuGetVersion!>!>!
+*REMOVED*DotNetOutdated.Core.Services.NuGetPackageResolutionService.ResolvePackageVersions(string! packageName, NuGet.Versioning.NuGetVersion! referencedVersion, System.Collections.Generic.IEnumerable<System.Uri!>! sources, NuGet.Versioning.VersionRange! currentVersionRange, DotNetOutdated.Core.VersionLock versionLock, DotNetOutdated.Core.PrereleaseReporting prerelease, string? prereleaseLabel, NuGet.Frameworks.NuGetFramework! targetFrameworkName, string! projectFilePath, bool isDevelopmentDependency) -> System.Threading.Tasks.Task<NuGet.Versioning.NuGetVersion!>!
+*REMOVED*DotNetOutdated.Core.Services.NuGetPackageResolutionService.ResolvePackageVersions(string! packageName, NuGet.Versioning.NuGetVersion! referencedVersion, System.Collections.Generic.IEnumerable<System.Uri!>! sources, NuGet.Versioning.VersionRange! currentVersionRange, DotNetOutdated.Core.VersionLock versionLock, DotNetOutdated.Core.PrereleaseReporting prerelease, string? prereleaseLabel, NuGet.Frameworks.NuGetFramework! targetFrameworkName, string! projectFilePath, bool isDevelopmentDependency, int olderThanDays, bool ignoreFailedSources = false) -> System.Threading.Tasks.Task<NuGet.Versioning.NuGetVersion!>!
+*REMOVED*DotNetOutdated.Core.Services.ProjectAnalysisService.AnalyzeProjectAsync(string! projectPath, bool runRestore, bool includeTransitiveDependencies, int transitiveDepth, string? runtime) -> System.Threading.Tasks.Task<System.Collections.Generic.List<DotNetOutdated.Core.Models.Project!>!>!
