@@ -62,6 +62,9 @@ namespace DotNetOutdated.Core.Services
         {
             options ??= ProjectAnalysisOptions.Default;
             var runtime = options.Runtime;
+
+            // Generating the restore graph runs `dotnet msbuild` to completion, so don't start it for a cancelled request.
+            cancellationToken.ThrowIfCancellationRequested();
             var dependencyGraph = await _evaluator.GetRestoreGraphAsync(projectPath, runtime).ConfigureAwait(false);
 
             var isFileBasedApp = projectPath.IsCSharpFile();
