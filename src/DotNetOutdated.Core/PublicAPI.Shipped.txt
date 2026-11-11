@@ -144,7 +144,7 @@ DotNetOutdated.Core.Services.RunStatus.ExitCode.get -> int
 DotNetOutdated.Core.Services.RunStatus.FailureDetails.get -> string!
 DotNetOutdated.Core.Services.RunStatus.IsSuccess.get -> bool
 DotNetOutdated.Core.Services.RunStatus.Output.get -> string!
-DotNetOutdated.Core.Services.RunStatus.RunStatus(string! output, string! errors, int exitCode) -> void
+DotNetOutdated.Core.Services.RunStatus.RunStatus(string? output, string? errors, int exitCode) -> void
 DotNetOutdated.Core.VersionLock
 DotNetOutdated.Core.VersionLock.Major = 1 -> DotNetOutdated.Core.VersionLock
 DotNetOutdated.Core.VersionLock.Minor = 2 -> DotNetOutdated.Core.VersionLock

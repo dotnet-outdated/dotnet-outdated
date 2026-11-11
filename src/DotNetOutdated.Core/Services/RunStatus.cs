@@ -4,7 +4,10 @@ namespace DotNetOutdated.Core.Services
 {
     public class RunStatus
     {
+        /// <summary>The process's standard output; empty when there was none.</summary>
         public string Output { get; }
+
+        /// <summary>The process's standard error; empty when there was none.</summary>
         public string Errors { get; }
         public int ExitCode { get; }
 
@@ -19,12 +22,14 @@ namespace DotNetOutdated.Core.Services
         /// </remarks>
         public string FailureDetails => string.Join(
             System.Environment.NewLine,
-            new[] { Output?.Trim(), Errors?.Trim() }.Where(part => !string.IsNullOrEmpty(part)));
+            new[] { Output.Trim(), Errors.Trim() }.Where(part => !string.IsNullOrEmpty(part)));
 
-        public RunStatus(string output, string errors, int exitCode)
+        /// <param name="output">The standard output; <see langword="null"/> is treated as empty.</param>
+        /// <param name="errors">The standard error; <see langword="null"/> is treated as empty.</param>
+        public RunStatus(string? output, string? errors, int exitCode)
         {
-            Output = output;
-            Errors = errors;
+            Output = output ?? string.Empty;
+            Errors = errors ?? string.Empty;
             ExitCode = exitCode;
         }
     }
