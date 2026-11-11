@@ -225,6 +225,20 @@ namespace DotNetOutdated.Tests
         }
 
         [Fact]
+        public async Task UpdatePackage_WithoutKind_LeavesTheKindToBeDetected()
+        {
+            // Clients written before "kind" existed omit it, so the SDK has to be recognised by name (#827).
+            var input = "{\"jsonrpc\": \"2.0\", \"method\": \"tools/call\", \"params\": { \"name\": \"update_package\", \"arguments\": " +
+                "{ \"projectPath\": \"/test/p.csproj\", \"packageName\": \"Aspire.AppHost.Sdk\", \"version\": \"9.1.0\", \"framework\": \"net8.0\" } }, \"id\": 6}\n";
+            _dotNetPackageService.Upgrade(Arg.Any<ReferenceUpgrade>()).Returns(new RunStatus("", "", 0));
+
+            var output = await RunServerAsync(input);
+
+            Assert.Contains("Successfully updated Aspire.AppHost.Sdk to 9.1.0", output);
+            _dotNetPackageService.Received(1).Upgrade(Arg.Is<ReferenceUpgrade>(upgrade => upgrade.Name == "Aspire.AppHost.Sdk" && upgrade.Kind == null));
+        }
+
+        [Fact]
         public async Task UpdatePackage_WithSdkKind_UpdatesTheSdk()
         {
             var input = "{\"jsonrpc\": \"2.0\", \"method\": \"tools/call\", \"params\": { \"name\": \"update_package\", \"arguments\": " +
@@ -254,11 +268,11 @@ namespace DotNetOutdated.Tests
         }
 
         [Fact]
-        public async Task UpdatePackage_WithNullKind_UpdatesThePackage()
+        public async Task UpdatePackage_WithNullKind_LeavesTheKindToBeDetected()
         {
             var input = "{\"jsonrpc\": \"2.0\", \"method\": \"tools/call\", \"params\": { \"name\": \"update_package\", \"arguments\": " +
                 "{ \"projectPath\": \"/test/p.csproj\", \"packageName\": \"Newtonsoft.Json\", \"version\": \"13.0.1\", \"framework\": \"net8.0\", \"kind\": null } }, \"id\": 8}\n";
-            _dotNetPackageService.Upgrade(new ReferenceUpgrade { ProjectPath = "/test/p.csproj", Name = "Newtonsoft.Json", TargetFramework = "net8.0", Version = new VersionRange(new NuGetVersion("13.0.1")), Kind = ReferenceKind.Package })
+            _dotNetPackageService.Upgrade(new ReferenceUpgrade { ProjectPath = "/test/p.csproj", Name = "Newtonsoft.Json", TargetFramework = "net8.0", Version = new VersionRange(new NuGetVersion("13.0.1")), Kind = null })
                 .Returns(new RunStatus("", "", 0));
 
             var output = await RunServerAsync(input);

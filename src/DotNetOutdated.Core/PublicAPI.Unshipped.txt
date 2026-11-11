@@ -158,7 +158,7 @@ DotNetOutdated.Core.Services.ReferenceUpgrade.<Clone>$() -> DotNetOutdated.Core.
 DotNetOutdated.Core.Services.ReferenceUpgrade.Equals(DotNetOutdated.Core.Services.ReferenceUpgrade? other) -> bool
 DotNetOutdated.Core.Services.ReferenceUpgrade.IgnoreFailedSources.get -> bool
 DotNetOutdated.Core.Services.ReferenceUpgrade.IgnoreFailedSources.init -> void
-DotNetOutdated.Core.Services.ReferenceUpgrade.Kind.get -> DotNetOutdated.Core.Services.ReferenceKind
+DotNetOutdated.Core.Services.ReferenceUpgrade.Kind.get -> DotNetOutdated.Core.Services.ReferenceKind?
 DotNetOutdated.Core.Services.ReferenceUpgrade.Kind.init -> void
 DotNetOutdated.Core.Services.ReferenceUpgrade.Name.get -> string!
 DotNetOutdated.Core.Services.ReferenceUpgrade.Name.init -> void

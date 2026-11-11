@@ -228,7 +228,7 @@ namespace DotNetOutdated
                             {
                                 type = "string",
                                 @enum = new[] { "package", "sdk" },
-                                description = "Whether packageName is a package or an MSBuild SDK, as reported by analyze_project (default: package)"
+                                description = "Whether packageName is a package or an MSBuild SDK, as reported by analyze_project. When omitted, a name the project declares as a versioned SDK is updated as an SDK, and any other name as a package; pass it when a project references a package and an SDK with the same name."
                             }
                         },
                         required = new[] { "projectPath", "packageName", "version", "framework" }
@@ -404,7 +404,7 @@ namespace DotNetOutdated
                  throw new ArgumentException("framework is required");
             }
 
-            var kind = ReferenceKind.Package;
+            ReferenceKind? kind = null;
             if (arguments.TryGetProperty("kind", out var kindProp) && kindProp.ValueKind != JsonValueKind.Null)
             {
                 kind = (kindProp.ValueKind == JsonValueKind.String ? kindProp.GetString()?.ToLowerInvariant() : null) switch

@@ -1165,6 +1165,151 @@ Information(""Outdated Sdk"");")
             dotNetRunner.DidNotReceive().Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[0] == "add"));
         }
 
+        // Callers that don't know the kind (MCP clients that omit it) rely on the name: see #827.
+        [Fact]
+        public void FileBasedAppDirectSdk_WithoutKind_UpdatesSdkDirective()
+        {
+            var appPath = XFS.Path(@"c:\repo\cake.cs");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { appPath, new MockFileData("#:property TargetFramework=net10.0\n#:sdk Cake.Sdk@6.0.0\n") }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
+
+            var result = service.Upgrade(appPath, "Cake.Sdk", "net10.0", new VersionRange(new NuGetVersion("6.2.0")), noRestore: true, kind: null);
+
+            Assert.True(result.IsSuccess);
+            dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
+            Assert.Equal("#:property TargetFramework=net10.0\n#:sdk Cake.Sdk@6.2.0\n", mockFileSystem.File.ReadAllText(appPath));
+        }
+
+        [Fact]
+        public void FileBasedAppVariableSdk_WithoutKind_UpdatesVariable()
+        {
+            var appPath = XFS.Path(@"c:\repo\cake.cs");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { appPath, new MockFileData("#:property SdkVersion=6.0.0\n#:sdk Cake.Sdk@$(SdkVersion)\n") }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
+
+            var result = service.Upgrade(appPath, "Cake.Sdk", "net10.0", new VersionRange(new NuGetVersion("6.2.0")), noRestore: true, kind: null);
+
+            Assert.True(result.IsSuccess);
+            dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
+            Assert.Equal("#:property SdkVersion=6.2.0\n#:sdk Cake.Sdk@$(SdkVersion)\n", mockFileSystem.File.ReadAllText(appPath));
+        }
+
+        [Fact]
+        public void FileBasedAppDirectPackage_WithoutKind_UpdatesPackageWithDotNetAdd()
+        {
+            var appPath = XFS.Path(@"c:\repo\app.cs");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { appPath, new MockFileData("#:package Humanizer@2.14.1\n") }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus(string.Empty, string.Empty, 0));
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
+
+            var result = service.Upgrade(appPath, "Humanizer", "net10.0", new VersionRange(new NuGetVersion("3.0.11")), noRestore: true, kind: null);
+
+            Assert.True(result.IsSuccess);
+            dotNetRunner.Received(1).Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[0] == "add" && a[3] == "Humanizer"));
+        }
+
+        [Fact]
+        public void FileBasedAppSdk_WithPackageKind_FailsWithoutAddingAPackageDirective()
+        {
+            var appPath = XFS.Path(@"c:\repo\cake.cs");
+            const string original = "#:sdk Cake.Sdk@6.0.0\n";
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { appPath, new MockFileData(original) }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus(string.Empty, string.Empty, 0));
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
+
+            var result = service.Upgrade(appPath, "Cake.Sdk", "net10.0", new VersionRange(new NuGetVersion("6.2.0")), noRestore: true, kind: ReferenceKind.Package);
+
+            Assert.False(result.IsSuccess);
+            Assert.Contains("#:sdk", result.Errors);
+            Assert.Equal(original, mockFileSystem.File.ReadAllText(appPath));
+            dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
+        }
+
+        [Theory]
+        [InlineData(null)]
+        [InlineData(ReferenceKind.Sdk)]
+        [InlineData(ReferenceKind.Package)]
+        public void FileBasedAppSdkAndPackageWithTheSameId_UpdatesTheSdkUnlessThePackageIsRequested(ReferenceKind? kind)
+        {
+            var appPath = XFS.Path(@"c:\repo\cake.cs");
+            const string original = "#:sdk Cake.Sdk@6.0.0\n#:package Cake.Sdk@6.0.0\n";
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { appPath, new MockFileData(original) }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus(string.Empty, string.Empty, 0));
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
+
+            var result = service.Upgrade(appPath, "Cake.Sdk", "net10.0", new VersionRange(new NuGetVersion("6.2.0")), noRestore: true, kind: kind);
+
+            Assert.True(result.IsSuccess);
+            if (kind == ReferenceKind.Package)
+            {
+                Assert.Equal(original, mockFileSystem.File.ReadAllText(appPath));
+                dotNetRunner.Received(1).Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[0] == "add" && a[3] == "Cake.Sdk"));
+            }
+            else
+            {
+                Assert.Equal("#:sdk Cake.Sdk@6.2.0\n#:package Cake.Sdk@6.0.0\n", mockFileSystem.File.ReadAllText(appPath));
+                dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
+            }
+        }
+
+        [Fact]
+        public void ProjectSdk_WithoutKind_UpdatesProjectFileWithoutAddingPackage()
+        {
+            var projectPath = XFS.Path(@"c:\repo\AppHost\AppHost.csproj");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { projectPath, new MockFileData(@"<Project Sdk=""Aspire.AppHost.Sdk/13.0.0""></Project>") }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus(string.Empty, string.Empty, 0));
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
+
+            var result = service.Upgrade(projectPath, "Aspire.AppHost.Sdk", "net10.0", new VersionRange(new NuGetVersion("13.0.2")), noRestore: true, kind: null);
+
+            Assert.True(result.IsSuccess);
+            Assert.Equal(@"<Project Sdk=""Aspire.AppHost.Sdk/13.0.2""></Project>", mockFileSystem.File.ReadAllText(projectPath));
+            dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
+        }
+
+        [Fact]
+        public void ProjectPackage_WithoutKind_UpdatesPackageWithDotNetAdd()
+        {
+            var projectPath = XFS.Path(@"c:\repo\App\App.csproj");
+            const string original = @"<Project Sdk=""Microsoft.NET.Sdk""><ItemGroup><PackageReference Include=""Newtonsoft.Json"" Version=""12.0.1"" /></ItemGroup></Project>";
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { projectPath, new MockFileData(original) }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus(string.Empty, string.Empty, 0));
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
+
+            var result = service.Upgrade(projectPath, "Newtonsoft.Json", "net8.0", new VersionRange(new NuGetVersion("13.0.1")), kind: null);
+
+            Assert.True(result.IsSuccess);
+            dotNetRunner.Received(1).Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[0] == "add" && a[3] == "Newtonsoft.Json"));
+        }
+
         [Theory]
         [InlineData(ReferenceKind.Package)]
         [InlineData(ReferenceKind.Sdk)]

@@ -45,12 +45,36 @@ internal sealed class VersionLocator(IFileSystem fileSystem, IProjectEvaluator e
     private readonly IProjectEvaluator _evaluator = evaluator;
     private readonly FileBasedAppDirectives _fileBasedAppDirectives = fileBasedAppDirectives;
 
-    public VersionLocation Locate(string projectPath, string name, ReferenceKind kind) =>
-        projectPath.IsCSharpFile()
-            ? LocateInFileBasedApp(projectPath, name, kind)
-            : kind == ReferenceKind.Sdk
-                ? LocateProjectSdk(projectPath, name)
-                : LocatePackage(projectPath, name);
+    /// <param name="kind">
+    /// Whether <paramref name="name"/> is a package or an SDK; when <see langword="null"/>, a name the project
+    /// declares as an SDK is treated as one.
+    /// </param>
+    public VersionLocation Locate(string projectPath, string name, ReferenceKind? kind)
+    {
+        if (projectPath.IsCSharpFile())
+        {
+            return LocateInFileBasedApp(projectPath, name, kind ?? FileBasedAppReferenceKind(projectPath, name));
+        }
+
+        return (kind ?? ProjectReferenceKind(projectPath, name)) == ReferenceKind.Sdk
+            ? LocateProjectSdk(projectPath, name)
+            : LocatePackage(projectPath, name);
+    }
+
+    private ReferenceKind ProjectReferenceKind(string projectPath, string name) =>
+        ProjectSdkReferenceHelper.Discover(_fileSystem, projectPath)
+            .Any(reference => string.Equals(reference.Name, name, StringComparison.OrdinalIgnoreCase))
+            ? ReferenceKind.Sdk
+            : ReferenceKind.Package;
+
+    private ReferenceKind FileBasedAppReferenceKind(string projectPath, string name) =>
+        DeclaresInFileBasedApp(projectPath, name, ReferenceKind.Sdk) ? ReferenceKind.Sdk : ReferenceKind.Package;
+
+    // Whether a file-based app has a #:package or #:sdk directive (literal or through a #:property) for the name.
+    private bool DeclaresInFileBasedApp(string projectPath, string name, ReferenceKind kind) =>
+        _fileBasedAppDirectives.PackageVariables(projectPath, kind).ContainsKey(name) ||
+        _fileBasedAppDirectives.References(projectPath).Any(reference =>
+            reference.Kind == kind && string.Equals(reference.Name, name, StringComparison.OrdinalIgnoreCase));
 
     private VersionLocation LocateInFileBasedApp(string projectPath, string name, ReferenceKind kind)
     {
@@ -61,6 +85,16 @@ internal sealed class VersionLocator(IFileSystem fileSystem, IProjectEvaluator e
 
         if (kind == ReferenceKind.Package)
         {
+            // `dotnet add package` would add a #:package directive next to the #:sdk one rather than update it.
+            if (DeclaresInFileBasedApp(projectPath, name, ReferenceKind.Sdk) &&
+                !DeclaresInFileBasedApp(projectPath, name, ReferenceKind.Package))
+            {
+                return FileBasedAppNotEditable(
+                    projectPath,
+                    name,
+                    $"The file declares {name} with #:sdk, not #:package; upgrade it as an SDK.");
+            }
+
             // `dotnet add package` rewrites a literal #:package directive.
             return new LiteralVersion();
         }
