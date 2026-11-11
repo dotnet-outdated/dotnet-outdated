@@ -229,7 +229,7 @@ namespace DotNetOutdated.Tests
             Assert.Equal("App", project.GetProperty("name").GetString());
             Assert.Equal("/test/App.csproj", project.GetProperty("filePath").GetString());
             var targetFramework = Assert.Single(project.GetProperty("targetFrameworks").EnumerateArray());
-            Assert.Equal("8.0.0.0", targetFramework.GetProperty("name").GetProperty("Version").GetString());
+            Assert.Equal("net8.0", targetFramework.GetProperty("name").GetString());
             Assert.Empty(targetFramework.GetProperty("dependencies").EnumerateArray());
         }
 
@@ -273,12 +273,44 @@ namespace DotNetOutdated.Tests
             var project = Assert.Single(analyzed.EnumerateArray());
             var targetFrameworks = project.GetProperty("targetFrameworks").EnumerateArray().ToList();
             Assert.Equal(2, targetFrameworks.Count);
-            Assert.Equal("8.0.0.0", targetFrameworks[0].GetProperty("name").GetProperty("Version").GetString());
+            Assert.Equal("net8.0", targetFrameworks[0].GetProperty("name").GetString());
             Assert.Empty(targetFrameworks[0].GetProperty("dependencies").EnumerateArray());
-            Assert.Equal("9.0.0.0", targetFrameworks[1].GetProperty("name").GetProperty("Version").GetString());
+            Assert.Equal("net9.0", targetFrameworks[1].GetProperty("name").GetString());
             var reported = Assert.Single(targetFrameworks[1].GetProperty("dependencies").EnumerateArray());
             Assert.Equal("Contoso.Widgets", reported.GetProperty("name").GetString());
             Assert.Equal("1.2.0", reported.GetProperty("latestVersion").GetString());
+        }
+
+        [Fact]
+        public async Task AnalyzeProject_NamesEachFrameworkByTheStringUpdatePackageAccepts()
+        {
+            var input = "{\"jsonrpc\": \"2.0\", \"method\": \"tools/call\", \"params\": { \"name\": \"analyze_project\", \"arguments\": { \"projectPath\": \"/test/p.csproj\" } }, \"id\": 3}\n";
+            var projects = new List<Project>
+            {
+                new()
+                {
+                    Name = "p",
+                    FilePath = "/test/p.csproj",
+                    Version = new NuGetVersion("1.0.0"),
+                    TargetFrameworks =
+                    [
+                        new TargetFramework { Name = NuGetFramework.Parse("net9.0") },
+                        new TargetFramework { Name = NuGetFramework.Parse("net8.0-windows7.0"), TargetAlias = "net8.0-windows" },
+                    ],
+                },
+            };
+            _projectAnalysisService.AnalyzeProjectAsync("/test/p.csproj", Arg.Any<ProjectAnalysisOptions>(), Arg.Any<CancellationToken>()).Returns(projects);
+            _outdatedDependencyService
+                .FindOutdatedAsync(projects, Arg.Any<OutdatedOptions>(), Arg.Any<CancellationToken>())
+                .Returns(Array.Empty<OutdatedProject>());
+
+            var analyzed = ParseAnalyzeProjectResult(await RunServerAsync(input));
+
+            var names = analyzed[0].GetProperty("targetFrameworks").EnumerateArray()
+                .Select(tf => tf.GetProperty("name"))
+                .ToList();
+            Assert.All(names, name => Assert.Equal(JsonValueKind.String, name.ValueKind));
+            Assert.Equal(["net9.0", "net8.0-windows"], names.Select(name => name.GetString()));
         }
 
         private static JsonElement ParseAnalyzeProjectResult(string output)

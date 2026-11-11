@@ -102,6 +102,10 @@ namespace DotNetOutdated.Models
         [JsonConverter(typeof(JsonStringEnumConverter))]
         public DependencyUpgradeSeverity UpgradeSeverity => OutdatedDependency.GetUpgradeSeverity(ResolvedVersion, LatestVersion);
 
+        /// <inheritdoc cref="OutdatedDependency.LatestVersionUnknownReason"/>
+        [JsonIgnore]
+        public LatestVersionUnknownReason LatestVersionUnknownReason => OutdatedDependency.GetLatestVersionUnknownReason(_dependency, LatestVersion);
+
         public AnalyzedDependency(Dependency dependency)
         {
             _dependency = dependency;

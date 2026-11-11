@@ -96,13 +96,12 @@ internal sealed class OutdatedDependencyService(INuGetPackageResolutionService r
         var resolvedVersion = dependency.ResolvedVersion;
         var allowedRange = CapAtMaximumVersion(dependency.VersionRange, options.MaximumVersion);
 
-        // A version can only be looked up from a resolved version and a range with a lower bound; otherwise the latest
-        // version is unknown.
-        LatestVersionQuery? query = resolvedVersion != null && allowedRange.HasLowerBound
+        // Otherwise the latest version is unknown, and OutdatedDependency.LatestVersionUnknownReason says why.
+        LatestVersionQuery? query = OutdatedDependency.CanLookUpLatestVersion(dependency)
             ? new LatestVersionQuery
             {
                 PackageId = dependency.Name,
-                CurrentVersion = resolvedVersion,
+                CurrentVersion = resolvedVersion!,
                 AllowedRange = allowedRange,
                 Sources = project.Sources.ToList(),
                 TargetFramework = targetFramework.Name,

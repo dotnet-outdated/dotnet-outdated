@@ -4,17 +4,18 @@ namespace DotNetOutdated.Tests;
 
 /// <remarks>
 /// The expectations were recorded from McMaster.Extensions.CommandLineUtils' <c>Prompt.GetYesNo</c>, which this
-/// replaced, so the upgrade prompt reads and behaves as it did.
+/// replaced, so the upgrade prompt reads and behaves as it did, except at the end of the input: that is not an
+/// answer, so it gives <see langword="null"/> rather than the default (#831).
 /// </remarks>
 public class PromptTests
 {
     private const string Question = "Do you wish to upgrade this package?";
 
-    public static TheoryData<string, bool, bool, string> Answers() => new()
+    public static TheoryData<string, bool, bool?, string> Answers() => new()
     {
         // input, default answer, expected answer, expected output
-        { "", true, true, Ask(true) },
-        { "", false, false, Ask(false) },
+        { "", true, null, Ask(true) },
+        { "", false, null, Ask(false) },
         { "\n", true, true, Ask(true) },
         { "\n", false, false, Ask(false) },
         { "y\n", true, true, Ask(true) },
@@ -37,13 +38,14 @@ public class PromptTests
         { "maybe\n\n", false, false, Ask(false) + Invalid("maybe") + Ask(false) },
         { "x\nz\nn\n", true, false, Ask(true) + Invalid("x") + Ask(true) + Invalid("z") + Ask(true) },
         { "x\nz\nn\n", false, false, Ask(false) + Invalid("x") + Ask(false) + Invalid("z") + Ask(false) },
-        { "x\n", true, true, Ask(true) + Invalid("x") + Ask(true) },
-        { "x\n", false, false, Ask(false) + Invalid("x") + Ask(false) },
+        { "x\n", true, null, Ask(true) + Invalid("x") + Ask(true) },
+        { "x\n", false, null, Ask(false) + Invalid("x") + Ask(false) },
+        { "x", true, null, Ask(true) + Invalid("x") + Ask(true) },
     };
 
     [Theory]
     [MemberData(nameof(Answers))]
-    public void GetYesNo(string input, bool defaultAnswer, bool expectedAnswer, string expectedOutput)
+    public void GetYesNo(string input, bool defaultAnswer, bool? expectedAnswer, string expectedOutput)
     {
         var console = new RecordingConsole(input);
 
