@@ -277,17 +277,30 @@ public class CommandLineTests
         Assert.Contains("Shell 'tcsh' is not supported. Supported shells: bash, fish, nushell, pwsh, zsh.", error.ToString());
     }
 
+    /// <summary>
+    /// Without a shell name, the shell comes from SHELL, and an unsupported one is a parse error. Windows ignores
+    /// SHELL and always defaults to PowerShell.
+    /// </summary>
     [Fact]
-    public void CompletionsScript_WithoutAShell_ReportsAnUnsupportedShellAsAnError()
+    public void CompletionsScript_WithoutAShell_UsesTheShellFromTheEnvironment()
     {
         var shell = Environment.GetEnvironmentVariable("SHELL");
         try
         {
             Environment.SetEnvironmentVariable("SHELL", "/bin/tcsh");
 
-            var parseResult = CreateCommandLine().Parse(["completions", "script"]);
+            var commandLine = CreateCommandLine();
+            var parseResult = commandLine.Parse(["completions", "script"]);
 
-            Assert.NotEmpty(parseResult.Errors);
+            if (OperatingSystem.IsWindows())
+            {
+                Assert.Empty(parseResult.Errors);
+                Assert.Equal(System.CommandLine.StaticCompletions.ShellNames.PowerShell, parseResult.GetValue(commandLine.CompletionsCommand.GenerateScriptCommand.ShellArgument));
+            }
+            else
+            {
+                Assert.NotEmpty(parseResult.Errors);
+            }
         }
         finally
         {
