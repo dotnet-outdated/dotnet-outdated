@@ -558,6 +558,59 @@ public static class EndToEndTests
     }
 
     [Fact]
+    public static void Recursive_Reports_Each_Project_Once_When_A_Project_References_Another()
+    {
+        // B references A, so the restore graph of B holds A as well as B (issue #830).
+        using var directory = TestSetup("recursive-solution");
+        var outputPath = Path.Combine(directory.Path, "output.json");
+
+        var actual = Program.Main([directory.Path, "--recursive", "--output", outputPath, "--output-format:json"]);
+        Assert.Equal(0, actual);
+
+        using var output = JsonDocument.Parse(File.ReadAllText(outputPath));
+        var reportedPaths = output.RootElement.GetProperty("Projects").EnumerateArray()
+            .Select(project => project.GetProperty("FilePath").GetString())
+            .Order(StringComparer.Ordinal)
+            .ToList();
+
+        // Compare file names: which of the equivalent paths is reported (e.g. /var or /private/var on macOS) is not fixed.
+        Assert.Equal(["A.csproj", "B.csproj"], reportedPaths.Select(Path.GetFileName));
+    }
+
+    [Fact]
+    public static void Recursive_Reports_Each_Project_Once_When_Reached_Through_A_Symbolic_Link()
+    {
+        // The project is analyzed through the link, but MSBuild reports a referenced project by its real path (issue #830).
+        // The link's target is itself under a link, as on macOS where /var/folders/... is under /private/var.
+        using var directory = TestSetup("recursive-solution");
+        var parentLinkPath = directory.Path + "-parent";
+        Directory.CreateSymbolicLink(parentLinkPath, Path.GetDirectoryName(directory.Path)!);
+        var linkPath = directory.Path + "-link";
+        Directory.CreateSymbolicLink(linkPath, Path.Combine(parentLinkPath, Path.GetFileName(directory.Path)));
+
+        try
+        {
+            var outputPath = Path.Combine(directory.Path, "output.json");
+
+            var actual = Program.Main([linkPath, "--recursive", "--output", outputPath, "--output-format:json"]);
+            Assert.Equal(0, actual);
+
+            using var output = JsonDocument.Parse(File.ReadAllText(outputPath));
+            var reportedNames = output.RootElement.GetProperty("Projects").EnumerateArray()
+                .Select(project => Path.GetFileName(project.GetProperty("FilePath").GetString()))
+                .Order(StringComparer.Ordinal)
+                .ToList();
+
+            Assert.Equal(["A.csproj", "B.csproj"], reportedNames);
+        }
+        finally
+        {
+            Directory.Delete(linkPath);
+            Directory.Delete(parentLinkPath);
+        }
+    }
+
+    [Fact]
     public static void Can_Upgrade_Version_Range_Held_In_Variable()
     {
         using var directory = TestSetup("version-range-variables");
@@ -641,9 +694,10 @@ public static class EndToEndTests
 
         var temp = new TemporaryDirectory();
 
-        foreach (var source in Directory.GetFiles(projectPath, "*", SearchOption.TopDirectoryOnly))
+        foreach (var source in Directory.GetFiles(projectPath, "*", SearchOption.AllDirectories))
         {
-            string destination = Path.Combine(temp.Path, Path.GetFileName(source));
+            string destination = Path.Combine(temp.Path, Path.GetRelativePath(projectPath, source));
+            Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
             if (Path.GetFileName(source) == "packages.lock.json")
             {
                 File.WriteAllText(destination, FillContentHashes(File.ReadAllText(source)));

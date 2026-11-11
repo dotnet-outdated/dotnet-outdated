@@ -149,7 +149,14 @@ namespace DotNetOutdated
                 }));
             });
 
-            var projects = projectLists.SelectMany(p => p).ToList();
+            // The restore graph of a project holds the projects it references too, so with --recursive a referenced
+            // project is analyzed both on its own and as part of each project that references it (issue #830).
+            // Report and upgrade each project file once. The paths are compared with symbolic links resolved, because MSBuild
+            // reports a referenced project by its real path (on macOS the temp folder /var is a link to /private/var).
+            var projects = projectLists
+               .SelectMany(p => p)
+               .DistinctBy(p => CanonicalPath(p.FilePath), OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+               .ToList();
 
             // Analyze the dependencies
             var outdatedProjects = await AnalyzeDependencies(projects, console).ConfigureAwait(false);
@@ -296,6 +303,45 @@ namespace DotNetOutdated
          }
 
          return success;
+      }
+
+      /// <summary>
+      /// The full path of <paramref name="path"/> with every symbolic link along it resolved, so two paths to the same
+      /// file compare equal. A part that can't be resolved is kept as it is.
+      /// </summary>
+      private string CanonicalPath(string path) => CanonicalPath(path, linksFollowed: 0);
+
+      private string CanonicalPath(string path, int linksFollowed)
+      {
+         // As many links as the OS follows before it gives up (MAXSYMLINKS on Linux), so a loop of links ends.
+         const int MaxLinksFollowed = 40;
+
+         var fullPath = _fileSystem.Path.GetFullPath(path);
+         var root = _fileSystem.Path.GetPathRoot(fullPath) ?? string.Empty;
+         var current = root;
+
+         foreach (var segment in fullPath[root.Length..].Split(
+            [_fileSystem.Path.DirectorySeparatorChar, _fileSystem.Path.AltDirectorySeparatorChar],
+            StringSplitOptions.RemoveEmptyEntries))
+         {
+            current = _fileSystem.Path.Combine(current, segment);
+
+            try
+            {
+               if (linksFollowed < MaxLinksFollowed &&
+                   _fileSystem.FileInfo.New(current).ResolveLinkTarget(returnFinalTarget: true) is { } target)
+               {
+                  // The target can itself be under a link (on macOS a link to /var/folders/... is under /private/var).
+                  current = CanonicalPath(target.FullName, linksFollowed + 1);
+               }
+            }
+            catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException)
+            {
+               // Not resolvable (e.g. a broken link or no permission): compare this part as written.
+            }
+         }
+
+         return current;
       }
 
       private static void PrintColorLegend(IConsole console)
