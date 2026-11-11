@@ -141,6 +141,23 @@ namespace DotNetOutdated.Tests
         }
 
         [Fact]
+        public void GetDeclarations_RootIsNotProject_ReturnsEmpty()
+        {
+            var fileSystem = CreateFileSystem(@"<Sdk Name=""X.Sdk"" Version=""1.0.0"" Sdk=""Y.Sdk/1.0.0""><Sdk Name=""Z.Sdk"" Version=""1.0.0"" /></Sdk>");
+
+            Assert.Empty(ProjectSdkReferenceHelper.GetDeclarations(fileSystem, ProjectPath));
+        }
+
+        [Fact]
+        public void GetDeclarations_ProjectSdkWithoutName_IsSkipped()
+        {
+            var fileSystem = CreateFileSystem(@"<Project Sdk=""/1.0.0; ;X.Sdk/2.0.0""></Project>");
+
+            var declaration = Assert.Single(ProjectSdkReferenceHelper.GetDeclarations(fileSystem, ProjectPath));
+            Assert.Equal(new ProjectSdkDeclaration("X.Sdk", "2.0.0", ProjectSdkDeclarationKind.ProjectAttribute), declaration);
+        }
+
+        [Fact]
         public void TryUpdate_ProjectSdkAttribute_UpdatesOnlyMatchingSdk()
         {
             var fileSystem = CreateFileSystem(@"<Project Sdk='Microsoft.NET.Sdk;Aspire.AppHost.Sdk/13.0.0'>
@@ -259,6 +276,37 @@ namespace DotNetOutdated.Tests
 
             var expected = encoding.GetPreamble().Concat(encoding.GetBytes("<Project Sdk=\"X.Sdk/2.0.0\">\r\n</Project>\r\n")).ToArray();
             Assert.Equal(expected, fileSystem.File.ReadAllBytes(ProjectPath));
+        }
+
+        [Fact]
+        public void TryUpdate_Utf16File_PreservesEncoding()
+        {
+            var encoding = new UnicodeEncoding(bigEndian: false, byteOrderMark: true);
+            var original = encoding.GetPreamble().Concat(encoding.GetBytes("<Project Sdk=\"X.Sdk/1.0.0\">\r\n</Project>\r\n")).ToArray();
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData> { { ProjectPath, new MockFileData(original) } });
+
+            Assert.True(ProjectSdkReferenceHelper.TryUpdate(fileSystem, ProjectPath, "X.Sdk", new NuGetVersion("2.0.0")));
+
+            var expected = encoding.GetPreamble().Concat(encoding.GetBytes("<Project Sdk=\"X.Sdk/2.0.0\">\r\n</Project>\r\n")).ToArray();
+            Assert.Equal(expected, fileSystem.File.ReadAllBytes(ProjectPath));
+        }
+
+        [Fact]
+        public void TryUpdate_NestedProjectElement_OnlyRootSdkAttributeIsUpdated()
+        {
+            var fileSystem = CreateFileSystem(@"<Project Sdk=""X.Sdk/1.0.0"">
+  <ItemGroup>
+    <Project Sdk=""X.Sdk/1.0.0"" />
+  </ItemGroup>
+</Project>");
+
+            Assert.True(ProjectSdkReferenceHelper.TryUpdate(fileSystem, ProjectPath, "X.Sdk", new NuGetVersion("2.0.0")));
+
+            Assert.Equal(@"<Project Sdk=""X.Sdk/2.0.0"">
+  <ItemGroup>
+    <Project Sdk=""X.Sdk/1.0.0"" />
+  </ItemGroup>
+</Project>", fileSystem.File.ReadAllText(ProjectPath));
         }
 
         [Fact]
