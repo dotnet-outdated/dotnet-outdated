@@ -11,8 +11,13 @@ public sealed record ReferenceUpgrade
     /// <summary>The package or SDK id.</summary>
     public required string Name { get; init; }
 
-    /// <summary>Whether <see cref="Name"/> is a package or an SDK, which matters when a project references both.</summary>
-    public ReferenceKind Kind { get; init; } = ReferenceKind.Package;
+    /// <summary>
+    /// Whether <see cref="Name"/> is a package or an SDK. Set it when known, and always when a project references a
+    /// package and an SDK with the same id. When <see langword="null"/> (the default), a name the project declares as
+    /// a versioned SDK (<c>Sdk="Id/Version"</c>, <c>&lt;Sdk&gt;</c>, <c>&lt;Import Sdk&gt;</c> or a file-based app's
+    /// <c>#:sdk</c> directive) is upgraded as an SDK, and any other name as a package.
+    /// </summary>
+    public ReferenceKind? Kind { get; init; }
 
     /// <summary>The target framework (short folder name or alias) to upgrade the reference for.</summary>
     public required string TargetFramework { get; init; }

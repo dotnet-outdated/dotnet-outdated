@@ -10,6 +10,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Xml.Linq;
 using DotNetOutdated.Core.Services;
+using Microsoft.Extensions.DependencyInjection;
 using NuGet.Versioning;
 using Xunit;
 
@@ -240,6 +241,37 @@ public static class EndToEndTests
 
         Assert.Contains("#:sdk DotNetOutdated.Fake.App.Sdk@6.1.0", content);
         Assert.DoesNotContain("DotNetOutdated.Fake.App.Generator", content);
+    }
+
+    // MCP clients written before update_package took a "kind" don't send one (#827).
+    [RequiresFileBasedAppSdk]
+    public static void Mcp_Update_Without_Kind_Updates_File_Based_App_Sdk_Directive()
+    {
+        using var project = TestSetup("file-based-app-sdk");
+
+        var appPath = Path.Combine(project.Path, "app.cs");
+
+        var result = CallMcpUpdatePackage(appPath, "DotNetOutdated.Fake.App.Sdk", "6.1.0", "net10.0");
+
+        Assert.False(result.TryGetProperty("isError", out _), result.ToString());
+        var content = File.ReadAllText(appPath);
+        Assert.Contains("#:sdk DotNetOutdated.Fake.App.Sdk@6.1.0", content);
+        Assert.DoesNotContain("#:package", content);
+    }
+
+    [Fact]
+    public static void Mcp_Update_Without_Kind_Updates_Versioned_Project_Sdk()
+    {
+        using var project = TestSetup("project-sdk-attribute");
+
+        var projectFilePath = Path.Combine(project.Path, "project-sdk-attribute.csproj");
+
+        var result = CallMcpUpdatePackage(projectFilePath, "DotNetOutdated.Fake.NoTargets.Sdk", "3.8.0", "netstandard2.0");
+
+        Assert.False(result.TryGetProperty("isError", out _), result.ToString());
+        var content = File.ReadAllText(projectFilePath);
+        Assert.Contains("<Project Sdk=\"DotNetOutdated.Fake.NoTargets.Sdk/3.8.0\">", content);
+        Assert.DoesNotContain("PackageReference", content);
     }
 
     [RequiresFileBasedAppSdk]
@@ -647,6 +679,42 @@ public static class EndToEndTests
         Assert.Equal("[12.0.3, 13.0.0)", (string)props.Descendants("FakeJsonVersion").Single());
 
         Assert.Equal("[6.0.1, 7.0.0)", packageVersions["DotNetOutdated.Fake.TextJson"]);
+    }
+
+    // Calls the MCP update_package tool, with no "kind", through the real services and returns the tool result.
+    private static JsonElement CallMcpUpdatePackage(string projectPath, string packageName, string version, string framework)
+    {
+        using var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection()
+            .AddDotNetOutdated()
+            .BuildServiceProvider();
+
+        var request = JsonSerializer.Serialize(new
+        {
+            jsonrpc = "2.0",
+            id = 1,
+            method = "tools/call",
+            @params = new
+            {
+                name = "update_package",
+                arguments = new { projectPath, packageName, version, framework },
+            },
+        });
+
+        using var input = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(request + "\n"));
+        using var output = new MemoryStream();
+        var server = new McpServer(
+            services,
+            services.GetRequiredService<IProjectDiscoveryService>(),
+            services.GetRequiredService<IProjectAnalysisService>(),
+            services.GetRequiredService<IDotNetPackageService>(),
+            services.GetRequiredService<IOutdatedDependencyService>(),
+            input,
+            output);
+
+        server.RunAsync().GetAwaiter().GetResult();
+
+        using var response = JsonDocument.Parse(System.Text.Encoding.UTF8.GetString(output.ToArray()));
+        return response.RootElement.GetProperty("result").Clone();
     }
 
     [Fact]

@@ -14,7 +14,7 @@ namespace DotNetOutdated.Tests
             VersionRange version,
             bool noRestore = false,
             bool ignoreFailedSources = false,
-            ReferenceKind kind = ReferenceKind.Package) =>
+            ReferenceKind? kind = ReferenceKind.Package) =>
             service.Upgrade(new ReferenceUpgrade
             {
                 ProjectPath = projectPath,
