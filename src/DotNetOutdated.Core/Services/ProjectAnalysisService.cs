@@ -18,7 +18,7 @@ namespace DotNetOutdated.Core.Services
 {
     public class ProjectAnalysisService : IProjectAnalysisService
     {
-        private readonly IDependencyGraphService _dependencyGraphService;
+        private readonly IProjectEvaluator _evaluator;
         private readonly IDotNetRestoreService _dotNetRestoreService;
         private readonly IFileSystem _fileSystem;
         private readonly FileBasedAppDirectives _fileBasedAppDirectives;
@@ -41,17 +41,26 @@ namespace DotNetOutdated.Core.Services
             IDotNetRestoreService dotNetRestoreService,
             IFileSystem fileSystem,
             ILogger logger)
+            : this(new DotNetProjectEvaluator(dependencyGraphService, fileSystem), dotNetRestoreService, fileSystem, logger)
         {
-            _dependencyGraphService = dependencyGraphService;
+        }
+
+        internal ProjectAnalysisService(
+            IProjectEvaluator evaluator,
+            IDotNetRestoreService dotNetRestoreService,
+            IFileSystem fileSystem,
+            ILogger logger)
+        {
+            _evaluator = evaluator;
             _dotNetRestoreService = dotNetRestoreService;
             _fileSystem = fileSystem;
-            _fileBasedAppDirectives = new FileBasedAppDirectives(fileSystem, new MSBuildEvaluator(fileSystem));
+            _fileBasedAppDirectives = new FileBasedAppDirectives(fileSystem, evaluator);
             _logger = logger;
         }
 
         public async Task<List<Project>> AnalyzeProjectAsync(string projectPath, bool runRestore, bool includeTransitiveDependencies, int transitiveDepth, string? runtime)
         {
-            var dependencyGraph = await _dependencyGraphService.GenerateDependencyGraphAsync(projectPath, runtime).ConfigureAwait(false);
+            var dependencyGraph = await _evaluator.GetRestoreGraphAsync(projectPath, runtime).ConfigureAwait(false);
 
             var isFileBasedApp = projectPath.IsCSharpFile();
             var fileBasedAppPath = isFileBasedApp ? _fileSystem.Path.GetFullPath(projectPath) : null;
@@ -198,7 +207,7 @@ namespace DotNetOutdated.Core.Services
             await _evaluationThrottle.WaitAsync().ConfigureAwait(false);
             try
             {
-                var items = await Task.Run(() => _dependencyGraphService.GetPackageReferenceItems(evaluation.ProjectPath, evaluation.TargetAlias, evaluation.Runtime)).ConfigureAwait(false);
+                var items = await Task.Run(() => _evaluator.GetPackageReferenceItems(evaluation.ProjectPath, evaluation.TargetAlias, evaluation.Runtime)).ConfigureAwait(false);
                 if (items == null)
                 {
                     _logger.LogVerbose($"Could not evaluate the package references of '{evaluation.ProjectPath}' for {evaluation.TargetAlias}. " +

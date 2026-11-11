@@ -14,10 +14,10 @@ namespace DotNetOutdated.Core.Services;
 /// they declare, and how to change their versions. Properties come from the app's own <c>#:property</c> lines and
 /// from the Directory.* files MSBuild would import for it. Edits keep the file's encoding and byte order mark.
 /// </summary>
-internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, MSBuildEvaluator evaluator, Action<string>? onWarning = null)
+internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IProjectEvaluator evaluator, Action<string>? onWarning = null)
 {
     private readonly IFileSystem _fileSystem = fileSystem;
-    private readonly MSBuildEvaluator _evaluator = evaluator;
+    private readonly IProjectEvaluator _evaluator = evaluator;
     private readonly Action<string>? _onWarning = onWarning;
 
     [GeneratedRegex(@"^[ \t]*#:[ \t]*package[ \t]+(.+?)\s*$")]
@@ -215,7 +215,7 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, MSB
             return false;
         }
 
-        var properties = _evaluator.Evaluate(projectFilePath, includeProjectFile: false).Properties;
+        var properties = _evaluator.GetImportedProperties(projectFilePath);
         if (!properties.TryGetValue(variableName, out var definition) ||
             definition.Ambiguous ||
             definition.ElementIndex < 0 ||
@@ -289,7 +289,7 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, MSB
     // Properties visible to a file-based app from Directory.Build.props and friends (raw values, for chain resolution).
     private void CollectEvaluatedProperties(string projectFilePath, Dictionary<string, (string Value, string FilePath)> propertyDefinitions)
     {
-        foreach (var (name, definition) in _evaluator.Evaluate(projectFilePath, includeProjectFile: false).Properties)
+        foreach (var (name, definition) in _evaluator.GetImportedProperties(projectFilePath))
         {
             propertyDefinitions[name] = (definition.RawValue, definition.FilePath);
         }
