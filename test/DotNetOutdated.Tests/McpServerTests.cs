@@ -176,7 +176,7 @@ namespace DotNetOutdated.Tests
             var output = await RunServerAsync(input);
 
             Assert.Contains("Invalid version", output);
-            _dotNetPackageService.ReceivedCalls().ToList().ForEach(call => Assert.NotEqual("AddPackage", call.GetMethodInfo().Name));
+            _dotNetPackageService.ReceivedCalls().ToList().ForEach(call => Assert.NotEqual(nameof(IDotNetPackageService.Upgrade), call.GetMethodInfo().Name));
         }
 
         [Fact]
@@ -184,7 +184,7 @@ namespace DotNetOutdated.Tests
         {
             var input = "{\"jsonrpc\": \"2.0\", \"method\": \"tools/call\", \"params\": { \"name\": \"update_package\", \"arguments\": " +
                 "{ \"projectPath\": \"/test/p.csproj\", \"packageName\": \"Newtonsoft.Json\", \"version\": \"13.0.1\", \"framework\": \"net8.0\" } }, \"id\": 5}\n";
-            _dotNetPackageService.AddPackage("/test/p.csproj", "Newtonsoft.Json", "net8.0", new VersionRange(new NuGetVersion("13.0.1")))
+            _dotNetPackageService.Upgrade(new ReferenceUpgrade { ProjectPath = "/test/p.csproj", Name = "Newtonsoft.Json", TargetFramework = "net8.0", Version = new VersionRange(new NuGetVersion("13.0.1")) })
                 .Returns(new RunStatus("", "", 0));
 
             var output = await RunServerAsync(input);
@@ -197,7 +197,7 @@ namespace DotNetOutdated.Tests
         {
             var input = "{\"jsonrpc\": \"2.0\", \"method\": \"tools/call\", \"params\": { \"name\": \"update_package\", \"arguments\": " +
                 "{ \"projectPath\": \"/test/p.csproj\", \"packageName\": \"Aspire.AppHost.Sdk\", \"version\": \"9.1.0\", \"framework\": \"net8.0\", \"kind\": \"sdk\" } }, \"id\": 6}\n";
-            _dotNetPackageService.AddPackage("/test/p.csproj", "Aspire.AppHost.Sdk", "net8.0", new VersionRange(new NuGetVersion("9.1.0")), kind: ReferenceKind.Sdk)
+            _dotNetPackageService.Upgrade(new ReferenceUpgrade { ProjectPath = "/test/p.csproj", Name = "Aspire.AppHost.Sdk", TargetFramework = "net8.0", Version = new VersionRange(new NuGetVersion("9.1.0")), Kind = ReferenceKind.Sdk })
                 .Returns(new RunStatus("", "", 0));
 
             var output = await RunServerAsync(input);
@@ -218,7 +218,7 @@ namespace DotNetOutdated.Tests
             var output = await RunServerAsync(input);
 
             Assert.Contains("Invalid kind", output);
-            _dotNetPackageService.DidNotReceiveWithAnyArgs().AddPackage(default, default, default, default(VersionRange));
+            _dotNetPackageService.DidNotReceiveWithAnyArgs().Upgrade(default!);
         }
 
         [Fact]
@@ -226,7 +226,7 @@ namespace DotNetOutdated.Tests
         {
             var input = "{\"jsonrpc\": \"2.0\", \"method\": \"tools/call\", \"params\": { \"name\": \"update_package\", \"arguments\": " +
                 "{ \"projectPath\": \"/test/p.csproj\", \"packageName\": \"Newtonsoft.Json\", \"version\": \"13.0.1\", \"framework\": \"net8.0\", \"kind\": null } }, \"id\": 8}\n";
-            _dotNetPackageService.AddPackage("/test/p.csproj", "Newtonsoft.Json", "net8.0", new VersionRange(new NuGetVersion("13.0.1")), kind: ReferenceKind.Package)
+            _dotNetPackageService.Upgrade(new ReferenceUpgrade { ProjectPath = "/test/p.csproj", Name = "Newtonsoft.Json", TargetFramework = "net8.0", Version = new VersionRange(new NuGetVersion("13.0.1")), Kind = ReferenceKind.Package })
                 .Returns(new RunStatus("", "", 0));
 
             var output = await RunServerAsync(input);
@@ -235,14 +235,13 @@ namespace DotNetOutdated.Tests
         }
 
         [Fact]
-        public async Task UpdatePackage_WhenAddPackageFails_ReturnsOutputAndErrors()
+        public async Task UpdatePackage_WhenUpgradeFails_ReturnsOutputAndErrors()
         {
             // Arrange
             // dotnet add package reports NuGet failures on stdout, so the tool result must include it.
             var input = "{\"jsonrpc\": \"2.0\", \"method\": \"tools/call\", \"params\": { \"name\": \"update_package\", \"arguments\": { \"projectPath\": \"/test/project1.csproj\", \"packageName\": \"Contoso.Widgets\", \"version\": \"2.0.0\", \"framework\": \"net8.0\" } }, \"id\": 4}\n";
 
-            _dotNetPackageService
-                .AddPackage("/test/project1.csproj", "Contoso.Widgets", "net8.0", new VersionRange(new NuGetVersion("2.0.0")))
+            _dotNetPackageService.Upgrade(new ReferenceUpgrade { ProjectPath = "/test/project1.csproj", Name = "Contoso.Widgets", TargetFramework = "net8.0", Version = new VersionRange(new NuGetVersion("2.0.0")) })
                 .Returns(new RunStatus("error: Cannot edit items in imported files", "stderr detail", 1));
 
             // Act

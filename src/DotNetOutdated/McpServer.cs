@@ -346,7 +346,12 @@ namespace DotNetOutdated
             int transitiveDepth = 1;
             string? runtime = null;
 
-            var projects = await _projectAnalysisService.AnalyzeProjectAsync(projectPath, false, includeTransitive, transitiveDepth, runtime);
+            var projects = await _projectAnalysisService.AnalyzeProjectAsync(projectPath, new ProjectAnalysisOptions
+            {
+                IncludeTransitiveDependencies = includeTransitive,
+                TransitiveDepth = transitiveDepth,
+                Runtime = runtime,
+            });
             
             var result = new List<object>();
             foreach (var project in projects)
@@ -364,17 +369,16 @@ namespace DotNetOutdated
                         {
                             try 
                             {
-                                latestVersion = await _nugetService.ResolvePackageVersions(
-                                    dep.Name,
-                                    referencedVersion,
-                                    project.Sources,
-                                    dep.VersionRange,
-                                    VersionLock.None,
-                                    PrereleaseReporting.Auto,
-                                    null,
-                                    tf.Name,
-                                    project.FilePath,
-                                    dep.IsDevelopmentDependency);
+                                latestVersion = await _nugetService.ResolveLatestVersionAsync(new LatestVersionQuery
+                                {
+                                    PackageId = dep.Name,
+                                    CurrentVersion = referencedVersion,
+                                    AllowedRange = dep.VersionRange,
+                                    Sources = project.Sources.ToList(),
+                                    TargetFramework = tf.Name,
+                                    ProjectFilePath = project.FilePath,
+                                    IsDevelopmentDependency = dep.IsDevelopmentDependency,
+                                });
                             }
                             catch (Exception ex)
                             {
@@ -448,7 +452,14 @@ namespace DotNetOutdated
                 };
             }
 
-            RunStatus status = _dotNetPackageService.AddPackage(projectPath, packageName, framework, new VersionRange(version), kind: kind);
+            RunStatus status = _dotNetPackageService.Upgrade(new ReferenceUpgrade
+            {
+                ProjectPath = projectPath,
+                Name = packageName,
+                Kind = kind,
+                TargetFramework = framework,
+                Version = new VersionRange(version),
+            });
 
             if (status.IsSuccess)
             {
