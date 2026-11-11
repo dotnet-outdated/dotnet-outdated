@@ -224,7 +224,16 @@ namespace DotNetOutdated
                   WriteProjectName(project.Description, console);
                }
 
-               upgrade = Prompt.GetYesNo(console, $"Do you wish to upgrade this {referenceNoun}?", true);
+               bool? answer = Prompt.GetYesNo(console, $"Do you wish to upgrade this {referenceNoun}?", true);
+               if (answer is null)
+               {
+                  // The input has ended, so no-one can confirm this or any later upgrade (#831).
+                  console.WriteLine();
+                  console.WriteLine("No input is available to answer the prompt, so the remaining upgrades were skipped.");
+                  break;
+               }
+
+               upgrade = answer.Value;
             }
 
             if (upgrade)
@@ -366,7 +375,27 @@ namespace DotNetOutdated
             console.WriteLine();
          }
 
-         if (projects.SelectMany(p => p.TargetFrameworks).SelectMany(f => f.Dependencies).Any(d => d.UpgradeSeverity == DependencyUpgradeSeverity.Unknown))
+         var allDependencies = projects.SelectMany(p => p.TargetFrameworks).SelectMany(f => f.Dependencies).ToList();
+
+         // A range without a lower bound is never looked up, so it says nothing about the NuGet sources.
+         var unboundedDependencies = allDependencies
+            .Where(d => d.LatestVersionUnknownReason == LatestVersionUnknownReason.NoLowerBound)
+            .DistinctBy(d => (d.Name, d.OriginalVersionRange))
+            .OrderBy(d => d.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+         foreach (var dependency in unboundedDependencies)
+         {
+            console.WriteLine($"The latest version of {dependency.Name} can't be determined because its version range {dependency.OriginalVersionRange} has no lower bound.", ConsoleColor.Yellow);
+         }
+
+         if (unboundedDependencies.Count != 0)
+         {
+            console.WriteLine();
+         }
+
+         // Restore failing to resolve a package is the usual way a source problem shows up here: a lookup that can't
+         // reach a source reports the resolved version instead.
+         if (allDependencies.Any(d => d.LatestVersionUnknownReason is LatestVersionUnknownReason.Unresolved or LatestVersionUnknownReason.NotProvided))
          {
             console.WriteLine("Errors occurred while analyzing dependencies for some of your projects. Are you sure you can connect to all your configured NuGet servers?", ConsoleColor.Red);
             if (String.IsNullOrEmpty(Environment.GetEnvironmentVariable("DOTNET_HOST_PATH")))

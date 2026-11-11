@@ -195,6 +195,40 @@ namespace DotNetOutdated.Tests
             Assert.Contains("Minor", output);
         }
 
+        [Fact]
+        public async Task AnalyzeProject_NamesEachFrameworkByTheStringUpdatePackageAccepts()
+        {
+            // Arrange
+            var input = "{\"jsonrpc\": \"2.0\", \"method\": \"tools/call\", \"params\": { \"name\": \"analyze_project\", \"arguments\": { \"projectPath\": \"/test/p.csproj\" } }, \"id\": 3}\n";
+            var projects = new List<Project> { new() { Name = "p", FilePath = "/test/p.csproj", Version = new NuGetVersion("1.0.0") } };
+            _projectAnalysisService.AnalyzeProjectAsync("/test/p.csproj", Arg.Any<ProjectAnalysisOptions>(), Arg.Any<CancellationToken>()).Returns(projects);
+            _outdatedDependencyService
+                .FindOutdatedAsync(projects, Arg.Any<OutdatedOptions>(), Arg.Any<CancellationToken>())
+                .Returns([new OutdatedProject
+                {
+                    Name = "p",
+                    FilePath = "/test/p.csproj",
+                    TargetFrameworks =
+                    [
+                        new OutdatedTargetFramework { Name = NuGetFramework.Parse("net9.0"), Dependencies = [] },
+                        new OutdatedTargetFramework { Name = NuGetFramework.Parse("net8.0-windows7.0"), TargetAlias = "net8.0-windows", Dependencies = [] },
+                    ],
+                }]);
+
+            // Act
+            var output = await RunServerAsync(input);
+
+            // Assert
+            using var response = JsonDocument.Parse(output);
+            var text = response.RootElement.GetProperty("result").GetProperty("content")[0].GetProperty("text").GetString()!;
+            using var result = JsonDocument.Parse(text);
+            var names = result.RootElement[0].GetProperty("targetFrameworks").EnumerateArray()
+                .Select(tf => tf.GetProperty("name"))
+                .ToList();
+            Assert.All(names, name => Assert.Equal(JsonValueKind.String, name.ValueKind));
+            Assert.Equal(["net9.0", "net8.0-windows"], names.Select(name => name.GetString()));
+        }
+
         [Theory]
         [InlineData("(,14.0.0)")]
         [InlineData("*")]

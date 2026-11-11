@@ -8,10 +8,14 @@ namespace DotNetOutdated
    public static class Prompt
    {
       /// <summary>
-      /// Asks a yes/no question until it gets an answer: "y" or "yes", "n" or "no", in any case. An empty answer, or
-      /// the end of the input, picks <paramref name="defaultAnswer"/>.
+      /// Asks a yes/no question until it gets an answer: "y" or "yes", "n" or "no", in any case. An empty answer picks
+      /// <paramref name="defaultAnswer"/>.
       /// </summary>
-      public static bool GetYesNo(IConsole console, string prompt, bool defaultAnswer)
+      /// <returns>
+      /// The answer, or <see langword="null"/> when the input ends before one is given (for example stdin is closed or
+      /// redirected from <c>/dev/null</c>). That is no answer at all, so the caller must not treat it as the default.
+      /// </returns>
+      public static bool? GetYesNo(IConsole console, string prompt, bool defaultAnswer)
       {
          ArgumentNullException.ThrowIfNull(console);
 
@@ -29,7 +33,9 @@ namespace DotNetOutdated
 
             switch (response)
             {
-               case null or "":
+               case null:
+                  return null;
+               case "":
                   return defaultAnswer;
                case "y" or "yes":
                   return true;

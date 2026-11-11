@@ -366,7 +366,8 @@ namespace DotNetOutdated
                 filePath = project.FilePath,
                 targetFrameworks = project.TargetFrameworks.Select(tf => new
                 {
-                    name = tf.Name,
+                    // The string update_package takes as its framework, as the CLI passes to dotnet add package.
+                    name = string.IsNullOrEmpty(tf.TargetAlias) ? tf.Name.GetShortFolderName() : tf.TargetAlias,
                     dependencies = tf.Dependencies.Select(outdated => new
                     {
                         name = outdated.Dependency.Name,

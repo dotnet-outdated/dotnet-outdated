@@ -14,6 +14,26 @@ namespace DotNetOutdated.Core.Models
         Unknown
     }
 
+    /// <summary>Why a dependency's latest version couldn't be determined.</summary>
+    public enum LatestVersionUnknownReason
+    {
+        /// <summary>The latest version is known.</summary>
+        None,
+
+        /// <summary>Restore didn't resolve the package, so there is no version to look up from.</summary>
+        Unresolved,
+
+        /// <summary>The version range has no lower bound (such as <c>(, 2.0.0]</c>), so it isn't looked up.</summary>
+        NoLowerBound,
+
+        /// <summary>
+        /// The dependency can be looked up, but no latest version was given. The built-in lookup always gives one (the
+        /// resolved version when nothing newer is found, including when a source can't be reached), so only a model or
+        /// <see cref="Services.INuGetPackageResolutionService"/> built elsewhere produces this.
+        /// </summary>
+        NotProvided
+    }
+
     /// <summary>A project with the dependencies of each target framework that have a newer version.</summary>
     public sealed record OutdatedProject
     {
@@ -55,13 +75,38 @@ namespace DotNetOutdated.Core.Models
         public required Dependency Dependency { get; init; }
 
         /// <summary>
-        /// The newest allowed version; <see langword="null"/> when it couldn't be determined, for example because the
-        /// package isn't resolved or no version is older than the requested number of days.
+        /// The newest allowed version, or the resolved version when nothing newer is allowed; <see langword="null"/>
+        /// when it couldn't be determined, and <see cref="LatestVersionUnknownReason"/> says why.
         /// </summary>
         public NuGetVersion? LatestVersion { get; init; }
 
+        /// <summary>Why <see cref="LatestVersion"/> is unknown, or <see cref="Models.LatestVersionUnknownReason.None"/> when it is known.</summary>
+        public LatestVersionUnknownReason LatestVersionUnknownReason => GetLatestVersionUnknownReason(Dependency, LatestVersion);
+
         /// <summary>How big the change from <see cref="Dependency.ResolvedVersion"/> to <see cref="LatestVersion"/> is.</summary>
         public DependencyUpgradeSeverity UpgradeSeverity => GetUpgradeSeverity(Dependency.ResolvedVersion, LatestVersion);
+
+        /// <summary>Why <paramref name="latestVersion"/> of <paramref name="dependency"/> is unknown.</summary>
+        public static LatestVersionUnknownReason GetLatestVersionUnknownReason(Dependency dependency, NuGetVersion? latestVersion)
+        {
+            System.ArgumentNullException.ThrowIfNull(dependency);
+
+            if (latestVersion != null)
+                return LatestVersionUnknownReason.None;
+            if (dependency.ResolvedVersion == null)
+                return LatestVersionUnknownReason.Unresolved;
+            if (!CanLookUpLatestVersion(dependency))
+                return LatestVersionUnknownReason.NoLowerBound;
+
+            return LatestVersionUnknownReason.NotProvided;
+        }
+
+        /// <summary>
+        /// A latest version is looked up from a resolved version and a range with a lower bound. Capping the range at a
+        /// maximum version keeps its lower bound, so the declared range decides.
+        /// </summary>
+        internal static bool CanLookUpLatestVersion(Dependency dependency) =>
+            dependency.ResolvedVersion != null && dependency.VersionRange.HasLowerBound;
 
         /// <summary>How big the change from <paramref name="resolvedVersion"/> to <paramref name="latestVersion"/> is.</summary>
         public static DependencyUpgradeSeverity GetUpgradeSeverity(NuGetVersion? resolvedVersion, NuGetVersion? latestVersion)

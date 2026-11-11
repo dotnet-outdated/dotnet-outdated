@@ -349,3 +349,10 @@ static Microsoft.Extensions.DependencyInjection.DotNetOutdatedServiceCollectionE
 *REMOVED*static DotNetOutdated.Core.Services.PackageReferenceItem.operator ==(DotNetOutdated.Core.Services.PackageReferenceItem? left, DotNetOutdated.Core.Services.PackageReferenceItem? right) -> bool
 *REMOVED*static DotNetOutdated.Core.Services.ProjectSdkDeclaration.operator !=(DotNetOutdated.Core.Services.ProjectSdkDeclaration? left, DotNetOutdated.Core.Services.ProjectSdkDeclaration? right) -> bool
 *REMOVED*static DotNetOutdated.Core.Services.ProjectSdkDeclaration.operator ==(DotNetOutdated.Core.Services.ProjectSdkDeclaration? left, DotNetOutdated.Core.Services.ProjectSdkDeclaration? right) -> bool
+DotNetOutdated.Core.Models.LatestVersionUnknownReason
+DotNetOutdated.Core.Models.LatestVersionUnknownReason.NoLowerBound = 2 -> DotNetOutdated.Core.Models.LatestVersionUnknownReason
+DotNetOutdated.Core.Models.LatestVersionUnknownReason.None = 0 -> DotNetOutdated.Core.Models.LatestVersionUnknownReason
+DotNetOutdated.Core.Models.LatestVersionUnknownReason.NotProvided = 3 -> DotNetOutdated.Core.Models.LatestVersionUnknownReason
+DotNetOutdated.Core.Models.LatestVersionUnknownReason.Unresolved = 1 -> DotNetOutdated.Core.Models.LatestVersionUnknownReason
+DotNetOutdated.Core.Models.OutdatedDependency.LatestVersionUnknownReason.get -> DotNetOutdated.Core.Models.LatestVersionUnknownReason
+static DotNetOutdated.Core.Models.OutdatedDependency.GetLatestVersionUnknownReason(DotNetOutdated.Core.Models.Dependency! dependency, NuGet.Versioning.NuGetVersion? latestVersion) -> DotNetOutdated.Core.Models.LatestVersionUnknownReason
