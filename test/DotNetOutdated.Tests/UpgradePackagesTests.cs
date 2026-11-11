@@ -137,6 +137,63 @@ public class UpgradePackagesTests
         _packageService.DidNotReceiveWithAnyArgs().Upgrade(default!);
     }
 
+    [Fact]
+    public void Prompt_WhenThereIsNoInput_NothingIsUpgradedAndTheUserIsTold()
+    {
+        // Arrange: stdin closed or redirected from /dev/null (#831)
+        UpgradeReturns(new RunStatus(string.Empty, string.Empty, exitCode: 0));
+
+        // Act
+        (bool success, string written) = RunUpgrade(UpgradeType.Prompt, string.Empty, Package("Contoso.A"), Package("Contoso.B"));
+
+        // Assert
+        Assert.True(success);
+        string[] lines = Lines(written);
+        Assert.Contains(lines, line => line.StartsWith("The package Contoso.A can be upgraded"));
+        Assert.Single(lines, line => line == SkippedMessage);
+        Assert.DoesNotContain(lines, line => line.StartsWith("The package Contoso.B can be upgraded"));
+        _packageService.DidNotReceiveWithAnyArgs().Upgrade(default!);
+    }
+
+    [Fact]
+    public void Prompt_WhenTheInputEndsPartWay_OnlyTheAnsweredUpgradesAreMade()
+    {
+        // Arrange
+        UpgradeReturns(new RunStatus(string.Empty, string.Empty, exitCode: 0));
+
+        // Act
+        (bool success, string written) = RunUpgrade(UpgradeType.Prompt, "y\n", Package("Contoso.A"), Package("Contoso.B"), Package("Contoso.C"));
+
+        // Assert
+        Assert.True(success);
+        string[] lines = Lines(written);
+        Assert.Contains(lines, line => line.EndsWith("Upgrading package Contoso.A..."));
+        Assert.Contains(lines, line => line.StartsWith("The package Contoso.B can be upgraded"));
+        Assert.Single(lines, line => line == SkippedMessage);
+        Assert.DoesNotContain(lines, line => line.StartsWith("The package Contoso.C can be upgraded"));
+        _packageService.Received(1).Upgrade(Arg.Is<ReferenceUpgrade>(upgrade => upgrade.Name == "Contoso.A"));
+        _packageService.Received(1).Upgrade(Arg.Any<ReferenceUpgrade>());
+    }
+
+    [Fact]
+    public void Prompt_AnEmptyAnswerStillUpgrades()
+    {
+        // Arrange
+        UpgradeReturns(new RunStatus(string.Empty, string.Empty, exitCode: 0));
+
+        // Act
+        (_, string written) = RunUpgrade(UpgradeType.Prompt, "\n\n", Package("Contoso.A"), Package("Contoso.B"));
+
+        // Assert
+        Assert.DoesNotContain(SkippedMessage, written);
+        _packageService.Received(2).Upgrade(Arg.Any<ReferenceUpgrade>());
+    }
+
+    private const string SkippedMessage = "No input is available to answer the prompt, so the remaining upgrades were skipped.";
+
+    private static Dependency Package(string name) =>
+        new() { Name = name, VersionRange = VersionRange.Parse("1.0.0"), ResolvedVersion = new NuGetVersion("1.0.0") };
+
     private void UpgradeReturns(RunStatus status) =>
         _packageService.Upgrade(Arg.Any<ReferenceUpgrade>()).Returns(status);
 
