@@ -149,7 +149,13 @@ namespace DotNetOutdated
                 }));
             });
 
-            var projects = projectLists.SelectMany(p => p).ToList();
+            // The restore graph of a project holds the projects it references too, so with --recursive a referenced
+            // project is analyzed both on its own and as part of each project that references it (issue #830).
+            // Report and upgrade each project file once.
+            var projects = projectLists
+               .SelectMany(p => p)
+               .DistinctBy(p => _fileSystem.Path.GetFullPath(p.FilePath), OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+               .ToList();
 
             // Analyze the dependencies
             var outdatedProjects = await AnalyzeDependencies(projects, console).ConfigureAwait(false);

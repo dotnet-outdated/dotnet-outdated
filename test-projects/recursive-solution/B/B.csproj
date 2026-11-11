@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>netstandard2.0;net8.0</TargetFrameworks>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="DotNetOutdated.Fake.Json" Version="11.0.1" />
+    <PackageReference Include="DotNetOutdated.Fake.Logging" Version="6.0.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../A/A.csproj" />
+  </ItemGroup>
+</Project>

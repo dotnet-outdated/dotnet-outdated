@@ -558,6 +558,27 @@ public static class EndToEndTests
     }
 
     [Fact]
+    public static void Recursive_Reports_Each_Project_Once_When_A_Project_References_Another()
+    {
+        // B references A, so the restore graph of B holds A as well as B (issue #830).
+        using var directory = TestSetup("recursive-solution");
+        var outputPath = Path.Combine(directory.Path, "output.json");
+
+        var actual = Program.Main([directory.Path, "--recursive", "--output", outputPath, "--output-format:json"]);
+        Assert.Equal(0, actual);
+
+        using var output = JsonDocument.Parse(File.ReadAllText(outputPath));
+        var reportedPaths = output.RootElement.GetProperty("Projects").EnumerateArray()
+            .Select(project => project.GetProperty("FilePath").GetString())
+            .Order(StringComparer.Ordinal)
+            .ToList();
+
+        Assert.Equal(
+            [Path.Combine(directory.Path, "A", "A.csproj"), Path.Combine(directory.Path, "B", "B.csproj")],
+            reportedPaths);
+    }
+
+    [Fact]
     public static void Can_Upgrade_Version_Range_Held_In_Variable()
     {
         using var directory = TestSetup("version-range-variables");
@@ -625,9 +646,10 @@ public static class EndToEndTests
 
         var temp = new TemporaryDirectory();
 
-        foreach (var source in Directory.GetFiles(projectPath, "*", SearchOption.TopDirectoryOnly))
+        foreach (var source in Directory.GetFiles(projectPath, "*", SearchOption.AllDirectories))
         {
-            string destination = Path.Combine(temp.Path, Path.GetFileName(source));
+            string destination = Path.Combine(temp.Path, Path.GetRelativePath(projectPath, source));
+            Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
             if (Path.GetFileName(source) == "packages.lock.json")
             {
                 File.WriteAllText(destination, FillContentHashes(File.ReadAllText(source)));
