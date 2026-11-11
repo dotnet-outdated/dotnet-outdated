@@ -26,7 +26,7 @@ namespace DotNetOutdated
    internal class Program(
         IFileSystem fileSystem,
         IReporter reporter,
-        INuGetPackageResolutionService nugetService,
+        IOutdatedDependencyService outdatedDependencyService,
         IProjectAnalysisService projectAnalysisService,
         IProjectDiscoveryService projectDiscoveryService,
         IDotNetPackageService dotNetPackageService,
@@ -34,7 +34,7 @@ namespace DotNetOutdated
    {
       private readonly IFileSystem _fileSystem = fileSystem;
       private readonly IReporter _reporter = reporter;
-      private readonly INuGetPackageResolutionService _nugetService = nugetService;
+      private readonly IOutdatedDependencyService _outdatedDependencyService = outdatedDependencyService;
       private readonly IProjectAnalysisService _projectAnalysisService = projectAnalysisService;
       private readonly IProjectDiscoveryService _projectDiscoveryService = projectDiscoveryService;
       private readonly IDotNetPackageService _dotNetPackageService = dotNetPackageService;
@@ -106,6 +106,7 @@ namespace DotNetOutdated
                          msg => provider.GetService<IReporter>().Warn(msg)))
                  .AddSingleton<INuGetPackageInfoService, NuGetPackageInfoService>()
                  .AddSingleton<INuGetPackageResolutionService, NuGetPackageResolutionService>()
+                 .AddSingleton<IOutdatedDependencyService, OutdatedDependencyService>()
                  .BuildServiceProvider();
 
          ProgramCommandLine commandLine = null;
@@ -398,172 +399,49 @@ namespace DotNetOutdated
 
       private async Task<List<AnalyzedProject>> AnalyzeDependencies(List<Project> projects, IConsole console)
       {
-         var outdatedProjects = new ConcurrentBag<AnalyzedProject>();
-
          console.WriteLine("Analyzing dependencies...");
 
-         await Parallel.ForEachAsync(projects, async (project, _) => await AddOutdatedProjectsIfNeeded(project, outdatedProjects));
+         var options = new OutdatedOptions
+         {
+            VersionLock = VersionLock,
+            Prerelease = Prerelease,
+            PrereleaseLabel = PrereleaseLabel,
+            OlderThanDays = OlderThanDays,
+            MaximumVersion = ParseMaximumVersion(),
+            IgnoreFailedSources = IgnoreFailedSources,
+            IncludeAutoReferences = IncludeAutoReferences,
+            IncludeUpToDate = IncludeUpToDate,
+            IncludeFilters = FilterInclude,
+            ExcludeFilters = FilterExclude,
+         };
 
-         return outdatedProjects
-             .OrderBy(p => p.Name)
-             .ThenBy(p => p.FilePath)
-             .ToList();
+         var outdatedProjects = await _outdatedDependencyService.FindOutdatedAsync(projects, options).ConfigureAwait(false);
+
+         return outdatedProjects.Select(AnalyzedProject.From).ToList();
       }
 
-      private bool AnyIncludeFilterMatches(Dependency dep) =>
-          FilterInclude.Any(f => NameContains(dep, f));
-
-      private bool NoExcludeFilterMatches(Dependency dep) =>
-          !FilterExclude.Any(f => NameContains(dep, f));
-
-      private static bool NameContains(Dependency dep, string part) =>
-          dep.Name.Contains(part, StringComparison.InvariantCultureIgnoreCase);
-
-      private async Task AddOutdatedProjectsIfNeeded(Project project, ConcurrentBag<AnalyzedProject> outdatedProjects)
+      private NuGetVersion ParseMaximumVersion()
       {
-         var outdatedFrameworks = new ConcurrentBag<AnalyzedTargetFramework>();
-
-         var tasks = new Task[project.TargetFrameworks.Count];
-
-         // Process each target framework with its related dependencies
-         for (var index = 0; index < project.TargetFrameworks.Count; index++)
+         if (string.IsNullOrEmpty(MaxVersion))
          {
-            var targetFramework = project.TargetFrameworks[index];
-            tasks[index] = AddOutdatedFrameworkIfNeeded(targetFramework, project, outdatedFrameworks);
+            return null;
          }
 
-         await Task.WhenAll(tasks).ConfigureAwait(false);
-
-         if (!outdatedFrameworks.IsEmpty)
-            outdatedProjects.Add(new AnalyzedProject(project.Name, project.FilePath, outdatedFrameworks));
-      }
-
-      private async Task AddOutdatedFrameworkIfNeeded(TargetFramework targetFramework, Project project, ConcurrentBag<AnalyzedTargetFramework> outdatedFrameworks)
-      {
-         var outdatedDependencies = new ConcurrentBag<AnalyzedDependency>();
-
-         IEnumerable<Dependency> deps = targetFramework.Dependencies.Values;
-         
-         if (!this.IncludeAutoReferences)
+         if (!Version.TryParse(MaxVersion, out var maxVersion))
          {
-            deps = deps.Where(d => !d.IsAutoReferenced);
+            throw new CommandValidationException($"The specified maximum version '{MaxVersion}' is not a valid version string.");
          }
 
-         if (FilterInclude.Count != 0)
-            deps = deps.Where(AnyIncludeFilterMatches);
-
-         if (FilterExclude.Count != 0)
-            deps = deps.Where(NoExcludeFilterMatches);
-
-         NuGetVersion maximumVersion = null;
-
-         if (!string.IsNullOrEmpty(MaxVersion))
+         // NuGetVersion normalizes no build or revision to 0, when we actually want
+         // those to mean "any version", so we need to force them to int.MaxValue.
+         if (maxVersion.Build is -1 || maxVersion.Revision is -1)
          {
-             if (!Version.TryParse(MaxVersion, out var maxVersion))
-             {
-                 throw new CommandValidationException($"The specified maximum version '{MaxVersion}' is not a valid version string.");
-             }
-
-             // NuGetVersion normalizes no build or revision to 0, when we actually want
-             // those to mean "any version", so we need to force them to int.MaxValue.
-             if (maxVersion.Build is -1 || maxVersion.Revision is -1)
-             {
-                 var build = maxVersion.Build == -1 ? int.MaxValue : maxVersion.Build;
-                 var revision = maxVersion.Revision == -1 ? int.MaxValue : maxVersion.Revision;
-                 maxVersion = new(maxVersion.Major, maxVersion.Minor, build, revision);
-             }
-
-             maximumVersion = new NuGetVersion(maxVersion);
+            var build = maxVersion.Build == -1 ? int.MaxValue : maxVersion.Build;
+            var revision = maxVersion.Revision == -1 ? int.MaxValue : maxVersion.Revision;
+            maxVersion = new(maxVersion.Major, maxVersion.Minor, build, revision);
          }
 
-         var dependencies = deps.OrderBy(dependency => dependency.IsTransitive)
-             .ThenBy(dependency => dependency.Name)
-             .ToArray();
-
-         var tasks = new Task[dependencies.Length];
-
-         for (var index = 0; index < dependencies.Length; index++)
-         {
-            var dependency = dependencies[index];
-
-            tasks[index] = AddOutdatedDependencyIfNeeded(project, targetFramework, dependency, maximumVersion, outdatedDependencies);
-         }
-
-         await Task.WhenAll(tasks).ConfigureAwait(false);
-
-         if (!outdatedDependencies.IsEmpty)
-            outdatedFrameworks.Add(new AnalyzedTargetFramework(targetFramework.Name, outdatedDependencies)
-            {
-               TargetAlias = targetFramework.TargetAlias,
-            });
-      }
-
-      private async Task AddOutdatedDependencyIfNeeded(
-          Project project,
-          TargetFramework targetFramework,
-          Dependency dependency,
-          NuGetVersion maximumVersion,
-          ConcurrentBag<AnalyzedDependency> outdatedDependencies)
-      {
-         var referencedVersion = dependency.ResolvedVersion;
-         var versionRange = dependency.VersionRange;
-         NuGetVersion latestVersion = null;
-
-        if (maximumVersion is not null &&
-            (versionRange.MaxVersion is null || maximumVersion < versionRange.MaxVersion))
-        {
-            // Cap the declared version range at the user-specified maximum: the effective
-            // upper bound is whichever of the two is lower, so pinned versions (e.g. [1.0.0])
-            // and bounded ranges (e.g. [1.0.0, 2.0.0)) are never widened by --maximum-version.
-            versionRange = new(
-                versionRange.MinVersion,
-                versionRange.IsMinInclusive,
-                maximumVersion,
-                includeMaxVersion: true,
-                versionRange.Float,
-                versionRange.OriginalString);
-        }
-
-         LatestVersionQuery query = null;
-         if (referencedVersion != null)
-         {
-            query = new LatestVersionQuery
-            {
-                PackageId = dependency.Name,
-                CurrentVersion = referencedVersion,
-                AllowedRange = versionRange,
-                Sources = project.Sources.ToList(),
-                TargetFramework = targetFramework.Name,
-                ProjectFilePath = project.FilePath,
-                IsDevelopmentDependency = dependency.IsDevelopmentDependency,
-                VersionLock = VersionLock,
-                Prerelease = Prerelease,
-                PrereleaseLabel = PrereleaseLabel,
-                OlderThanDays = OlderThanDays,
-                IgnoreFailedSources = IgnoreFailedSources,
-            };
-            latestVersion = await _nugetService.ResolveLatestVersionAsync(query).ConfigureAwait(false);
-         }
-
-         if (referencedVersion == null || latestVersion == null || referencedVersion != latestVersion || IncludeUpToDate)
-         {
-            // special case when there is version installed which is not older than "OlderThan" days makes "latestVersion" to be null
-            if (OlderThanDays > 0 && latestVersion == null)
-            {
-               NuGetVersion absoluteLatestVersion = query == null
-                   ? null
-                   : await _nugetService.ResolveLatestVersionAsync(query with { OlderThanDays = 0, IgnoreFailedSources = false }).ConfigureAwait(false);
-
-               if (absoluteLatestVersion == null || referencedVersion > absoluteLatestVersion)
-               {
-                  outdatedDependencies.Add(new AnalyzedDependency(dependency, latestVersion));
-               }
-            }
-            else
-            {
-               outdatedDependencies.Add(new AnalyzedDependency(dependency, latestVersion));
-            }
-         }
+         return new NuGetVersion(maxVersion);
       }
 
       private static ConsoleColor GetUpgradeSeverityColor(DependencyUpgradeSeverity? upgradeSeverity)

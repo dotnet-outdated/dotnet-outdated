@@ -30,6 +30,7 @@ namespace DotNetOutdated
                          msg => provider.GetService<IReporter>().Warn(msg)))
                  .AddSingleton<INuGetPackageInfoService, NuGetPackageInfoService>()
                  .AddSingleton<INuGetPackageResolutionService, NuGetPackageResolutionService>()
+                 .AddSingleton<IOutdatedDependencyService, OutdatedDependencyService>()
                  .BuildServiceProvider();
 
             var server = new McpServer(
@@ -37,7 +38,7 @@ namespace DotNetOutdated
                 services.GetRequiredService<IProjectDiscoveryService>(),
                 services.GetRequiredService<IProjectAnalysisService>(),
                 services.GetRequiredService<IDotNetPackageService>(),
-                services.GetRequiredService<INuGetPackageResolutionService>(),
+                services.GetRequiredService<IOutdatedDependencyService>(),
                 Console.OpenStandardInput(),
                 Console.OpenStandardOutput()
             );

@@ -1,4 +1,5 @@
-﻿#nullable enable
+﻿using DotNetOutdated.Core.Models;
+#nullable enable
 using DotNetOutdated.Models;
 using System.Collections.Generic;
 using System.IO;

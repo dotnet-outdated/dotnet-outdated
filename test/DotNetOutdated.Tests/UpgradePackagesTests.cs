@@ -151,7 +151,7 @@ public class UpgradePackagesTests
         var program = new Program(
             Substitute.For<System.IO.Abstractions.IFileSystem>(),
             Substitute.For<IReporter>(),
-            Substitute.For<INuGetPackageResolutionService>(),
+            Substitute.For<IOutdatedDependencyService>(),
             Substitute.For<IProjectAnalysisService>(),
             Substitute.For<IProjectDiscoveryService>(),
             _packageService,
