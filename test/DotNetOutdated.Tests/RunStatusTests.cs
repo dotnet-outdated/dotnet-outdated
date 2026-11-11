@@ -18,4 +18,13 @@ public class RunStatusTests
 
         Assert.Equal(expected.Replace("|", Environment.NewLine), status.FailureDetails);
     }
+
+    [Fact]
+    public void Constructor_TreatsMissingStreamsAsEmpty()
+    {
+        var status = new RunStatus(null, null, exitCode: 0);
+
+        Assert.Equal(string.Empty, status.Output);
+        Assert.Equal(string.Empty, status.Errors);
+    }
 }

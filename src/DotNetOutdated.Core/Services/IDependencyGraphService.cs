@@ -6,7 +6,7 @@ namespace DotNetOutdated.Core.Services
 {
     public interface IDependencyGraphService
     {
-        Task<DependencyGraphSpec> GenerateDependencyGraphAsync(string projectPath, string runtime);
+        Task<DependencyGraphSpec> GenerateDependencyGraphAsync(string projectPath, string? runtime);
 
         /// <summary>
         /// Evaluates a project for one target framework and returns its <c>PackageReference</c> items,
@@ -19,7 +19,7 @@ namespace DotNetOutdated.Core.Services
         /// The evaluated items, or <c>null</c> when the project could not be evaluated. The default implementation
         /// returns an empty list.
         /// </returns>
-        IReadOnlyList<PackageReferenceItem> GetPackageReferenceItems(string projectPath, string targetFramework, string runtime = null) => [];
+        IReadOnlyList<PackageReferenceItem>? GetPackageReferenceItems(string projectPath, string targetFramework, string? runtime = null) => [];
     }
 
     /// <summary>
@@ -27,5 +27,5 @@ namespace DotNetOutdated.Core.Services
     /// </summary>
     /// <param name="Name">The package id.</param>
     /// <param name="DefiningProjectFullPath">The full path of the project, props or targets file that defined the item.</param>
-    public sealed record PackageReferenceItem(string Name, string DefiningProjectFullPath);
+    public sealed record PackageReferenceItem(string? Name, string? DefiningProjectFullPath);
 }

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.RegularExpressions;
 using NuGet.Versioning;
 
@@ -69,7 +70,7 @@ internal static partial class VersionExpression
     /// <summary>
     /// Evaluates a supported version expression for a given value of its variable.
     /// </summary>
-    public static bool TryEvaluate(string expression, string variableValue, out VersionRange range)
+    public static bool TryEvaluate(string expression, string? variableValue, [NotNullWhen(true)] out VersionRange? range)
     {
         range = null;
         if (!TryParse(expression, out var variableName, out var isRange))
@@ -98,7 +99,7 @@ internal static partial class VersionExpression
             return originalExpression;
         }
 
-        if (TryEvaluate(originalExpression, newRange.MinVersion.ToString(), out var evaluated) &&
+        if (TryEvaluate(originalExpression, newRange.MinVersion!.ToString(), out var evaluated) &&
             evaluated.Equals(newRange))
         {
             return originalExpression;

@@ -8,6 +8,9 @@
     <Authors>dotnet-outdated Team &amp; Contributors</Authors>
     <Copyright>Copyright (c) Jerrie Pelser</Copyright>
     <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <!-- Keep the public API files and nullability annotations accurate: both are part of the package's contract. -->
+    <WarningsAsErrors>$(WarningsAsErrors);Nullable;RS0016;RS0017;RS0036;RS0037</WarningsAsErrors>
     <PackageId>DotNetOutdatedTool.Core</PackageId>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/dotnet-outdated/dotnet-outdated</PackageProjectUrl>
@@ -18,6 +21,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" Version="5.6.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
     <PackageReference Include="NuGet.Configuration" Version="7.9.0" />
     <PackageReference Include="NuGet.Credentials" Version="7.9.0" />
     <PackageReference Include="NuGet.ProjectModel" Version="7.9.0" />
@@ -25,6 +32,12 @@
     <PackageReference Include="NuGet.Versioning" Version="7.9.0" />
     <PackageReference Include="System.Formats.Asn1" Version="10.0.14" />
     <PackageReference Include="System.IO.Abstractions" Version="22.3.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The public API of the package. A change shows up here so it can be reviewed; see PublicAPI.Unshipped.txt. -->
+    <AdditionalFiles Include="PublicAPI.Shipped.txt" />
+    <AdditionalFiles Include="PublicAPI.Unshipped.txt" />
   </ItemGroup>
 
   <ItemGroup>

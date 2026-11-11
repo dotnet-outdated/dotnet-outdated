@@ -49,19 +49,17 @@ namespace DotNetOutdated.Core.Services
             _logger = logger;
         }
 
-        public async Task<List<Project>> AnalyzeProjectAsync(string projectPath, bool runRestore, bool includeTransitiveDependencies, int transitiveDepth,  string runtime)
+        public async Task<List<Project>> AnalyzeProjectAsync(string projectPath, bool runRestore, bool includeTransitiveDependencies, int transitiveDepth, string? runtime)
         {
             var dependencyGraph = await _dependencyGraphService.GenerateDependencyGraphAsync(projectPath, runtime).ConfigureAwait(false);
-            if (dependencyGraph == null)
-                return null;
 
             var isFileBasedApp = projectPath.IsCSharpFile();
-            var projectFilePath = isFileBasedApp ? _fileSystem.Path.GetFullPath(projectPath) : null;
+            var fileBasedAppPath = isFileBasedApp ? _fileSystem.Path.GetFullPath(projectPath) : null;
             var projects = new List<Project>();
             var sdkEvaluations = new List<SdkEvaluation>();
             foreach (var packageSpec in dependencyGraph.Projects.Where(p => p.RestoreMetadata.ProjectStyle == ProjectStyle.PackageReference))
             {
-                var analyzedProjectPath = isFileBasedApp ? projectFilePath : packageSpec.FilePath;
+                var analyzedProjectPath = fileBasedAppPath ?? packageSpec.FilePath!;
 
                 // Restore the packages
                 if (runRestore)
@@ -108,13 +106,13 @@ namespace DotNetOutdated.Core.Services
                             if (projectLibrary != null)
                             {
                                 // Determine whether this is a development dependency
-                                var packageIdentity = new PackageIdentity(projectLibrary.Name, projectLibrary.Version);
+                                var packageIdentity = new PackageIdentity(projectLibrary.Name!, projectLibrary.Version);
                                 var packageInfo = LocalFolderUtility.GetPackageV3(packageSpec.RestoreMetadata.PackagesPath, packageIdentity, NullLogger.Instance);
                                 if (packageInfo != null)
                                     isDevelopmentDependency = packageInfo.GetReader().GetDevelopmentDependency();
                             }
 
-                            var dependency = new Dependency(projectDependency.Name, projectDependency.LibraryRange.VersionRange, projectLibrary?.Version,
+                            var dependency = new Dependency(projectDependency.Name, projectDependency.LibraryRange.VersionRange!, projectLibrary?.Version,
                                 projectDependency.AutoReferenced, false, isDevelopmentDependency);
                             targetFramework.Dependencies.TryAdd(dependency.Name, dependency);
 
@@ -217,14 +215,14 @@ namespace DotNetOutdated.Core.Services
             }
         }
 
-        private List<string> GetPackageFolders(string projectPath, PackageSpec packageSpec) =>
+        private List<string?> GetPackageFolders(string projectPath, PackageSpec packageSpec) =>
             // The SDK resolver finds SDKs in the global packages folder from the NuGet settings, while restore uses
             // RestorePackagesPath when it is set, so check both.
             new[] { packageSpec.RestoreMetadata.PackagesPath, GetConfiguredGlobalPackagesFolder(projectPath) }
                 .Concat(packageSpec.RestoreMetadata.FallbackFolders ?? [])
                 .ToList();
 
-        private string GetConfiguredGlobalPackagesFolder(string projectPath)
+        private string? GetConfiguredGlobalPackagesFolder(string projectPath)
         {
             try
             {
@@ -238,9 +236,9 @@ namespace DotNetOutdated.Core.Services
             }
         }
 
-        private sealed record SdkEvaluation(string ProjectPath, string TargetAlias, string Runtime, List<string> PackageFolders, TargetFramework TargetFramework);
+        private sealed record SdkEvaluation(string ProjectPath, string TargetAlias, string? Runtime, List<string?> PackageFolders, TargetFramework TargetFramework);
 
-        private void AddDependencies(TargetFramework targetFramework, LockFileTargetLibrary parentLibrary, LockFileTarget target, int level, int transitiveDepth)
+        private void AddDependencies(TargetFramework targetFramework, LockFileTargetLibrary? parentLibrary, LockFileTarget target, int level, int transitiveDepth)
         {
             if (parentLibrary?.Dependencies != null)
             {

@@ -17,7 +17,7 @@ namespace DotNetOutdated.Core.Services
     /// </summary>
     public class DotNetPackageService : IDotNetPackageService
     {
-        private readonly Action<string> _onWarning;
+        private readonly Action<string>? _onWarning;
         private readonly IDotNetRunner _dotNetRunner;
         private readonly IFileSystem _fileSystem;
         private readonly VersionLocator _versionLocator;
@@ -29,7 +29,7 @@ namespace DotNetOutdated.Core.Services
         private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _restoredVariableStates =
             new(StringComparer.OrdinalIgnoreCase);
 
-        public DotNetPackageService(IDotNetRunner dotNetRunner, IFileSystem fileSystem, Action<string> onWarning = null)
+        public DotNetPackageService(IDotNetRunner dotNetRunner, IFileSystem fileSystem, Action<string>? onWarning = null)
         {
             _dotNetRunner = dotNetRunner;
             _fileSystem = fileSystem;
@@ -80,7 +80,7 @@ namespace DotNetOutdated.Core.Services
             bool IgnoreFailedSources)
         {
             // Locations that can only hold a single version (file-based app directives, SDKs) take the lower bound.
-            public NuGetVersion Version => VersionRange.MinVersion;
+            public NuGetVersion Version => VersionRange.MinVersion!; // AddPackage rejects ranges without a lower bound.
         }
 
         private RunStatus UpdateFileBasedVariable(PackageVariableInfo variableInfo, UpgradeOptions options)
@@ -201,7 +201,7 @@ namespace DotNetOutdated.Core.Services
 
         // Runs `dotnet add package`, then puts back what it loses: the Directory.Packages.props layout and, when the
         // version came from a variable, the variable reference.
-        private RunStatus AddWithDotNet(UpgradeOptions options, PackageVariableInfo variableInfo)
+        private RunStatus AddWithDotNet(UpgradeOptions options, PackageVariableInfo? variableInfo)
         {
             var projectPath = options.ProjectPath;
             string projectName = _fileSystem.Path.GetFileName(projectPath);
@@ -282,7 +282,7 @@ namespace DotNetOutdated.Core.Services
             NoMatchingEntry,
         }
 
-        private CentralPackageVersionUpdate TryUpdateCentralPackageVersion(string projectPath, string packageName, VersionRange versionRange, out string centralPackagesPath)
+        private CentralPackageVersionUpdate TryUpdateCentralPackageVersion(string projectPath, string packageName, VersionRange versionRange, out string? centralPackagesPath)
         {
             centralPackagesPath = null;
             foreach (var cpvmFile in FindCentralPackagesFiles(projectPath))
@@ -324,7 +324,7 @@ namespace DotNetOutdated.Core.Services
             while (directory != null)
             {
                 var files = directory.GetFiles("*", SearchOption.TopDirectoryOnly);
-                IFileInfo cpvmFile = null;
+                IFileInfo? cpvmFile = null;
                 foreach (var file in files)
                 {
                     if (file.Name.Equals("Directory.Packages.props", StringComparison.OrdinalIgnoreCase))

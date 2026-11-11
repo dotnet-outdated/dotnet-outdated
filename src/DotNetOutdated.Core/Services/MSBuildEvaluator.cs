@@ -20,15 +20,15 @@ internal sealed class MSBuildEvaluator(IFileSystem fileSystem)
 
     internal sealed class PropertyDefinition
     {
-        public string Name { get; init; }
+        public required string Name { get; init; }
 
         /// <summary>The trimmed text inside the property element.</summary>
-        public string RawValue { get; init; }
+        public required string RawValue { get; init; }
 
         /// <summary>The value after expanding property references, or <see langword="null"/> when that isn't possible.</summary>
-        public string Value { get; init; }
+        public string? Value { get; init; }
 
-        public string FilePath { get; init; }
+        public required string FilePath { get; init; }
 
         /// <summary>Index of this element among same-named properties under any <c>PropertyGroup</c> in <see cref="FilePath"/>.</summary>
         public int ElementIndex { get; init; }
@@ -37,18 +37,18 @@ internal sealed class MSBuildEvaluator(IFileSystem fileSystem)
         public bool Ambiguous { get; init; }
 
         /// <summary>When <see cref="RawValue"/> is exactly <c>$(Other)</c>, the name of that property.</summary>
-        public string LinkName { get; init; }
+        public string? LinkName { get; init; }
 
         /// <summary>The definition of <see cref="LinkName"/> in effect when this property was assigned, if any.</summary>
-        public PropertyDefinition Link { get; init; }
+        public PropertyDefinition? Link { get; init; }
     }
 
     internal sealed class PackageItem
     {
-        public string PackageName { get; init; }
-        public string ElementType { get; init; }
-        public string FilePath { get; init; }
-        public string VersionExpression { get; init; }
+        public required string PackageName { get; init; }
+        public required string ElementType { get; init; }
+        public required string FilePath { get; init; }
+        public required string VersionExpression { get; init; }
         public bool IsVersionOverride { get; init; }
     }
 
@@ -113,7 +113,7 @@ internal sealed class MSBuildEvaluator(IFileSystem fileSystem)
         return state;
     }
 
-    private string FindFileAbove(string startDirectory, string fileName)
+    private string? FindFileAbove(string startDirectory, string fileName)
     {
         var directory = startDirectory;
         while (!string.IsNullOrEmpty(directory))
@@ -130,7 +130,7 @@ internal sealed class MSBuildEvaluator(IFileSystem fileSystem)
         return null;
     }
 
-    private void EvaluateFileIfPresent(string filePath, EvaluationState state, bool uncertain = false)
+    private void EvaluateFileIfPresent(string? filePath, EvaluationState state, bool uncertain = false)
     {
         if (string.IsNullOrEmpty(filePath) || !state.ImportedFiles.Add(filePath))
         {
@@ -281,9 +281,9 @@ internal sealed class MSBuildEvaluator(IFileSystem fileSystem)
 
         var rawValue = property.Value.Trim();
         var ambiguous = uncertain || condition == null;
-        string linkName = null;
-        PropertyDefinition link = null;
-        string value;
+        string? linkName = null;
+        PropertyDefinition? link = null;
+        string? value;
 
         if (VersionExpression.TryGetSinglePropertyReference(rawValue, out var referenced) && !IsWellKnownProperty(referenced))
         {
@@ -403,7 +403,7 @@ internal sealed class MSBuildEvaluator(IFileSystem fileSystem)
         EvaluateFileIfPresent(resolved, state, uncertain || condition == null);
     }
 
-    private bool? EvaluateCondition(XElement element, string filePath, EvaluationState state, IReadOnlyCollection<string> assignedProperties)
+    private bool? EvaluateCondition(XElement element, string filePath, EvaluationState state, IReadOnlyCollection<string>? assignedProperties)
     {
         var condition = GetAttributeValue(element, "Condition");
         return condition == null
@@ -450,7 +450,7 @@ internal sealed class MSBuildEvaluator(IFileSystem fileSystem)
     /// An undefined property in <paramref name="assignedProperties"/> (those the condition's element assigns)
     /// expands to empty, so the common <c>Condition="'$(X)' == ''"</c> default pattern can be evaluated.
     /// </summary>
-    private string Expand(string text, string filePath, EvaluationState state, IReadOnlyCollection<string> assignedProperties)
+    private string? Expand(string text, string filePath, EvaluationState state, IReadOnlyCollection<string>? assignedProperties)
     {
         if (string.IsNullOrEmpty(text))
         {
@@ -538,7 +538,7 @@ internal sealed class MSBuildEvaluator(IFileSystem fileSystem)
             // A version on the PackageReference (Version or VersionOverride) takes precedence over central versions.
             var item = state.PackageReferences.GetValueOrDefault(packageName) ??
                        state.GlobalPackageReferences.GetValueOrDefault(packageName) ??
-                       state.PackageVersions.GetValueOrDefault(packageName);
+                       state.PackageVersions[packageName];
 
             var info = CreatePackageVariableInfo(item, state);
             if (info != null)
@@ -550,7 +550,7 @@ internal sealed class MSBuildEvaluator(IFileSystem fileSystem)
         return result;
     }
 
-    private static PackageVariableInfo CreatePackageVariableInfo(PackageItem item, EvaluationState state)
+    private static PackageVariableInfo? CreatePackageVariableInfo(PackageItem item, EvaluationState state)
     {
         if (!item.VersionExpression.Contains("$(", StringComparison.Ordinal))
         {
@@ -578,7 +578,7 @@ internal sealed class MSBuildEvaluator(IFileSystem fileSystem)
 
         // Follow $(A) -> <A>$(B)</A> -> <B>1.0.0</B> to the property that holds the literal version.
         state.Properties.TryGetValue(variableName, out var definition);
-        PropertyDefinition anchor = null;
+        PropertyDefinition? anchor = null;
         string rootName = variableName;
         var ambiguous = false;
         while (definition != null)
@@ -653,10 +653,10 @@ internal sealed class MSBuildEvaluator(IFileSystem fileSystem)
         return !string.IsNullOrEmpty(versionValue);
     }
 
-    private static string GetAttributeOrElementValue(XElement element, string name) =>
+    private static string? GetAttributeOrElementValue(XElement element, string name) =>
         GetAttributeValue(element, name) ??
         element.Elements().FirstOrDefault(e => e.Name.LocalName.Equals(name, StringComparison.OrdinalIgnoreCase))?.Value.Trim();
 
-    private static string GetAttributeValue(XElement element, string name) =>
+    private static string? GetAttributeValue(XElement element, string name) =>
         element.Attributes().FirstOrDefault(a => a.Name.LocalName.Equals(name, StringComparison.OrdinalIgnoreCase))?.Value;
 }

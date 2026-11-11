@@ -10,21 +10,21 @@ internal sealed class PackageVariableInfo
 
     public const string FileBasedSdkDirectiveElementType = "FileBasedSdkDirective";
 
-    public string PackageName { get; set; }
-    public string VariableName { get; set; }
-    public string VariableValue { get; set; }
-    public string FilePath { get; set; }  // Where the property is DEFINED
-    public string PackageReferenceFilePath { get; set; }  // Where the PackageReference/PackageVersion is USED
-    public string ElementType { get; set; }
-    public string PackageReferenceName { get; set; }
-    public string PackageReferenceVersion { get; set; }
+    public required string PackageName { get; set; }
+    public string VariableName { get; set; } = string.Empty;
+    public required string VariableValue { get; set; }
+    public string FilePath { get; set; } = string.Empty;  // Where the property is DEFINED
+    public required string PackageReferenceFilePath { get; set; }  // Where the PackageReference/PackageVersion is USED
+    public required string ElementType { get; set; }
+    public string? PackageReferenceName { get; set; }
+    public string PackageReferenceVersion { get; set; } = string.Empty;
     public bool IsVersionOverride { get; set; }
 
     /// <summary>
     /// Why the variable can't be updated safely (for example an unsupported version expression, or a property
     /// assigned under a condition that can't be evaluated statically); <see langword="null"/> when it can.
     /// </summary>
-    public string UnsupportedReason { get; set; }
+    public string? UnsupportedReason { get; set; }
 
     /// <summary>Which same-named property element in <see cref="FilePath"/> is in effect; -1 when unknown.</summary>
     public int PropertyElementIndex { get; set; } = -1;

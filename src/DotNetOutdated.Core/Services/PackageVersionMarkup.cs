@@ -53,8 +53,8 @@ namespace DotNetOutdated.Core.Services
             string[] elementNames,
             string packageName,
             string newValue,
-            string previousExpression = null,
-            VersionRange expectedLiteral = null)
+            string? previousExpression = null,
+            VersionRange? expectedLiteral = null)
         {
             var result = ReplaceVersionAttributes(
                 content, elementNames, packageName, newValue, allowVersionOverride: true, skipExistingVariables: true, out _, previousExpression, expectedLiteral);
@@ -100,8 +100,8 @@ namespace DotNetOutdated.Core.Services
             bool allowVersionOverride,
             bool skipExistingVariables,
             out bool matched,
-            string previousExpression = null,
-            VersionRange expectedLiteral = null)
+            string? previousExpression = null,
+            VersionRange? expectedLiteral = null)
         {
             var elements = string.Join("|", Array.ConvertAll(elementNames, Regex.Escape));
             var pattern =
@@ -133,7 +133,7 @@ namespace DotNetOutdated.Core.Services
             return result;
         }
 
-        private static bool IsRestorable(string value, string previousExpression, VersionRange expectedLiteral)
+        private static bool IsRestorable(string value, string? previousExpression, VersionRange? expectedLiteral)
         {
             var trimmed = value.Trim();
             if (previousExpression != null && string.Equals(trimmed, previousExpression.Trim(), StringComparison.Ordinal))
@@ -150,10 +150,10 @@ namespace DotNetOutdated.Core.Services
                    (VersionRange.TryParse(trimmed, out var literal) && literal.Equals(expectedLiteral));
         }
 
-        private static bool MatchesPackage(string attributesText, string packageName, bool allowVersionOverride, out Group version)
+        private static bool MatchesPackage(string attributesText, string packageName, bool allowVersionOverride, out Group? version)
         {
-            Group versionAttr = null;
-            Group overrideAttr = null;
+            Group? versionAttr = null;
+            Group? overrideAttr = null;
             var isPackage = false;
 
             foreach (Match attribute in Attribute.Matches(attributesText))

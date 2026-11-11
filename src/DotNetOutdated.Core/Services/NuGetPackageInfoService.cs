@@ -17,13 +17,13 @@ namespace DotNetOutdated.Core.Services
 
     public sealed class NuGetPackageInfoService : INuGetPackageInfoService, IDisposable
     {
-        private IEnumerable<PackageSource> _enabledSources;
-
-        private PackageSourceMapping _packageSourceMapping;
+        // The enabled sources and the package source mapping come from the same settings and are published together,
+        // so a concurrent first call never sees sources without their mapping (which would query unmapped sources).
+        private SourceSettings? _sourceSettings;
 
         private readonly SourceCacheContext _context;
 
-        private readonly ConcurrentDictionary<string, Task<PackageMetadataResource>> _metadataResourceRequests = [];
+        private readonly ConcurrentDictionary<string, Task<PackageMetadataResource?>> _metadataResourceRequests = [];
 
         public NuGetPackageInfoService()
         {
@@ -33,20 +33,23 @@ namespace DotNetOutdated.Core.Services
             };
         }
 
-        private IEnumerable<PackageSource> GetEnabledSources(string root)
+        private sealed record SourceSettings(IEnumerable<PackageSource> EnabledSources, PackageSourceMapping PackageSourceMapping);
+
+        private SourceSettings GetSourceSettings(string root)
         {
-            if (_enabledSources == null)
+            if (_sourceSettings == null)
             {
                 var settings = Settings.LoadDefaultSettings(root);
-                _enabledSources = SettingsUtility.GetEnabledSources(settings);
-                _packageSourceMapping = PackageSourceMapping.GetPackageSourceMapping(settings);
+                _sourceSettings = new SourceSettings(
+                    SettingsUtility.GetEnabledSources(settings),
+                    PackageSourceMapping.GetPackageSourceMapping(settings));
             }
 
-            return _enabledSources;
+            return _sourceSettings;
         }
 
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "This method is supposed to fail silently")]
-        private async Task<PackageMetadataResource> FindMetadataResourceForSource(Uri source, string projectFilePath, string packageId)
+        private async Task<PackageMetadataResource?> FindMetadataResourceForSource(Uri source, string projectFilePath, string packageId)
         {
             try
             {
@@ -55,13 +58,13 @@ namespace DotNetOutdated.Core.Services
                 // We try and create the source repository from the enable sources we loaded from config.
                 // This allows us to inherit the username/password for the source from the config and thus
                 // enables secure feeds to work properly
-                var enabledSources = this.GetEnabledSources(projectFilePath);
-                var enabledSource = enabledSources?.FirstOrDefault(s => s.SourceUri == source);
+                var sourceSettings = GetSourceSettings(projectFilePath);
+                var enabledSource = sourceSettings.EnabledSources.FirstOrDefault(s => s.SourceUri == source);
 
 
-                if (enabledSource != null && _packageSourceMapping.IsEnabled)
+                if (enabledSource != null && sourceSettings.PackageSourceMapping.IsEnabled)
                 {
-                    var mappedSources = _packageSourceMapping.GetConfiguredPackageSources(packageId);
+                    var mappedSources = sourceSettings.PackageSourceMapping.GetConfiguredPackageSources(packageId);
                     if (mappedSources != null && !mappedSources.Any(s => string.Equals(s, enabledSource.Name, StringComparison.OrdinalIgnoreCase)))
                     {
                         // Skip package sources that are not mapped to the package
