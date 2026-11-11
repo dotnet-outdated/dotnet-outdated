@@ -25,6 +25,7 @@ namespace DotNetOutdated.Tests
                 new NuGetVersion("1.1.0"),
                 new NuGetVersion("1.2.0"),
                 new NuGetVersion("1.2.2"),
+                new NuGetVersion("1.2.3-pre"),
                 new NuGetVersion("1.3.0-pre"),
                 new NuGetVersion("1.3.0"),
                 new NuGetVersion("1.4.0-pre"),
@@ -112,6 +113,7 @@ namespace DotNetOutdated.Tests
         [InlineData("1.3.0-pre", VersionLock.None, PrereleaseReporting.Never, "2.1.0")]
         [InlineData("1.2.0", VersionLock.Major, PrereleaseReporting.Auto, "1.3.0")]
         [InlineData("1.2.0", VersionLock.Minor, PrereleaseReporting.Auto, "1.2.2")]
+        [InlineData("1.2.0", VersionLock.Minor, PrereleaseReporting.Always, "1.2.3-pre")]
         [InlineData("3.0.0-pre.1", VersionLock.None, PrereleaseReporting.Never, "3.0.0-pre.1")]
         [InlineData("3.0.0-pre.1", VersionLock.None, PrereleaseReporting.Always, "4.0.0-pre.1")]
         [InlineData("3.0.0-pre.1", VersionLock.None, PrereleaseReporting.Auto, "4.0.0-pre.1")]

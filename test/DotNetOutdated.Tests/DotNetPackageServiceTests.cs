@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.IO.Abstractions.TestingHelpers;
+using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using DotNetOutdated.Core.Services;
@@ -168,7 +169,10 @@ namespace DotNetOutdated.Tests
 
             Assert.False(result.IsSuccess);
             Assert.Contains("SomePackage", result.Errors);
-            Assert.Contains(propsPath, result.Errors);
+            Assert.Equal(
+                $"Could not update 'SomePackage' in '{propsPath}': no <PackageVersion> or <GlobalPackageReference> element was found " +
+                "with an Include or Update attribute and a Version attribute. Update the version manually.",
+                result.Errors);
             // Must not fall back to `dotnet add package --no-restore`, which writes the version into the project file.
             dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
             Assert.Equal(propsContent, mockFileSystem.File.ReadAllText(propsPath));
@@ -1659,6 +1663,116 @@ Information(""Outdated Sdk"");")
             var warning = Assert.Single(warnings);
             Assert.Contains("literal version", warning);
             Assert.Contains("$(Major).0.3", warning);
+        }
+
+        [Theory]
+        [InlineData(false, false)]
+        [InlineData(false, true)]
+        [InlineData(true, false)]
+        [InlineData(true, true)]
+        public void AddPackage_PassesIgnoreFailedSourcesToDotNet(bool noRestore, bool ignoreFailedSources)
+        {
+            var projectPath = XFS.Path(@"c:\repo\A\A.csproj");
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                [projectPath] = new("<Project Sdk=\"Microsoft.NET.Sdk\"><ItemGroup><PackageReference Include=\"Serilog\" Version=\"2.0.0\" /></ItemGroup></Project>"),
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
+            var service = new DotNetPackageService(dotNetRunner, fileSystem);
+
+            Assert.True(service.Upgrade(projectPath, "Serilog", "net8.0", new VersionRange(new NuGetVersion("3.0.0")), noRestore, ignoreFailedSources).IsSuccess);
+
+            List<string> expected = ["add", "A.csproj", "package", "Serilog", "-v", "3.0.0", "-f", "net8.0"];
+            if (noRestore)
+            {
+                expected.Add("--no-restore");
+            }
+
+            if (ignoreFailedSources)
+            {
+                expected.Add("--ignore-failed-sources");
+            }
+
+            dotNetRunner.Received(1).Run(XFS.Path(@"c:\repo\A"), Arg.Is<string[]>(a => a.SequenceEqual(expected)));
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void Restore_PassesIgnoreFailedSourcesToDotNet(bool ignoreFailedSources)
+        {
+            var projectPath = XFS.Path(@"c:\repo\AppHost\AppHost.csproj");
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                [projectPath] = new("<Project Sdk=\"Aspire.AppHost.Sdk/9.0.0\"></Project>"),
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
+            var service = new DotNetPackageService(dotNetRunner, fileSystem);
+
+            Assert.True(service.Upgrade(projectPath, "Aspire.AppHost.Sdk", "net9.0", new VersionRange(new NuGetVersion("9.1.0")), noRestore: false, ignoreFailedSources, kind: ReferenceKind.Sdk).IsSuccess);
+
+            string[] expected = ignoreFailedSources
+                ? ["restore", "AppHost.csproj", "--ignore-failed-sources"]
+                : ["restore", "AppHost.csproj"];
+            dotNetRunner.Received(1).Run(XFS.Path(@"c:\repo\AppHost"), Arg.Is<string[]>(a => a.SequenceEqual(expected)));
+        }
+
+        [Fact]
+        public void RemovePackage_RunsDotNetRemovePackageInTheProjectDirectory()
+        {
+            var projectPath = XFS.Path(@"c:\repo\A\A.csproj");
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("removed", "", 0));
+            var service = new DotNetPackageService(dotNetRunner, new MockFileSystem());
+
+            var status = service.RemovePackage(projectPath, "Serilog");
+
+            Assert.Equal("removed", status.Output);
+            dotNetRunner.Received(1).Run(XFS.Path(@"c:\repo\A"), Arg.Is<string[]>(a => a.SequenceEqual(new[] { "remove", "A.csproj", "package", "Serilog" })));
+        }
+
+        [Fact]
+        public void DotNetRestoreService_RunsDotNetRestoreInTheProjectDirectory()
+        {
+            var projectPath = XFS.Path(@"c:\repo\A\A.csproj");
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("restored", "", 0));
+            var service = new DotNetRestoreService(dotNetRunner, new MockFileSystem());
+
+            var status = service.Restore(projectPath);
+
+            Assert.Equal("restored", status.Output);
+            dotNetRunner.Received(1).Run(XFS.Path(@"c:\repo\A"), Arg.Is<string[]>(a => a.SequenceEqual(new[] { "restore", projectPath })));
+        }
+
+        [Fact]
+        public void FileBasedAppVariableThatCannotBeWritten_ReportsFailureWithoutChangingFiles()
+        {
+            // The property's definition in Directory.Build.props depends on a condition that can't be evaluated
+            // statically, so it is not known which definition to change.
+            var appPath = XFS.Path(@"c:\repo\app.cs");
+            var propsPath = XFS.Path(@"c:\repo\Directory.Build.props");
+            const string appContent = "#:package Humanizer@$(HumanizerVersion)\nConsole.WriteLine();";
+            const string propsContent = "<Project><PropertyGroup><HumanizerVersion Condition=\"Exists('missing.txt') And $([MSBuild]::IsOSPlatform('Windows'))\">2.14.1</HumanizerVersion></PropertyGroup></Project>";
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                [appPath] = new(appContent),
+                [propsPath] = new(propsContent),
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            var service = new DotNetPackageService(dotNetRunner, fileSystem);
+
+            var status = service.Upgrade(appPath, "Humanizer", "net10.0", new VersionRange(new NuGetVersion("3.0.0")), noRestore: false);
+
+            Assert.False(status.IsSuccess);
+            Assert.Equal(
+                $"Failed to update file-based app '{appPath}' for 'Humanizer'. Could not update the matching #:property value or #:package/#:sdk directive.",
+                status.Errors);
+            Assert.Equal(appContent, fileSystem.File.ReadAllText(appPath));
+            Assert.Equal(propsContent, fileSystem.File.ReadAllText(propsPath));
+            dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
         }
     }
 }

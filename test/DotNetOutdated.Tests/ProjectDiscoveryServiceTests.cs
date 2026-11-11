@@ -211,6 +211,75 @@ namespace DotNetOutdated.Tests
             Assert.Contains(_project4, projects);
         }
 
+        [Theory]
+        [InlineData("#!/usr/bin/env dotnet\n", true)]
+        [InlineData("﻿#!/usr/bin/env dotnet\n", true)] // UTF-8 byte order mark before the shebang
+        [InlineData("﻿#!", true)]
+        [InlineData("#!", true)]
+        [InlineData("#", false)]
+        [InlineData("﻿#", false)]
+        [InlineData("﻿", false)]
+        [InlineData("", false)]
+        [InlineData("// #!/usr/bin/env dotnet\n", false)]
+        [InlineData("#:package Humanizer@2.14.1\n", false)]
+        public void RecursiveIncludesFileBasedAppsOnlyWhenTheyStartWithAShebang(string content, bool included)
+        {
+            // Arrange
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { _project4, Singletons.NullObject},
+                { _looseFileBasedApp, new MockFileData(System.Text.Encoding.UTF8.GetBytes(content))}
+            }, _path);
+            var projectDiscoveryService = new ProjectDiscoveryService(fileSystem);
+
+            // Act
+            var projects = projectDiscoveryService.DiscoverProjects(_path, true, includeFileBasedApps: true);
+
+            // Assert
+            Assert.Equal(included, projects.Contains(_looseFileBasedApp));
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void RecursiveIncludesCSharpAndFSharpProjects(bool includeFileBasedApps)
+        {
+            // Arrange
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { _project1, Singletons.NullObject},
+                { _project3, Singletons.NullObject},
+                { _nonProjectFile, Singletons.NullObject}
+            }, _path);
+            var projectDiscoveryService = new ProjectDiscoveryService(fileSystem);
+
+            // Act
+            var projects = projectDiscoveryService.DiscoverProjects(_path, true, includeFileBasedApps);
+
+            // Assert
+            Assert.Equal(new[] { _project1, _project3 }, projects.OrderBy(p => p, System.StringComparer.Ordinal));
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void RecursiveWithoutProjectsThrows(bool includeFileBasedApps)
+        {
+            // Arrange
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { _nonProjectFile, Singletons.NullObject},
+                { _looseNonFileBasedApp, new MockFileData("Console.WriteLine();")}
+            }, _path);
+            var projectDiscoveryService = new ProjectDiscoveryService(fileSystem);
+
+            // Act
+            var exception = Assert.Throws<CommandValidationException>(() => projectDiscoveryService.DiscoverProjects(_path, true, includeFileBasedApps));
+
+            // Assert
+            Assert.Equal(string.Format(CultureInfo.InvariantCulture, ValidationErrorMessages.DirectoryDoesNotContainSolutionsOrProjects, _path), exception.Message);
+        }
+
         [Fact]
         public void NoSolutionsOrProjectsThrows()
         {
