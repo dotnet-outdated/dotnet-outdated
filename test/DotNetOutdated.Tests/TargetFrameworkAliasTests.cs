@@ -89,7 +89,7 @@ public class TargetFrameworkAliasTests
             packageService.Upgrade(Arg.Any<ReferenceUpgrade>())
                 .Returns(new RunStatus(string.Empty, string.Empty, exitCode: 0));
             var program = new Program(
-                fileSystem, Substitute.For<IReporter>(), resolutionService, analysisService,
+                fileSystem, Substitute.For<IReporter>(), new OutdatedDependencyService(resolutionService), analysisService,
                 discoveryService, packageService, new DotNetRunnerOptions())
             {
                 Path = projectPath,

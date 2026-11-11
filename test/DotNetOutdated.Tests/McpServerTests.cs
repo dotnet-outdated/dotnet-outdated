@@ -6,10 +6,12 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using DotNetOutdated.Core.Models;
 using DotNetOutdated.Core.Services;
 using DotNetOutdated.Models;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
+using NuGet.Frameworks;
 using NuGet.Versioning;
 using Xunit;
 
@@ -21,7 +23,7 @@ namespace DotNetOutdated.Tests
         private readonly IProjectDiscoveryService _projectDiscoveryService;
         private readonly IProjectAnalysisService _projectAnalysisService;
         private readonly IDotNetPackageService _dotNetPackageService;
-        private readonly INuGetPackageResolutionService _nugetService;
+        private readonly IOutdatedDependencyService _outdatedDependencyService;
 
         public McpServerTests()
         {
@@ -29,7 +31,7 @@ namespace DotNetOutdated.Tests
             _projectDiscoveryService = Substitute.For<IProjectDiscoveryService>();
             _projectAnalysisService = Substitute.For<IProjectAnalysisService>();
             _dotNetPackageService = Substitute.For<IDotNetPackageService>();
-            _nugetService = Substitute.For<INuGetPackageResolutionService>();
+            _outdatedDependencyService = Substitute.For<IOutdatedDependencyService>();
         }
 
         private async Task<string> RunServerAsync(string input)
@@ -42,7 +44,7 @@ namespace DotNetOutdated.Tests
                 _projectDiscoveryService,
                 _projectAnalysisService,
                 _dotNetPackageService,
-                _nugetService,
+                _outdatedDependencyService,
                 inputStream,
                 outputStream
             );
@@ -161,6 +163,36 @@ namespace DotNetOutdated.Tests
             // Assert
             Assert.Contains("project1.csproj", output);
             Assert.Contains("\"resultType\":\"complete\"", output);
+        }
+
+        [Fact]
+        public async Task AnalyzeProject_ReportsEveryDependencyWithItsLatestVersion()
+        {
+            // Arrange
+            var input = "{\"jsonrpc\": \"2.0\", \"method\": \"tools/call\", \"params\": { \"name\": \"analyze_project\", \"arguments\": { \"projectPath\": \"/test/p.csproj\" } }, \"id\": 3}\n";
+            var projects = new List<Project> { new("p", "/test/p.csproj", [], new NuGetVersion("1.0.0")) };
+            _projectAnalysisService.AnalyzeProjectAsync("/test/p.csproj", Arg.Any<ProjectAnalysisOptions>(), Arg.Any<CancellationToken>()).Returns(projects);
+            var dependency = new Dependency("Contoso.Widgets", VersionRange.Parse("1.0.0"), new NuGetVersion("1.0.0"), false, false, false);
+            _outdatedDependencyService
+                .FindOutdatedAsync(projects, Arg.Is<OutdatedOptions>(o => o.IncludeUpToDate && o.IncludeAutoReferences), Arg.Any<CancellationToken>())
+                .Returns([new OutdatedProject
+                {
+                    Name = "p",
+                    FilePath = "/test/p.csproj",
+                    TargetFrameworks = [new OutdatedTargetFramework
+                    {
+                        Name = NuGetFramework.Parse("net9.0"),
+                        Dependencies = [new OutdatedDependency { Dependency = dependency, LatestVersion = new NuGetVersion("1.2.0") }],
+                    }],
+                }]);
+
+            // Act
+            var output = await RunServerAsync(input);
+
+            // Assert
+            Assert.Contains("Contoso.Widgets", output);
+            Assert.Contains("1.2.0", output);
+            Assert.Contains("Minor", output);
         }
 
         [Theory]

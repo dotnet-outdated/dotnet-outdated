@@ -1,4 +1,5 @@
-﻿using DotNetOutdated.Core.Services;
+﻿using DotNetOutdated.Core.Models;
+using DotNetOutdated.Core.Services;
 using DotNetOutdated.Models;
 using NuGet.Versioning;
 using System.Collections.Generic;
