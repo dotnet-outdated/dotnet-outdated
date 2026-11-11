@@ -2,7 +2,7 @@
 
 namespace DotNetOutdated.Core.Services
 {
-    public class DotNetRestoreService(IDotNetRunner dotNetRunner, IFileSystem fileSystem) : IDotNetRestoreService
+    internal class DotNetRestoreService(IDotNetRunner dotNetRunner, IFileSystem fileSystem) : IDotNetRestoreService
     {
         private readonly IDotNetRunner _dotNetRunner = dotNetRunner;
         private readonly IFileSystem _fileSystem = fileSystem;

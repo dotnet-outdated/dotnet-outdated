@@ -4,7 +4,7 @@ using NuGet.ProjectModel;
 
 namespace DotNetOutdated.Core.Services
 {
-    public interface IDependencyGraphService
+    internal interface IDependencyGraphService
     {
         Task<DependencyGraphSpec> GenerateDependencyGraphAsync(string projectPath, string? runtime);
 
@@ -27,5 +27,5 @@ namespace DotNetOutdated.Core.Services
     /// </summary>
     /// <param name="Name">The package id.</param>
     /// <param name="DefiningProjectFullPath">The full path of the project, props or targets file that defined the item.</param>
-    public sealed record PackageReferenceItem(string? Name, string? DefiningProjectFullPath);
+    internal sealed record PackageReferenceItem(string? Name, string? DefiningProjectFullPath);
 }

@@ -91,22 +91,9 @@ namespace DotNetOutdated
          using var services = new ServiceCollection()
                  .AddSingleton(PhysicalConsole.Singleton)
                  .AddSingleton<IReporter>(provider => new ConsoleReporter(provider.GetService<IConsole>()))
-                 .AddSingleton<IFileSystem, FileSystem>()
+                 .AddSingleton<IWarningReporter>(provider => provider.GetRequiredService<IReporter>())
                  .AddSingleton<ILogger>(provider => new ConsoleLogger(provider.GetService<IConsole>(), LogLevel.Warning))
-                 .AddSingleton<IProjectDiscoveryService, ProjectDiscoveryService>()
-                 .AddSingleton<IProjectAnalysisService, ProjectAnalysisService>()
-                 .AddSingleton<DotNetRunnerOptions>()
-                .AddSingleton<IDotNetRunner, DotNetRunner>()
-                 .AddSingleton<IDependencyGraphService, DependencyGraphService>()
-                 .AddSingleton<IDotNetRestoreService, DotNetRestoreService>()
-                 .AddSingleton<IDotNetPackageService>(provider =>
-                     new DotNetPackageService(
-                         provider.GetService<IDotNetRunner>(),
-                         provider.GetService<IFileSystem>(),
-                         msg => provider.GetService<IReporter>().Warn(msg)))
-                 .AddSingleton<INuGetPackageInfoService, NuGetPackageInfoService>()
-                 .AddSingleton<INuGetPackageResolutionService, NuGetPackageResolutionService>()
-                 .AddSingleton<IOutdatedDependencyService, OutdatedDependencyService>()
+                 .AddDotNetOutdated()
                  .BuildServiceProvider();
 
          ProgramCommandLine commandLine = null;

@@ -17,7 +17,7 @@ namespace DotNetOutdated.Core.Services;
 /// A versioned MSBuild project SDK declared in a project file as <c>&lt;Project Sdk="Id/Version"&gt;</c>,
 /// <c>&lt;Sdk Name="Id" Version="Version" /&gt;</c> or <c>&lt;Import Project="..." Sdk="Id" Version="Version" /&gt;</c>.
 /// </summary>
-public sealed class ProjectSdkReference
+internal sealed class ProjectSdkReference
 {
     /// <summary>
     /// Gets the SDK package id.
@@ -39,7 +39,7 @@ public sealed class ProjectSdkReference
 /// <summary>
 /// Where an MSBuild project SDK is declared in a project file.
 /// </summary>
-public enum ProjectSdkDeclarationKind
+internal enum ProjectSdkDeclarationKind
 {
     /// <summary><c>&lt;Project Sdk="Id[/Version]"&gt;</c>. One declaration per SDK in the semicolon-separated list.</summary>
     ProjectAttribute,
@@ -55,7 +55,7 @@ public enum ProjectSdkDeclarationKind
 /// An MSBuild project SDK declared in a project file, as written. <see cref="Version"/> is <see langword="null"/> when
 /// the declaration has no version, and may contain MSBuild property references such as <c>$(AspireVersion)</c>.
 /// </summary>
-public sealed record ProjectSdkDeclaration(string Name, string? Version, ProjectSdkDeclarationKind Kind);
+internal sealed record ProjectSdkDeclaration(string Name, string? Version, ProjectSdkDeclarationKind Kind);
 
 /// <summary>
 /// Discovers and updates versioned MSBuild project SDK references in project files.

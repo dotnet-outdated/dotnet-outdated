@@ -14,7 +14,7 @@ namespace DotNetOutdated.Core.Services;
 /// <see cref="OutdatedOptions"/>. Up to one project per processor is looked up at a time, with the target frameworks and
 /// dependencies of each project looked up concurrently.
 /// </summary>
-public sealed class OutdatedDependencyService(INuGetPackageResolutionService resolutionService) : IOutdatedDependencyService
+internal sealed class OutdatedDependencyService(INuGetPackageResolutionService resolutionService) : IOutdatedDependencyService
 {
     private readonly INuGetPackageResolutionService _resolutionService = resolutionService;
 

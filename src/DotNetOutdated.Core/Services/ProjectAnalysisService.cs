@@ -16,7 +16,7 @@ using System.Threading.Tasks;
 
 namespace DotNetOutdated.Core.Services
 {
-    public class ProjectAnalysisService : IProjectAnalysisService
+    internal class ProjectAnalysisService : IProjectAnalysisService
     {
         private readonly IProjectEvaluator _evaluator;
         private readonly IDotNetRestoreService _dotNetRestoreService;

@@ -15,7 +15,7 @@ namespace DotNetOutdated.Core.Services
     /// <c>dotnet add package</c> (with <c>Directory.Packages.props</c> formatting kept), and versions that it can't
     /// update or would lose (MSBuild properties, SDK declarations, file-based app directives) are rewritten directly.
     /// </summary>
-    public class DotNetPackageService : IDotNetPackageService
+    internal class DotNetPackageService : IDotNetPackageService
     {
         private readonly Action<string>? _onWarning;
         private readonly IDotNetRunner _dotNetRunner;

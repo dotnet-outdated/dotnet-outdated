@@ -8,7 +8,7 @@ using NuGet.Versioning;
 
 namespace DotNetOutdated.Core.Services
 {
-    public class NuGetPackageResolutionService(INuGetPackageInfoService nugetService) : INuGetPackageResolutionService
+    internal class NuGetPackageResolutionService(INuGetPackageInfoService nugetService) : INuGetPackageResolutionService
     {
         private readonly INuGetPackageInfoService _nugetService = nugetService;
         private readonly ConcurrentDictionary<string, Lazy<Task<IReadOnlyList<NuGetVersion>>>> _cache = [];

@@ -15,7 +15,7 @@ namespace DotNetOutdated.Core.Services
 {
     using System.Collections.Concurrent;
 
-    public sealed class NuGetPackageInfoService : INuGetPackageInfoService, IDisposable
+    internal sealed class NuGetPackageInfoService : INuGetPackageInfoService, IDisposable
     {
         // The enabled sources and the package source mapping come from the same settings and are published together,
         // so a concurrent first call never sees sources without their mapping (which would query unmapped sources).

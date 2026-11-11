@@ -68,7 +68,8 @@ namespace DotNetOutdated
 
         public static bool IsProjectSdkStyle(this PackageProjectReference project)
         {
-            if (project.ProjectFilePath.IsCSharpFile())
+            // A file-based app (a .cs file) has no project file to be anything but SDK-style.
+            if (project.ProjectFilePath.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }
