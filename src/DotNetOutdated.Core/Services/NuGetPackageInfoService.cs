@@ -49,7 +49,7 @@ namespace DotNetOutdated.Core.Services
         }
 
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "This method is supposed to fail silently")]
-        private async Task<PackageMetadataResource?> FindMetadataResourceForSource(Uri source, string? projectFilePath, string packageId)
+        private async Task<PackageMetadataResource?> FindMetadataResourceForSource(Uri source, string? projectFilePath, string packageId, CancellationToken cancellationToken)
         {
             try
             {
@@ -76,9 +76,15 @@ namespace DotNetOutdated.Core.Services
                                            ? new SourceRepository(enabledSource, Repository.Provider.GetCoreV3())
                                            : Repository.Factory.GetCoreV3(resourceUrl);
 
+                // The discovery request is cached per source and shared, so it doesn't take this caller's token; the caller
+                // only stops waiting for it.
                 var metadataResourceRequest = _metadataResourceRequests.GetOrAdd(resourceUrl, _ => sourceRepository.GetResourceAsync<PackageMetadataResource>());
 
-                return await metadataResourceRequest.ConfigureAwait(false);
+                return await metadataResourceRequest.WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
             }
             catch (Exception)
             {
@@ -103,7 +109,7 @@ namespace DotNetOutdated.Core.Services
             {
                 try
                 {
-                    var metadata = await FindMetadataResourceForSource(source, projectFilePath, package).ConfigureAwait(false);
+                    var metadata = await FindMetadataResourceForSource(source, projectFilePath, package, cancellationToken).ConfigureAwait(false);
                     if (metadata != null)
                     {
                         var compatibleMetadataList = await metadata.GetMetadataAsync(package, includePrerelease, false, _context, NullLogger.Instance, cancellationToken).ConfigureAwait(false);
