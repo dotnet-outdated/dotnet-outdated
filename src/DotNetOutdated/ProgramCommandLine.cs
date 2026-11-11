@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.CommandLine;
 using System.Linq;
 using System.CommandLine.Parsing;
+using System.Text.RegularExpressions;
 #if NET10_0_OR_GREATER
 using System.CommandLine.StaticCompletions;
 #endif
@@ -365,8 +366,73 @@ namespace DotNetOutdated
             return 1;
          }
 
-         parseResult.InvocationConfiguration.Output.Write(provider.GenerateCompletions(RootCommand).ReplaceLineEndings("\n"));
+         var script = provider.GenerateCompletions(RootCommand).ReplaceLineEndings("\n");
+         parseResult.InvocationConfiguration.Output.Write(CompleteFileNames(shell, script));
          return 0;
+      }
+
+      /// <summary>
+      /// Makes a completion script fall back to file names, as the shell does for a command without one, so the path
+      /// argument and the <c>--output</c> file name still complete.
+      /// </summary>
+      /// <remarks>
+      /// System.CommandLine.StaticCompletions 3.0.0 only completes option names, subcommands and listed values. Where
+      /// none match, its bash, fish and nushell scripts offer nothing, and its zsh script gives the path argument and
+      /// <c>--output</c> no completion. PowerShell already falls back to file names when a native completer returns none.
+      /// </remarks>
+      private string CompleteFileNames(string shell, string script)
+      {
+         switch (shell)
+         {
+            case ShellNames.Bash:
+               // -o default: readline's file name completion when the function returns no matches.
+               return script.Replace("\ncomplete -F ", "\ncomplete -o bashdefault -o default -F ");
+
+            case ShellNames.Fish:
+               // The function's candidates when one starts with the token, else file names; a plain `complete` without
+               // -f would list file names beside option values too.
+               return Regex.Replace(script, @"^complete -c (?<command>\S+) -f -a '\((?<function>\w+)\)'$", match =>
+               {
+                  var function = match.Groups["function"].Value;
+                  return $$"""
+                     function {{function}}_or_files
+                         set -l token (commandline -ct)
+                         set -l candidates ({{function}})
+                         if contains -- $token (string sub -l (string length -- $token) -- (string replace -r '\t.*' '' -- $candidates))
+                             printf '%s\n' $candidates
+                         else
+                             __fish_complete_path $token
+                         end
+                     end
+
+                     complete -c {{match.Groups["command"].Value}} -f -a '({{function}}_or_files)'
+                     """;
+               }, RegexOptions.Multiline);
+
+            case ShellNames.Zsh:
+               // An empty action (": ") completes nothing; _files completes file names.
+               var lines = script.Split('\n');
+               for (var i = 0; i < lines.Length; i++)
+               {
+                  var spec = lines[i].TrimStart();
+                  if ((spec.StartsWith($"'::{Path.Name} -- ", StringComparison.Ordinal) ||
+                       OutputFilename.Aliases.Prepend(OutputFilename.Name).Any(name => spec.StartsWith($"'{name}=[", StringComparison.Ordinal))) &&
+                      spec.EndsWith(": ' \\", StringComparison.Ordinal))
+                  {
+                     lines[i] = $"{lines[i][..^": ' \\".Length]}:_files' \\";
+                  }
+               }
+
+               return string.Join('\n', lines);
+
+            case ShellNames.Nushell:
+               // A completer that returns null, rather than an empty list, falls back to file names. With no
+               // suggestions the tool still writes a newline, which `lines` reads as one empty suggestion.
+               return script.Replace(" | lines\n", " | lines | compact --empty | if ($in | is-empty) { null } else { $in }\n");
+
+            default:
+               return script;
+         }
       }
 
       /// <summary>

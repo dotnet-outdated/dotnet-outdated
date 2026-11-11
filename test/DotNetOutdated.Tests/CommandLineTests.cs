@@ -244,7 +244,7 @@ public class CommandLineTests
     /// The nushell script lists no options; it asks the tool for them, see <see cref="SuggestDirective_CompletesOptionsAndValues"/>.
     /// </summary>
     [Theory]
-    [InlineData("bash", "complete -F _{1} {0}")]
+    [InlineData("bash", "-F _{1} {0}")]
     [InlineData("zsh", "#compdef {0}")]
     [InlineData("pwsh", "Register-ArgumentCompleter -Native -CommandName '{0}'")]
     [InlineData("fish", "complete -c {0}")]
@@ -263,6 +263,28 @@ public class CommandLineTests
         Assert.DoesNotContain('\r', output.ToString());
         if (shell != "nushell")
             Assert.Contains("--transitive-depth", output.ToString());
+    }
+
+    /// <summary>
+    /// Where no option, subcommand or value matches, the scripts fall back to file names, so the path argument and
+    /// the --output file name still complete. PowerShell falls back on its own.
+    /// </summary>
+    [Theory]
+    [InlineData("bash", "\ncomplete -o bashdefault -o default -F _{1} {0}", 1)]
+    [InlineData("zsh", ":_files' \\\n", 3)] // the path argument, --output and -o
+    [InlineData("fish", "\ncomplete -c {0} -f -a '(_{1}_or_files)'", 1)]
+    [InlineData("fish", "__fish_complete_path $token", 1)]
+    [InlineData("nushell", " | lines | compact --empty | if ($in | is-empty) {{ null }} else {{ $in }}\n", 1)]
+    public void CompletionsScript_FallsBackToFileNames(string shell, string expectedFormat, int expectedCount)
+    {
+        var commandLine = CreateCommandLine();
+        var name = commandLine.RootCommand.Name;
+        var output = new System.IO.StringWriter();
+
+        commandLine.Parse(["completions", "script", shell]).Invoke(new System.CommandLine.InvocationConfiguration { Output = output });
+
+        var expected = string.Format(expectedFormat, name, name.Replace('-', '_'));
+        Assert.Equal(expectedCount, output.ToString().Split(expected).Length - 1);
     }
 
     [Fact]
