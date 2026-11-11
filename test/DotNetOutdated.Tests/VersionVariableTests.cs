@@ -1028,20 +1028,6 @@ Console.WriteLine();")
         }
 
         [Fact]
-        public void GetDependencyDictionaryKey_DistinguishesPackageAndSdkWithSameName()
-        {
-            Assert.Equal(
-                "SharedId#package",
-                FileBasedAppReferenceHelper.GetDependencyDictionaryKey("SharedId", ReferenceKind.Package));
-            Assert.Equal(
-                "SharedId#sdk",
-                FileBasedAppReferenceHelper.GetDependencyDictionaryKey("SharedId", ReferenceKind.Sdk));
-            Assert.NotEqual(
-                FileBasedAppReferenceHelper.GetDependencyDictionaryKey("SharedId", ReferenceKind.Package),
-                FileBasedAppReferenceHelper.GetDependencyDictionaryKey("SharedId", ReferenceKind.Sdk));
-        }
-
-        [Fact]
         public void Update_FileBasedApp_VariableSdkIdAndVersion_PreservesExpressions()
         {
             var appPath = XFS.Path(@"c:\repo\cake.cs");

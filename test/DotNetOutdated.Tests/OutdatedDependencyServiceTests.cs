@@ -143,7 +143,7 @@ namespace DotNetOutdated.Tests
         [InlineData("1.0.0", "(, 2.0.0)")]
         public async Task UnresolvedOrUnboundedDependencies_AreReportedWithAnUnknownLatestVersion(string? resolvedVersion, string range)
         {
-            var dependency = new Dependency("Package", VersionRange.Parse(range), resolvedVersion == null ? null : NuGetVersion.Parse(resolvedVersion), false, false, false);
+            var dependency = new Dependency { Name = "Package", VersionRange = VersionRange.Parse(range), ResolvedVersion = resolvedVersion == null ? null : NuGetVersion.Parse(resolvedVersion) };
 
             var result = await Service().FindOutdatedAsync([Project("App", dependency)]);
 
@@ -205,20 +205,16 @@ namespace DotNetOutdated.Tests
         private static Dependency Dependency(string name, string version, bool isAutoReferenced = false, bool isDevelopmentDependency = false)
         {
             var range = VersionRange.Parse(version);
-            return new Dependency(name, range, range.MinVersion, isAutoReferenced, isTransitive: false, isDevelopmentDependency);
+            return new Dependency { Name = name, VersionRange = range, ResolvedVersion = range.MinVersion, IsAutoReferenced = isAutoReferenced, IsDevelopmentDependency = isDevelopmentDependency };
         }
 
-        private static Project Project(string name, params Dependency[] dependencies)
+        private static Project Project(string name, params Dependency[] dependencies) => new()
         {
-            var project = new Project(name, $"/src/{name}/{name}.csproj", [new Uri("https://api.nuget.org/v3/index.json")], new NuGetVersion("1.0.0"));
-            var targetFramework = new TargetFramework(Net9) { TargetAlias = "net9.0" };
-            foreach (var dependency in dependencies)
-            {
-                targetFramework.Dependencies.Add(dependency.Name, dependency);
-            }
-
-            project.TargetFrameworks.Add(targetFramework);
-            return project;
-        }
+            Name = name,
+            FilePath = $"/src/{name}/{name}.csproj",
+            Sources = [new Uri("https://api.nuget.org/v3/index.json")],
+            Version = new NuGetVersion("1.0.0"),
+            TargetFrameworks = [new TargetFramework { Name = Net9, TargetAlias = "net9.0", Dependencies = dependencies }],
+        };
     }
 }

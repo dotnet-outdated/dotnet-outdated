@@ -95,18 +95,15 @@ namespace DotNetOutdated.Core.Services
         /// Marks the direct package dependencies named in <paramref name="packageDefinedNames"/> as auto-referenced.
         /// A declared SDK with the same id as an injected package stays as it is, so its upgrade is still reported.
         /// </summary>
-        public static void MarkAsAutoReferenced(TargetFramework targetFramework, ISet<string> packageDefinedNames)
-        {
-            foreach (var (key, dependency) in targetFramework.Dependencies.ToList())
-            {
-                if (!dependency.IsTransitive && !dependency.IsAutoReferenced && packageDefinedNames.Contains(dependency.Name) &&
-                    dependency.Kind == ReferenceKind.Package)
-                {
-                    targetFramework.Dependencies[key] = new Dependency(dependency.Name, dependency.VersionRange, dependency.ResolvedVersion,
-                        isAutoReferenced: true, isTransitive: false, dependency.IsDevelopmentDependency, dependency.Kind);
-                }
-            }
-        }
+        /// <returns>The dependencies, in the same order, with the named ones marked.</returns>
+        public static IReadOnlyList<Dependency> MarkAsAutoReferenced(IEnumerable<Dependency> dependencies, ISet<string> packageDefinedNames) =>
+            dependencies
+                .Select(dependency =>
+                    !dependency.IsTransitive && !dependency.IsAutoReferenced && dependency.Kind == ReferenceKind.Package &&
+                    packageDefinedNames.Contains(dependency.Name)
+                        ? dependency with { IsAutoReferenced = true }
+                        : dependency)
+                .ToList();
 
         private static bool IsInFolder(IFileSystem fileSystem, string? path, List<string> folders) =>
             !string.IsNullOrEmpty(path) &&

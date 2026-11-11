@@ -1,4 +1,14 @@
 #nullable enable
+DotNetOutdated.Core.Models.Dependency.<Clone>$() -> DotNetOutdated.Core.Models.Dependency!
+DotNetOutdated.Core.Models.Dependency.Dependency() -> void
+DotNetOutdated.Core.Models.Dependency.Equals(DotNetOutdated.Core.Models.Dependency? other) -> bool
+DotNetOutdated.Core.Models.Dependency.IsAutoReferenced.init -> void
+DotNetOutdated.Core.Models.Dependency.IsDevelopmentDependency.init -> void
+DotNetOutdated.Core.Models.Dependency.IsTransitive.init -> void
+DotNetOutdated.Core.Models.Dependency.Kind.init -> void
+DotNetOutdated.Core.Models.Dependency.Name.init -> void
+DotNetOutdated.Core.Models.Dependency.ResolvedVersion.init -> void
+DotNetOutdated.Core.Models.Dependency.VersionRange.init -> void
 DotNetOutdated.Core.Models.DependencyUpgradeSeverity
 DotNetOutdated.Core.Models.DependencyUpgradeSeverity.Major = 3 -> DotNetOutdated.Core.Models.DependencyUpgradeSeverity
 DotNetOutdated.Core.Models.DependencyUpgradeSeverity.Minor = 2 -> DotNetOutdated.Core.Models.DependencyUpgradeSeverity
@@ -34,6 +44,23 @@ DotNetOutdated.Core.Models.OutdatedTargetFramework.Name.init -> void
 DotNetOutdated.Core.Models.OutdatedTargetFramework.OutdatedTargetFramework() -> void
 DotNetOutdated.Core.Models.OutdatedTargetFramework.TargetAlias.get -> string?
 DotNetOutdated.Core.Models.OutdatedTargetFramework.TargetAlias.init -> void
+DotNetOutdated.Core.Models.Project.<Clone>$() -> DotNetOutdated.Core.Models.Project!
+DotNetOutdated.Core.Models.Project.Equals(DotNetOutdated.Core.Models.Project? other) -> bool
+DotNetOutdated.Core.Models.Project.FilePath.init -> void
+DotNetOutdated.Core.Models.Project.Name.init -> void
+DotNetOutdated.Core.Models.Project.Project() -> void
+DotNetOutdated.Core.Models.Project.Sources.get -> System.Collections.Generic.IReadOnlyList<System.Uri!>!
+DotNetOutdated.Core.Models.Project.Sources.init -> void
+DotNetOutdated.Core.Models.Project.TargetFrameworks.get -> System.Collections.Generic.IReadOnlyList<DotNetOutdated.Core.Models.TargetFramework!>!
+DotNetOutdated.Core.Models.Project.TargetFrameworks.init -> void
+DotNetOutdated.Core.Models.Project.Version.init -> void
+DotNetOutdated.Core.Models.TargetFramework.<Clone>$() -> DotNetOutdated.Core.Models.TargetFramework!
+DotNetOutdated.Core.Models.TargetFramework.Dependencies.get -> System.Collections.Generic.IReadOnlyList<DotNetOutdated.Core.Models.Dependency!>!
+DotNetOutdated.Core.Models.TargetFramework.Dependencies.init -> void
+DotNetOutdated.Core.Models.TargetFramework.Equals(DotNetOutdated.Core.Models.TargetFramework? other) -> bool
+DotNetOutdated.Core.Models.TargetFramework.Name.init -> void
+DotNetOutdated.Core.Models.TargetFramework.TargetAlias.init -> void
+DotNetOutdated.Core.Models.TargetFramework.TargetFramework() -> void
 DotNetOutdated.Core.Services.IDotNetPackageService.Upgrade(DotNetOutdated.Core.Services.ReferenceUpgrade! upgrade) -> DotNetOutdated.Core.Services.RunStatus!
 DotNetOutdated.Core.Services.INuGetPackageInfoService.GetAllVersionsAsync(DotNetOutdated.Core.Services.PackageVersionsQuery! query, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<NuGet.Versioning.NuGetVersion!>!>!
 DotNetOutdated.Core.Services.INuGetPackageResolutionService.ResolveLatestVersionAsync(DotNetOutdated.Core.Services.LatestVersionQuery! query, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<NuGet.Versioning.NuGetVersion!>!
@@ -145,6 +172,9 @@ DotNetOutdated.Core.Services.ReferenceUpgrade.TargetFramework.init -> void
 DotNetOutdated.Core.Services.ReferenceUpgrade.Version.get -> NuGet.Versioning.VersionRange!
 DotNetOutdated.Core.Services.ReferenceUpgrade.Version.init -> void
 Microsoft.Extensions.DependencyInjection.DotNetOutdatedServiceCollectionExtensions
+override DotNetOutdated.Core.Models.Dependency.Equals(object? obj) -> bool
+override DotNetOutdated.Core.Models.Dependency.GetHashCode() -> int
+override DotNetOutdated.Core.Models.Dependency.ToString() -> string!
 override DotNetOutdated.Core.Models.OutdatedDependency.Equals(object? obj) -> bool
 override DotNetOutdated.Core.Models.OutdatedDependency.GetHashCode() -> int
 override DotNetOutdated.Core.Models.OutdatedDependency.ToString() -> string!
@@ -154,6 +184,12 @@ override DotNetOutdated.Core.Models.OutdatedProject.ToString() -> string!
 override DotNetOutdated.Core.Models.OutdatedTargetFramework.Equals(object? obj) -> bool
 override DotNetOutdated.Core.Models.OutdatedTargetFramework.GetHashCode() -> int
 override DotNetOutdated.Core.Models.OutdatedTargetFramework.ToString() -> string!
+override DotNetOutdated.Core.Models.Project.Equals(object? obj) -> bool
+override DotNetOutdated.Core.Models.Project.GetHashCode() -> int
+override DotNetOutdated.Core.Models.Project.ToString() -> string!
+override DotNetOutdated.Core.Models.TargetFramework.Equals(object? obj) -> bool
+override DotNetOutdated.Core.Models.TargetFramework.GetHashCode() -> int
+override DotNetOutdated.Core.Models.TargetFramework.ToString() -> string!
 override DotNetOutdated.Core.Services.LatestVersionQuery.Equals(object? obj) -> bool
 override DotNetOutdated.Core.Services.LatestVersionQuery.GetHashCode() -> int
 override DotNetOutdated.Core.Services.LatestVersionQuery.ToString() -> string!
@@ -169,6 +205,8 @@ override DotNetOutdated.Core.Services.ProjectAnalysisOptions.ToString() -> strin
 override DotNetOutdated.Core.Services.ReferenceUpgrade.Equals(object? obj) -> bool
 override DotNetOutdated.Core.Services.ReferenceUpgrade.GetHashCode() -> int
 override DotNetOutdated.Core.Services.ReferenceUpgrade.ToString() -> string!
+static DotNetOutdated.Core.Models.Dependency.operator !=(DotNetOutdated.Core.Models.Dependency? left, DotNetOutdated.Core.Models.Dependency? right) -> bool
+static DotNetOutdated.Core.Models.Dependency.operator ==(DotNetOutdated.Core.Models.Dependency? left, DotNetOutdated.Core.Models.Dependency? right) -> bool
 static DotNetOutdated.Core.Models.OutdatedDependency.GetUpgradeSeverity(NuGet.Versioning.NuGetVersion? resolvedVersion, NuGet.Versioning.NuGetVersion? latestVersion) -> DotNetOutdated.Core.Models.DependencyUpgradeSeverity
 static DotNetOutdated.Core.Models.OutdatedDependency.operator !=(DotNetOutdated.Core.Models.OutdatedDependency? left, DotNetOutdated.Core.Models.OutdatedDependency? right) -> bool
 static DotNetOutdated.Core.Models.OutdatedDependency.operator ==(DotNetOutdated.Core.Models.OutdatedDependency? left, DotNetOutdated.Core.Models.OutdatedDependency? right) -> bool
@@ -176,6 +214,10 @@ static DotNetOutdated.Core.Models.OutdatedProject.operator !=(DotNetOutdated.Cor
 static DotNetOutdated.Core.Models.OutdatedProject.operator ==(DotNetOutdated.Core.Models.OutdatedProject? left, DotNetOutdated.Core.Models.OutdatedProject? right) -> bool
 static DotNetOutdated.Core.Models.OutdatedTargetFramework.operator !=(DotNetOutdated.Core.Models.OutdatedTargetFramework? left, DotNetOutdated.Core.Models.OutdatedTargetFramework? right) -> bool
 static DotNetOutdated.Core.Models.OutdatedTargetFramework.operator ==(DotNetOutdated.Core.Models.OutdatedTargetFramework? left, DotNetOutdated.Core.Models.OutdatedTargetFramework? right) -> bool
+static DotNetOutdated.Core.Models.Project.operator !=(DotNetOutdated.Core.Models.Project? left, DotNetOutdated.Core.Models.Project? right) -> bool
+static DotNetOutdated.Core.Models.Project.operator ==(DotNetOutdated.Core.Models.Project? left, DotNetOutdated.Core.Models.Project? right) -> bool
+static DotNetOutdated.Core.Models.TargetFramework.operator !=(DotNetOutdated.Core.Models.TargetFramework? left, DotNetOutdated.Core.Models.TargetFramework? right) -> bool
+static DotNetOutdated.Core.Models.TargetFramework.operator ==(DotNetOutdated.Core.Models.TargetFramework? left, DotNetOutdated.Core.Models.TargetFramework? right) -> bool
 static DotNetOutdated.Core.Services.LatestVersionQuery.operator !=(DotNetOutdated.Core.Services.LatestVersionQuery? left, DotNetOutdated.Core.Services.LatestVersionQuery? right) -> bool
 static DotNetOutdated.Core.Services.LatestVersionQuery.operator ==(DotNetOutdated.Core.Services.LatestVersionQuery? left, DotNetOutdated.Core.Services.LatestVersionQuery? right) -> bool
 static DotNetOutdated.Core.Services.OutdatedOptions.Default.get -> DotNetOutdated.Core.Services.OutdatedOptions!
@@ -189,6 +231,14 @@ static DotNetOutdated.Core.Services.ProjectAnalysisOptions.operator ==(DotNetOut
 static DotNetOutdated.Core.Services.ReferenceUpgrade.operator !=(DotNetOutdated.Core.Services.ReferenceUpgrade? left, DotNetOutdated.Core.Services.ReferenceUpgrade? right) -> bool
 static DotNetOutdated.Core.Services.ReferenceUpgrade.operator ==(DotNetOutdated.Core.Services.ReferenceUpgrade? left, DotNetOutdated.Core.Services.ReferenceUpgrade? right) -> bool
 static Microsoft.Extensions.DependencyInjection.DotNetOutdatedServiceCollectionExtensions.AddDotNetOutdated(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+*REMOVED*DotNetOutdated.Core.Models.Dependency.Dependency(string! name, NuGet.Versioning.VersionRange! versionRange, NuGet.Versioning.NuGetVersion? resolvedVersion, bool isAutoReferenced, bool isTransitive, bool isDevelopmentDependency, DotNetOutdated.Core.Services.ReferenceKind kind = DotNetOutdated.Core.Services.ReferenceKind.Package) -> void
+*REMOVED*DotNetOutdated.Core.Models.Project.Project(string! name, string! filePath, System.Collections.Generic.IEnumerable<System.Uri!>! sources, NuGet.Versioning.NuGetVersion! version) -> void
+*REMOVED*DotNetOutdated.Core.Models.Project.Sources.get -> System.Collections.Generic.IList<System.Uri!>!
+*REMOVED*DotNetOutdated.Core.Models.Project.TargetFrameworks.get -> System.Collections.Generic.IList<DotNetOutdated.Core.Models.TargetFramework!>!
+*REMOVED*DotNetOutdated.Core.Models.TargetFramework.Dependencies.get -> System.Collections.Generic.Dictionary<string!, DotNetOutdated.Core.Models.Dependency!>!
+*REMOVED*DotNetOutdated.Core.Models.TargetFramework.Name.set -> void
+*REMOVED*DotNetOutdated.Core.Models.TargetFramework.TargetAlias.set -> void
+*REMOVED*DotNetOutdated.Core.Models.TargetFramework.TargetFramework(NuGet.Frameworks.NuGetFramework! name) -> void
 *REMOVED*DotNetOutdated.Core.ProjectPathExtensions
 *REMOVED*DotNetOutdated.Core.Services.DependencyGraphService
 *REMOVED*DotNetOutdated.Core.Services.DependencyGraphService.DependencyGraphService(DotNetOutdated.Core.Services.IDotNetRunner! dotNetRunner, System.IO.Abstractions.IFileSystem! fileSystem) -> void

@@ -170,9 +170,9 @@ namespace DotNetOutdated.Tests
         {
             // Arrange
             var input = "{\"jsonrpc\": \"2.0\", \"method\": \"tools/call\", \"params\": { \"name\": \"analyze_project\", \"arguments\": { \"projectPath\": \"/test/p.csproj\" } }, \"id\": 3}\n";
-            var projects = new List<Project> { new("p", "/test/p.csproj", [], new NuGetVersion("1.0.0")) };
+            var projects = new List<Project> { new() { Name = "p", FilePath = "/test/p.csproj", Version = new NuGetVersion("1.0.0") } };
             _projectAnalysisService.AnalyzeProjectAsync("/test/p.csproj", Arg.Any<ProjectAnalysisOptions>(), Arg.Any<CancellationToken>()).Returns(projects);
-            var dependency = new Dependency("Contoso.Widgets", VersionRange.Parse("1.0.0"), new NuGetVersion("1.0.0"), false, false, false);
+            var dependency = new Dependency { Name = "Contoso.Widgets", VersionRange = VersionRange.Parse("1.0.0"), ResolvedVersion = new NuGetVersion("1.0.0") };
             _outdatedDependencyService
                 .FindOutdatedAsync(projects, Arg.Is<OutdatedOptions>(o => o.IncludeUpToDate && o.IncludeAutoReferences), Arg.Any<CancellationToken>())
                 .Returns([new OutdatedProject
