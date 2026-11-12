@@ -1779,6 +1779,157 @@ Information(""Outdated Sdk"");")
         }
 
         [Fact]
+        public void AProjectListedOncePerTargetFramework_RunsDotNetAddForEachOfThem()
+        {
+            // `dotnet add package -f` changes one target framework's reference: a reference declared per target
+            // framework, or a transitive package being promoted, needs a run for each.
+            var projectPath = XFS.Path(@"c:\repo\MyProject.csproj");
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                [projectPath] = new(
+                    """
+                    <Project Sdk="Microsoft.NET.Sdk">
+                      <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'"><PackageReference Include="Foo" Version="1.0.0" /></ItemGroup>
+                      <ItemGroup Condition="'$(TargetFramework)' == 'net9.0'"><PackageReference Include="Foo" Version="1.0.0" /></ItemGroup>
+                    </Project>
+                    """),
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
+
+            var results = service.Upgrade(new ReferenceUpgrade
+            {
+                Name = "Foo",
+                Version = new NuGetVersion("2.0.0"),
+                Projects = [new UpgradeProject(projectPath, "net8.0"), new UpgradeProject(projectPath, "net9.0")],
+            });
+
+            Assert.Equal(UpgradeOutcome.Upgraded, Assert.Single(results).Outcome);
+            dotNetRunner.Received(1).Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[0] == "add" && a[6] == "-f" && a[7] == "net8.0"));
+            dotNetRunner.Received(1).Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[0] == "add" && a[6] == "-f" && a[7] == "net9.0"));
+            dotNetRunner.ReceivedWithAnyArgs(2).Run(default, default);
+        }
+
+        [Fact]
+        public void AProjectListedOncePerTargetFramework_StopsAtTheFirstDotNetAddThatFails()
+        {
+            var projectPath = XFS.Path(@"c:\repo\MyProject.csproj");
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                [projectPath] = new(SdkProjectContent),
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "incompatible", 1));
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
+
+            var results = service.Upgrade(new ReferenceUpgrade
+            {
+                Name = "Foo",
+                Version = new NuGetVersion("2.0.0"),
+                Projects = [new UpgradeProject(projectPath, "net8.0"), new UpgradeProject(projectPath, "net9.0")],
+            });
+
+            var result = Assert.Single(results);
+            Assert.Equal(UpgradeOutcome.Failed, result.Outcome);
+            Assert.Equal("incompatible", result.FailureDetails);
+            dotNetRunner.ReceivedWithAnyArgs(1).Run(default, default);
+        }
+
+        [Theory]
+        [InlineData("#:package Foo@[12.0.1, 13.0.0)", "[12.0.3, 13.0.0)")]
+        [InlineData("#:package Foo@[12.0.1,13.0.0)", "[12.0.3, 13.0.0)")]
+        // `dotnet add package` writes a range that holds a space in quotes.
+        [InlineData("#:package Foo@\"[12.0.1, 13.0.0)\"", "[12.0.3, 13.0.0)")]
+        [InlineData("#:package foo@[12.0.1, 13.0.0)", "[12.0.3, 13.0.0)")]
+        [InlineData("#:package Foo@12.0.1", "12.0.3")]
+        [InlineData("#:package Foo@[12.0.1, 12.0.2]", "12.0.3")]
+        [InlineData("#:package Other@[12.0.1, 13.0.0)", "12.0.3")]
+        public void FileBasedAppDirectPackage_KeepsTheDeclaredUpperBoundWhileTheVersionSatisfiesIt(string directive, string expectedArgument)
+        {
+            var appPath = XFS.Path(@"c:\repo\app.cs");
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                [appPath] = new(directive + "\nConsole.WriteLine();\n"),
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
+
+            var result = service.Upgrade(appPath, "Foo", "net10.0", NuGetVersion.Parse("12.0.3"));
+
+            Assert.True(result.IsSuccess);
+            dotNetRunner.Received(1).Run(
+                Arg.Any<string>(),
+                Arg.Is<string[]>(a => a[0] == "add" && a[4] == "-v" && a[5] == expectedArgument));
+        }
+
+        [Fact]
+        public void NonSdkStyleProject_KeepsTheUpperBoundDeclaredByTheReferenceItRemoves()
+        {
+            var projectPath = XFS.Path(@"c:\repo\MyProject.csproj");
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                [projectPath] = new("<Project ToolsVersion=\"15.0\"><ItemGroup><PackageReference Include=\"Foo\" Version=\"[6.0.13, 7.0.0)\" /></ItemGroup></Project>"),
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(call =>
+            {
+                if (call.Arg<string[]>()[0] == "remove")
+                {
+                    // What `dotnet remove package` does.
+                    fileSystem.File.WriteAllText(projectPath, "<Project ToolsVersion=\"15.0\"><ItemGroup /></Project>");
+                }
+
+                return new RunStatus("", "", 0);
+            });
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
+
+            var result = service.Upgrade(projectPath, "Foo", "net48", NuGetVersion.Parse("6.0.36"));
+
+            Assert.True(result.IsSuccess);
+            Received.InOrder(() =>
+            {
+                dotNetRunner.Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[0] == "remove"));
+                dotNetRunner.Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[0] == "add" && a[5] == "[6.0.36, 7.0.0)"));
+            });
+        }
+
+        [Fact]
+        public void SharedVariableWrittenAfterDotNetAdd_RestoresAProjectThatHasItWrittenDirectly()
+        {
+            // A's reference is in its project file, so `dotnet add package` updates it and then the variable. B's is
+            // in an imported file, so its variable is written directly: it is found written, and B must be restored.
+            var propsPath = XFS.Path(@"c:\repo\Directory.Build.props");
+            var referencesPath = XFS.Path(@"c:\repo\refs.props");
+            var projectA = XFS.Path(@"c:\repo\A\A.csproj");
+            var projectB = XFS.Path(@"c:\repo\B\B.csproj");
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                [propsPath] = new("<Project><PropertyGroup><FooVersion>1.0.0</FooVersion></PropertyGroup></Project>"),
+                [referencesPath] = new("<Project><ItemGroup><PackageReference Include=\"Foo\" Version=\"$(FooVersion)\" /></ItemGroup></Project>"),
+                [projectA] = new("<Project Sdk=\"Microsoft.NET.Sdk\"><ItemGroup><PackageReference Include=\"Foo\" Version=\"$(FooVersion)\" /></ItemGroup></Project>"),
+                [projectB] = new("<Project Sdk=\"Microsoft.NET.Sdk\"><Import Project=\"../refs.props\" /></Project>"),
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
+
+            var results = service.Upgrade(new ReferenceUpgrade
+            {
+                Name = "Foo",
+                Version = new NuGetVersion("2.0.0"),
+                Projects = [new UpgradeProject(projectA, "net8.0"), new UpgradeProject(projectB, "net8.0")],
+            });
+
+            Assert.Equal([(projectA, UpgradeOutcome.Upgraded), (projectB, UpgradeOutcome.Upgraded)], results.Select(r => (r.ProjectPath, r.Outcome)));
+            dotNetRunner.Received(1).Run(XFS.Path(@"c:\repo\A"), Arg.Is<string[]>(a => a[0] == "add"));
+            dotNetRunner.Received(1).Run(XFS.Path(@"c:\repo\B"), Arg.Is<string[]>(a => a[0] == "restore"));
+            dotNetRunner.ReceivedWithAnyArgs(2).Run(default, default);
+            Assert.Contains("<FooVersion>2.0.0</FooVersion>", fileSystem.File.ReadAllText(propsPath));
+        }
+
+        [Fact]
         public void AProjectThatFails_DoesNotStopTheOthers()
         {
             var projectA = XFS.Path(@"c:\repo\A\A.csproj");

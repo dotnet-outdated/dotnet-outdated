@@ -44,8 +44,9 @@ public sealed record ReferenceUpgrade
 /// <summary>A project whose reference <see cref="IReferenceUpgrader.Upgrade"/> upgrades.</summary>
 /// <param name="Path">The project file or file-based app.</param>
 /// <param name="TargetFramework">
-/// A target framework of the project (short folder name or alias) that <c>dotnet add package</c> checks the new
-/// version against; when <see langword="null"/>, it checks every target framework.
+/// A target framework of the project (short folder name or alias) to upgrade the reference for; when
+/// <see langword="null"/>, every target framework. A reference declared per target framework is upgraded only for
+/// the target frameworks given, so list a multi-targeted project once for each.
 /// </param>
 public sealed record UpgradeProject(string Path, string? TargetFramework = null);
 

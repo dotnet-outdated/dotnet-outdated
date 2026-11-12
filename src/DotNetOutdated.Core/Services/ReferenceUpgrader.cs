@@ -48,12 +48,13 @@ namespace DotNetOutdated.Core.Services
 
             lock (_gate)
             {
-                // A location is found per project, so a project listed once per target framework is upgraded once.
+                // A project listed once per target framework is upgraded once, for all of those target frameworks.
                 return upgrade.Projects
                     .GroupBy(project => _fileSystem.Path.GetFullPath(project.Path), StringComparer.OrdinalIgnoreCase)
                     .Select(projects => UpgradeProject(
                         upgrade,
-                        projects.First() with { TargetFramework = projects.Select(p => p.TargetFramework).FirstOrDefault(tf => tf != null) }))
+                        projects.First().Path,
+                        [.. projects.Select(p => p.TargetFramework).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase)]))
                     .ToList();
             }
         }
@@ -70,13 +71,11 @@ namespace DotNetOutdated.Core.Services
         // What upgrading one project needs: the request, and the modules that collect this project's warnings.
         private sealed record Context(
             ReferenceUpgrade Upgrade,
-            UpgradeProject Project,
+            string ProjectPath,
             List<string> Warnings,
             FileBasedAppDirectives Directives,
             MSBuildVariableWriter VariableWriter)
         {
-            public string ProjectPath => Project.Path;
-
             public string Name => Upgrade.Name;
         }
 
@@ -91,41 +90,66 @@ namespace DotNetOutdated.Core.Services
         // `dotnet add package` changed the version, and restored the project unless --no-restore was set.
         private sealed record AddedWithDotNet(RunStatus Status) : Write;
 
-        private ProjectUpgradeResult UpgradeProject(ReferenceUpgrade upgrade, UpgradeProject project)
+        private ProjectUpgradeResult UpgradeProject(ReferenceUpgrade upgrade, string projectPath, IReadOnlyList<string> targetFrameworks)
         {
             var warnings = new List<string>();
             var directives = new FileBasedAppDirectives(_fileSystem, _evaluator, warnings.Add);
-            var context = new Context(upgrade, project, warnings, directives, new MSBuildVariableWriter(_fileSystem, warnings.Add));
+            var context = new Context(upgrade, projectPath, warnings, directives, new MSBuildVariableWriter(_fileSystem, warnings.Add));
             var locator = new VersionLocator(_fileSystem, _evaluator, directives);
-            var kind = locator.ResolveKind(project.Path, upgrade.Name, upgrade.Kind);
+            var kind = locator.ResolveKind(projectPath, upgrade.Name, upgrade.Kind);
 
-            if (kind == ReferenceKind.Package && !IsSdkStyleProject(project.Path))
+            VersionRange? removedRange = null;
+            if (kind == ReferenceKind.Package && !IsSdkStyleProject(projectPath))
             {
+                // Removing the reference takes its declared range with it, so read that first.
+                removedRange = locator.Locate(projectPath, upgrade.Name, kind).DeclaredRange;
                 warnings.Add(
-                    $"'{project.Path}' isn't an SDK-style project, so {upgrade.Name} was removed and added back at the new version.");
-                var removal = RemovePackage(project.Path, upgrade.Name);
+                    $"'{projectPath}' isn't an SDK-style project, so {upgrade.Name} was removed and added back at the new version.");
+                var removal = RemovePackage(projectPath, upgrade.Name);
                 if (!removal.IsSuccess)
                 {
                     return Result(context, UpgradeOutcome.Failed, removal.FailureDetails);
                 }
             }
 
-            var location = locator.Locate(project.Path, upgrade.Name, kind);
-            var range = RangeFor(location.DeclaredRange, upgrade.Version);
-            var write = location switch
+            // `dotnet add package -f` changes one target framework's reference, so it runs for each target framework
+            // the project is listed with (a file-based app takes no -f). Any other location is written once.
+            var write = WriteLocation(context, locator, kind, removedRange, targetFrameworks.FirstOrDefault());
+            if (!projectPath.IsCSharpFile())
+            {
+                foreach (var targetFramework in targetFrameworks.Skip(1))
+                {
+                    if (write is not AddedWithDotNet { Status.IsSuccess: true })
+                    {
+                        break;
+                    }
+
+                    write = WriteLocation(context, locator, kind, removedRange, targetFramework);
+                }
+            }
+
+            return Finish(context, write);
+        }
+
+        // Finds the version location as it is now (an earlier target framework's `dotnet add package` may have changed
+        // it) and writes the new version there.
+        private Write WriteLocation(Context context, VersionLocator locator, ReferenceKind kind, VersionRange? removedRange, string? targetFramework)
+        {
+            var upgrade = context.Upgrade;
+            var location = locator.Locate(context.ProjectPath, upgrade.Name, kind);
+            var range = RangeFor(location.DeclaredRange ?? removedRange, upgrade.Version);
+            return location switch
             {
                 NotEditable notEditable => new WriteFailed(notEditable.Message),
                 FileBasedVariableVersion l => UpdateFileBasedVariable(context, l.Variable),
                 FileBasedDirectiveVersion l => UpdateFileBasedDirective(context, l.Reference),
                 ProjectSdkVersion l => UpdateProjectSdk(context, l.Sdk),
                 MSBuildVariableVersion l when upgrade.NoRestore || !l.DotNetAddCanUpdate => UpdateVariable(context, l.Variable, range),
-                MSBuildVariableVersion l => AddWithDotNet(context, range, l.Variable),
+                MSBuildVariableVersion l => AddWithDotNet(context, range, l.Variable, targetFramework),
                 GlobalPackageReferenceVersion l => UpdateGlobalPackageReference(context, l.FilePath, range),
-                LiteralVersion l => UpdateLiteral(context, l, range),
+                LiteralVersion l => UpdateLiteral(context, l, range, targetFramework),
                 _ => throw new InvalidOperationException($"Unexpected version location {location}."),
             };
-
-            return Finish(context, write);
         }
 
         private ProjectUpgradeResult Finish(Context context, Write write)
@@ -239,7 +263,7 @@ namespace DotNetOutdated.Core.Services
         // can't edit the reference.
         private static Write UpdateVariable(Context context, PackageVariableInfo variableInfo, VersionRange range)
         {
-            var location = $"{variableInfo.FilePath}|$({variableInfo.VariableName})|{range.ToVersionString()}";
+            var location = VariableLocation(variableInfo, range);
             if (context.VariableWriter.TryUpdate(variableInfo, range))
             {
                 return new Written(true, location);
@@ -251,6 +275,9 @@ namespace DotNetOutdated.Core.Services
                     $"Failed to update '{context.Name}': could not write '{range.ToVersionString()}' to the " +
                     $"$({variableInfo.VariableName}) property in '{variableInfo.FilePath}'.");
         }
+
+        private static string VariableLocation(PackageVariableInfo variableInfo, VersionRange range) =>
+            $"{variableInfo.FilePath}|$({variableInfo.VariableName})|{range.ToVersionString()}";
 
         // Writes a GlobalPackageReference's literal version directly: `dotnet add package` would add a PackageReference
         // instead, which central package management rejects.
@@ -278,9 +305,9 @@ namespace DotNetOutdated.Core.Services
             return new Written(updated, $"{filePath}|{context.Name}|{versionText}");
         }
 
-        private Write UpdateLiteral(Context context, LiteralVersion location, VersionRange range)
+        private Write UpdateLiteral(Context context, LiteralVersion location, VersionRange range, string? targetFramework)
         {
-            if (location.Warning != null)
+            if (location.Warning != null && !context.Warnings.Contains(location.Warning))
             {
                 context.Warnings.Add(location.Warning);
             }
@@ -293,7 +320,7 @@ namespace DotNetOutdated.Core.Services
                 return UpdateCentralPackageVersion(context, central.FilePath, range);
             }
 
-            return AddWithDotNet(context, range, variableInfo: null);
+            return AddWithDotNet(context, range, variableInfo: null, targetFramework);
         }
 
         private Write UpdateCentralPackageVersion(Context context, string centralPackagesPath, VersionRange range)
@@ -324,7 +351,7 @@ namespace DotNetOutdated.Core.Services
 
         // Runs `dotnet add package`, then puts back what it loses: the Directory.Packages.props layout and, when the
         // version came from a variable, the variable reference.
-        private AddedWithDotNet AddWithDotNet(Context context, VersionRange range, PackageVariableInfo? variableInfo)
+        private AddedWithDotNet AddWithDotNet(Context context, VersionRange range, PackageVariableInfo? variableInfo, string? targetFramework)
         {
             var projectPath = context.ProjectPath;
             string projectName = _fileSystem.Path.GetFileName(projectPath);
@@ -333,7 +360,7 @@ namespace DotNetOutdated.Core.Services
             var versionText = range.ToVersionString();
             List<string> arguments = ["add", projectName, "package", context.Name, "-v", versionText];
             // File-based apps declare TargetFramework via #:property; dotnet add rejects -f on .cs paths with newer SDKs.
-            if (!projectPath.IsCSharpFile() && context.Project.TargetFramework is { } targetFramework)
+            if (!projectPath.IsCSharpFile() && targetFramework != null)
             {
                 arguments.Add("-f");
                 arguments.Add(targetFramework);
@@ -364,6 +391,10 @@ namespace DotNetOutdated.Core.Services
                 if (variableInfo != null)
                 {
                     context.VariableWriter.TryUpdate(variableInfo, range);
+
+                    // A project that shares the variable but has it written directly then finds it written by this
+                    // upgrader, not already current, and is restored.
+                    _writtenLocations.Add(VariableLocation(variableInfo, range));
                 }
             }
 

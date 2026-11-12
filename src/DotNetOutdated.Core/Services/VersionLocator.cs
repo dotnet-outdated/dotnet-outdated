@@ -18,10 +18,11 @@ internal abstract record VersionLocation
 /// A literal version in the project file or a central <c>Directory.Packages.props</c>, which <c>dotnet add package</c>
 /// can rewrite, or no version at all (a transitive package), which it adds. <see cref="Declaration"/> is the item that
 /// holds the version, if any; <see cref="Warning"/> is set when a version expression is replaced by the literal.
+/// <see cref="Declared"/> is the range of a version that isn't held by an item (a file-based app's directive).
 /// </summary>
-internal sealed record LiteralVersion(PackageVersionDeclaration? Declaration = null, string? Warning = null) : VersionLocation
+internal sealed record LiteralVersion(PackageVersionDeclaration? Declaration = null, string? Warning = null, VersionRange? Declared = null) : VersionLocation
 {
-    public override VersionRange? DeclaredRange => Declaration?.VersionRange;
+    public override VersionRange? DeclaredRange => Declaration?.VersionRange ?? Declared;
 }
 
 /// <summary>An MSBuild property behind a <c>PackageReference</c>, <c>PackageVersion</c> or <c>GlobalPackageReference</c>.</summary>
@@ -123,7 +124,7 @@ internal sealed class VersionLocator(IFileSystem fileSystem, IProjectEvaluator e
             }
 
             // `dotnet add package` rewrites a literal #:package directive.
-            return new LiteralVersion();
+            return new LiteralVersion(Declared: _fileBasedAppDirectives.DeclaredPackageRange(projectPath, name));
         }
 
         var reference = _fileBasedAppDirectives.References(projectPath)
