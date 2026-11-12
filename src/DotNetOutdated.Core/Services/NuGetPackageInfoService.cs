@@ -160,14 +160,12 @@ namespace DotNetOutdated.Core.Services
                 {
                     // Suppress HTTP errors when connecting to NuGet sources
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ignoreFailedSources || ex.InnerException is HttpRequestException)
                 {
-                    if (!ignoreFailedSources)
-                    {
-                        continue;
-                    }
-                    // if the inner exception is NOT HttpRequestException, throw it
-                    if (ex.InnerException != null && !(ex.InnerException is HttpRequestException)) throw;
+                    // Like `dotnet restore --ignore-failed-sources`, the option skips a source that fails and lets the
+                    // others answer. Without it, a failure is an error rather than a silently incomplete list of versions,
+                    // except for HTTP errors (NuGet wraps them in a FatalProtocolException), which are always suppressed
+                    // like the HttpRequestException above.
                 }
             }
 

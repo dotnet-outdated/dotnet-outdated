@@ -134,7 +134,7 @@ namespace DotNetOutdated.Tests
             Assert.Equal(expected, versions.Select(v => v.ToNormalizedString()).Order(StringComparer.Ordinal));
         }
 
-        [Fact(Skip = "bug: a failing source is skipped silently without IgnoreFailedSources, and fails the lookup with it")]
+        [Fact]
         public async Task GetAllVersionsAsync_FailsForABrokenSourceUnlessFailedSourcesAreIgnored()
         {
             using var broken = new LocalFeed();

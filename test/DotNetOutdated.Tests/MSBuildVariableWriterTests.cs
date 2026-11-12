@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.IO.Abstractions.TestingHelpers;
 using DotNetOutdated.Core.Services;
 using NuGet.Versioning;
@@ -68,6 +68,21 @@ namespace DotNetOutdated.Tests
             Assert.True(Update(fileSystem, Info(insertProperty: true)));
 
             Assert.Equal("<Project><PropertyGroup><AVersion>2.0.0</AVersion></PropertyGroup></Project>", fileSystem.File.ReadAllText(PropsPath));
+            Assert.Equal(RestoredReference, fileSystem.File.ReadAllText(ProjectPath));
+            Assert.Empty(_warnings);
+        }
+
+        [Theory]
+        [InlineData(true, "<Project><PropertyGroup><AVersion>2.0.0</AVersion></PropertyGroup></Project>")]
+        [InlineData(true, "<Project><PropertyGroup><AVersion>2&#46;0&#46;0</AVersion></PropertyGroup></Project>")]
+        [InlineData(false, "<Project><PropertyGroup Condition=\"'$(C)' == 'b'\"><AVersion>2&#46;0&#46;0</AVersion></PropertyGroup></Project>")]
+        public void DefinitionAlreadyAtNewValue_OnlyRestoresTheReference(bool insertProperty, string props)
+        {
+            var fileSystem = FileSystem(props);
+
+            Assert.True(Update(fileSystem, Info(insertProperty: insertProperty)));
+
+            Assert.Equal(props, fileSystem.File.ReadAllText(PropsPath));
             Assert.Equal(RestoredReference, fileSystem.File.ReadAllText(ProjectPath));
             Assert.Empty(_warnings);
         }

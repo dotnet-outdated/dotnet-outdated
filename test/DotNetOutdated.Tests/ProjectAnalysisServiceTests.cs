@@ -178,7 +178,7 @@ namespace DotNetOutdated.Tests
             Assert.Null(dependencies.Single(d => d.Name == "Missing").ResolvedVersion);
         }
 
-        [Fact(Skip = "bug: a direct dependency that an earlier direct dependency depends on is reported as transitive")]
+        [Fact]
         public async Task TransitiveDependencies_DoNotTurnALaterDirectDependencyIntoATransitiveOne()
         {
             // For example Microsoft.Extensions.Hosting (direct) depends on Microsoft.Extensions.Logging (also direct).
