@@ -156,17 +156,20 @@ namespace DotNetOutdated.Core.Services
 
         // Writes a GlobalPackageReference's literal version directly: `dotnet add package` would add a PackageReference
         // instead, which central package management rejects.
-        private RunStatus UpdateGlobalPackageReference(string filePath, UpgradeOptions options)
+        private RunStatus UpdateGlobalPackageReference(string filePath, UpgradeOptions options) =>
+            UpdateLiteralVersionInFile(filePath, "GlobalPackageReference", options);
+
+        private RunStatus UpdateLiteralVersionInFile(string filePath, string elementName, UpgradeOptions options)
         {
             var versionText = options.VersionRange.ToVersionString();
             var file = EncodedText.Read(_fileSystem, filePath);
             var newContent = PackageVersionMarkup.ReplaceVersion(
-                file.Content, ["GlobalPackageReference"], options.PackageName, versionText, out var matched);
+                file.Content, [elementName], options.PackageName, versionText, out var matched);
 
             if (!matched)
             {
                 return Failure(
-                    $"Could not update '{options.PackageName}' in '{filePath}': no <GlobalPackageReference> element was found " +
+                    $"Could not update '{options.PackageName}' in '{filePath}': no <{elementName}> element was found " +
                     "with an Include or Update attribute and a literal Version attribute. Update the version manually.");
             }
 
