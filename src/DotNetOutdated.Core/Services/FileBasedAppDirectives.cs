@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
@@ -125,24 +125,27 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
     /// <returns><see langword="true"/> when any file was changed.</returns>
     public bool TryUpdateVariable(PackageVariableInfo variableInfo, NuGetVersion newVersion)
     {
+        // A failure after the property was rewritten (say, evaluating the imported properties for the directive pass)
+        // still reports the update that was written.
+        var updated = false;
         try
         {
-            return UpdateVariable(variableInfo, newVersion);
+            UpdateVariable(variableInfo, newVersion, ref updated);
         }
         catch (Exception ex)
         {
             _onWarning?.Invoke(
                 $"Failed to update package reference '{variableInfo.PackageName}' ({variableInfo.ElementType}): {ex.Message}");
-            return false;
         }
+
+        return updated;
     }
 
-    private bool UpdateVariable(PackageVariableInfo variableInfo, NuGetVersion newVersion)
+    private void UpdateVariable(PackageVariableInfo variableInfo, NuGetVersion newVersion, ref bool updated)
     {
         var directiveReplaceRegex = variableInfo.ReferenceKind == ReferenceKind.Sdk
             ? SdkDirectiveReplaceRegex()
             : PackageDirectiveReplaceRegex();
-        var updated = false;
 
         if (_fileSystem.File.Exists(variableInfo.FilePath) && !string.IsNullOrEmpty(variableInfo.VariableName))
         {
@@ -201,8 +204,6 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
                 updated = true;
             }
         }
-
-        return updated;
     }
 
     // Updates the definition of variableName that is in effect for the file-based app at projectFilePath.

@@ -1,4 +1,4 @@
-#nullable enable
+﻿#nullable enable
 
 using System;
 using System.Collections.Generic;
@@ -226,7 +226,26 @@ namespace DotNetOutdated.Tests
         }
 
         [Fact]
-        public void TryUpdateVariable_WhenTheUpdateThrows_WarnsAndReturnsFalse()
+        public void TryUpdateVariable_WhenTheUpdateThrowsBeforeWritingAnything_WarnsAndReturnsFalse()
+        {
+            const string app = "#:package Foo@$(FooVersion)\n";
+            const string props = "<Project><PropertyGroup><FooVersion>1.0.0</FooVersion></PropertyGroup></Project>";
+            var fileSystem = FileSystem(app, new() { [RootPropsPath] = props });
+            var variableInfo = Directives(fileSystem).PackageVariables(AppPath, ReferenceKind.Package)["Foo"];
+            var evaluator = Substitute.For<IProjectEvaluator>();
+            evaluator.GetImportedProperties(Arg.Any<string>()).Returns(_ => throw new InvalidOperationException("boom"));
+
+            Assert.False(Directives(fileSystem, evaluator).TryUpdateVariable(variableInfo, new NuGetVersion("2.0.0")));
+
+            Assert.Equal(props, fileSystem.File.ReadAllText(RootPropsPath));
+            Assert.Equal(app, fileSystem.File.ReadAllText(AppPath));
+            var warning = Assert.Single(_warnings);
+            Assert.Contains("'Foo'", warning);
+            Assert.Contains("boom", warning);
+        }
+
+        [Fact]
+        public void TryUpdateVariable_WhenTheUpdateThrowsAfterRewritingTheProperty_WarnsAndReportsTheUpdate()
         {
             const string app = "#:property FooVersion=1.0.0\n#:package Foo@$(FooVersion)\n";
             var fileSystem = FileSystem(app);
@@ -234,8 +253,9 @@ namespace DotNetOutdated.Tests
             var evaluator = Substitute.For<IProjectEvaluator>();
             evaluator.GetImportedProperties(Arg.Any<string>()).Returns(_ => throw new InvalidOperationException("boom"));
 
-            Assert.False(Directives(fileSystem, evaluator).TryUpdateVariable(variableInfo, new NuGetVersion("2.0.0")));
+            Assert.True(Directives(fileSystem, evaluator).TryUpdateVariable(variableInfo, new NuGetVersion("2.0.0")));
 
+            Assert.Equal(app.Replace("FooVersion=1.0.0", "FooVersion=2.0.0"), fileSystem.File.ReadAllText(AppPath));
             var warning = Assert.Single(_warnings);
             Assert.Contains("'Foo'", warning);
             Assert.Contains("boom", warning);
