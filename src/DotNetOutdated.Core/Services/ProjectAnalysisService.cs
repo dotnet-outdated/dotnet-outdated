@@ -119,6 +119,7 @@ namespace DotNetOutdated.Core.Services
 
                     if (target != null)
                     {
+                        var directLibraries = new List<LockFileTargetLibrary?>();
                         foreach (var projectDependency in targetFrameworkInformation.Dependencies)
                         {
                             var projectLibrary = target.Libraries.FirstOrDefault(library => string.Equals(library.Name, projectDependency.Name, StringComparison.OrdinalIgnoreCase));
@@ -141,10 +142,17 @@ namespace DotNetOutdated.Core.Services
                                 IsAutoReferenced = projectDependency.AutoReferenced,
                                 IsDevelopmentDependency = isDevelopmentDependency,
                             });
+                            directLibraries.Add(projectLibrary);
+                        }
 
-                            // Process transitive dependencies for the library
-                            if (options.IncludeTransitiveDependencies)
+                        // Walk the transitive dependencies only once every direct dependency is in, so a direct dependency
+                        // that another one depends on isn't added as transitive first (TryAdd would then keep that entry).
+                        if (options.IncludeTransitiveDependencies)
+                        {
+                            foreach (var projectLibrary in directLibraries)
+                            {
                                 AddDependencies(targetFramework, projectLibrary, target, 1, options.TransitiveDepth);
+                            }
                         }
 
                         if (isFileBasedApp)
