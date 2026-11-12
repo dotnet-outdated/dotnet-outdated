@@ -46,6 +46,17 @@ namespace DotNetOutdated.Tests
             Assert.False(matched);
         }
 
+        // Markup that only looks like an element (inside a comment, CDATA or a property value) is never edited.
+        [Theory]
+        [InlineData("<!-- <PackageReference Include=\"A\" Version=\"1.0.0\" /> -->")]
+        [InlineData("<P><![CDATA[<PackageReference Include=\"A\" Version=\"1.0.0\" />]]></P>")]
+        [InlineData("<P>&lt;PackageReference Include=\"A\" Version=\"1.0.0\" /&gt;</P>")]
+        public void ReplaceVersion_MarkupThatIsNotAnElement_IsLeftAlone(string content)
+        {
+            Assert.Equal(content, PackageVersionMarkup.ReplaceVersion(content, PackageReference, "A", "2.0.0", out var matched));
+            Assert.False(matched);
+        }
+
         // ── ReplacePackageVersion ─────────────────────────────────────────────────
 
         [Theory]
