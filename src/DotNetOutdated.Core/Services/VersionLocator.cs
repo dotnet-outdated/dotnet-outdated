@@ -22,6 +22,13 @@ internal sealed record LiteralVersion(string? Warning = null) : VersionLocation;
 /// </param>
 internal sealed record MSBuildVariableVersion(PackageVariableInfo Variable, bool DotNetAddCanUpdate) : VersionLocation;
 
+/// <summary>
+/// A literal version on a <c>GlobalPackageReference</c> in <paramref name="FilePath"/>. <c>dotnet add package</c> can't
+/// update one (it adds a <c>PackageReference</c> instead, which central package management rejects), so the version
+/// must be written directly.
+/// </summary>
+internal sealed record GlobalPackageReferenceVersion(string FilePath) : VersionLocation;
+
 /// <summary>A versioned MSBuild project SDK declared in the project file.</summary>
 internal sealed record ProjectSdkVersion(ProjectSdkReference Sdk) : VersionLocation;
 
@@ -140,7 +147,9 @@ internal sealed class VersionLocator(IFileSystem fileSystem, IProjectEvaluator e
     {
         if (!_evaluator.GetVersionVariables(projectPath).TryGetValue(name, out var variableInfo))
         {
-            return new LiteralVersion();
+            return _evaluator.GetGlobalPackageReferenceFile(projectPath, name) is { } globalReferenceFile
+                ? new GlobalPackageReferenceVersion(globalReferenceFile)
+                : new LiteralVersion();
         }
 
         bool dotNetAddCanUpdate =

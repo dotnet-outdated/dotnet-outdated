@@ -24,9 +24,10 @@ namespace DotNetOutdated.Core.Services
         private readonly FileBasedAppDirectives _fileBasedAppDirectives;
         private readonly MSBuildVariableWriter _variableWriter;
 
-        // Restores already run for a project after a variable reached a value, so a property shared by several
-        // projects (or target frameworks) restores each project once rather than only the first.
-        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _restoredVariableStates =
+        // Restores already run for a project after a shared version location (a property or GlobalPackageReference)
+        // reached a value, so one shared by several projects (or target frameworks) restores each project once rather
+        // than only the first.
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _restoredStates =
             new(StringComparer.OrdinalIgnoreCase);
 
         public DotNetPackageService(IDotNetRunner dotNetRunner, IFileSystem fileSystem, Action<string>? onWarning = null)
@@ -65,6 +66,7 @@ namespace DotNetOutdated.Core.Services
                 MSBuildVariableVersion location when noRestore || !location.DotNetAddCanUpdate =>
                     UpdateVariable(location.Variable, options),
                 MSBuildVariableVersion location => AddWithDotNet(options, location.Variable),
+                GlobalPackageReferenceVersion location => UpdateGlobalPackageReference(location.FilePath, options),
                 LiteralVersion location => UpdateLiteral(location, options),
                 var location => throw new InvalidOperationException($"Unexpected version location {location}."),
             };
@@ -149,14 +151,47 @@ namespace DotNetOutdated.Core.Services
                     $"$({variableInfo.VariableName}) property in '{variableInfo.FilePath}'.");
             }
 
+            return RestoreOnce(options, updated, variableInfo.FilePath, variableInfo.VariableName, versionRange.ToVersionString());
+        }
+
+        // Writes a GlobalPackageReference's literal version directly: `dotnet add package` would add a PackageReference
+        // instead, which central package management rejects.
+        private RunStatus UpdateGlobalPackageReference(string filePath, UpgradeOptions options)
+        {
+            var versionText = options.VersionRange.ToVersionString();
+            var file = EncodedText.Read(_fileSystem, filePath);
+            var newContent = PackageVersionMarkup.ReplaceVersion(
+                file.Content, ["GlobalPackageReference"], options.PackageName, versionText, out var matched);
+
+            if (!matched)
+            {
+                return Failure(
+                    $"Could not update '{options.PackageName}' in '{filePath}': no <GlobalPackageReference> element was found " +
+                    "with an Include or Update attribute and a literal Version attribute. Update the version manually.");
+            }
+
+            var updated = newContent != file.Content;
+            if (updated)
+            {
+                // Keep the original encoding and byte order mark.
+                file.Write(_fileSystem, filePath, newContent);
+            }
+
+            return RestoreOnce(options, updated, filePath, options.PackageName, versionText);
+        }
+
+        // Restores the project unless --no-restore is set or it was already restored after the shared location
+        // (identified by sharedLocation) reached this value: a multi-targeted project, or several projects sharing a
+        // property or GlobalPackageReference, upgrade it more than once, and only the first call changes the file.
+        private RunStatus RestoreOnce(UpgradeOptions options, bool updated, params string[] sharedLocation)
+        {
             if (options.NoRestore)
             {
                 return Success();
             }
 
-            var restoreKey = string.Join(
-                "|", _fileSystem.Path.GetFullPath(options.ProjectPath), variableInfo.FilePath, variableInfo.VariableName, versionRange.ToVersionString());
-            if (!updated && _restoredVariableStates.ContainsKey(restoreKey))
+            var restoreKey = string.Join("|", [_fileSystem.Path.GetFullPath(options.ProjectPath), .. sharedLocation]);
+            if (!updated && _restoredStates.ContainsKey(restoreKey))
             {
                 return Success();
             }
@@ -164,7 +199,7 @@ namespace DotNetOutdated.Core.Services
             var restoreStatus = RestoreProject(options);
             if (restoreStatus.IsSuccess)
             {
-                _restoredVariableStates[restoreKey] = true;
+                _restoredStates[restoreKey] = true;
             }
 
             return restoreStatus;

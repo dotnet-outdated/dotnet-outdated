@@ -78,6 +78,24 @@ internal sealed class MSBuildEvaluator(IFileSystem fileSystem)
             : new Dictionary<string, PackageVariableInfo>(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
+    /// The file whose <c>GlobalPackageReference</c> sets the package's version for the project, or
+    /// <see langword="null"/> when a <c>PackageReference</c> sets it or no <c>GlobalPackageReference</c> includes it.
+    /// </summary>
+    public string? GlobalPackageReferenceFile(string projectFilePath, string packageName)
+    {
+        if (!_fileSystem.File.Exists(projectFilePath))
+        {
+            return null;
+        }
+
+        var state = Evaluate(projectFilePath, includeProjectFile: true);
+        return !state.PackageReferences.ContainsKey(packageName) &&
+               state.GlobalPackageReferences.TryGetValue(packageName, out var item)
+            ? item.FilePath
+            : null;
+    }
+
+    /// <summary>
     /// Evaluates the files MSBuild would import for <paramref name="projectFilePath"/>. Without
     /// <paramref name="includeProjectFile"/> only the Directory.* files are evaluated, as for a file-based app.
     /// </summary>

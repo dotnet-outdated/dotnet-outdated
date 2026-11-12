@@ -31,6 +31,8 @@ namespace DotNetOutdated.Tests
 
             public IReadOnlyDictionary<string, PackageVariableInfo> GetVersionVariables(string projectPath) => VersionVariables;
 
+            public string? GetGlobalPackageReferenceFile(string projectPath, string packageName) => null;
+
             public IReadOnlyDictionary<string, ImportedProperty> GetImportedProperties(string appPath) =>
                 new Dictionary<string, ImportedProperty>();
         }
