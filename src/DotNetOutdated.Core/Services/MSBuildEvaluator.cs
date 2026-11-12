@@ -50,6 +50,9 @@ internal sealed class MSBuildEvaluator(IFileSystem fileSystem)
         public required string FilePath { get; init; }
         public required string VersionExpression { get; init; }
         public bool IsVersionOverride { get; init; }
+
+        /// <summary>Whether the item is an <c>Update</c> rather than an <c>Include</c>.</summary>
+        public bool IsUpdate { get; init; }
     }
 
     internal sealed class EvaluationState(string projectPath, string projectDirectory)
@@ -91,6 +94,32 @@ internal sealed class MSBuildEvaluator(IFileSystem fileSystem)
         var state = Evaluate(projectFilePath, includeProjectFile: true);
         return !state.PackageReferences.ContainsKey(packageName) &&
                state.GlobalPackageReferences.TryGetValue(packageName, out var item)
+            ? item.FilePath
+            : null;
+    }
+
+    /// <summary>
+    /// The file whose <c>PackageReference</c> sets a literal <c>Version</c> for the package when <c>dotnet add package</c>
+    /// can't edit it ("Cannot edit items in imported files"): the item is in a file the project imports, such as a
+    /// shared Directory.Build.props, or is an <c>Update</c>. <see langword="null"/> when the project file's own
+    /// <c>Include</c> sets the version, the version isn't a literal <c>Version</c>, or no <c>PackageReference</c> sets it.
+    /// </summary>
+    public string? PackageReferenceVersionFile(string projectFilePath, string packageName)
+    {
+        if (!_fileSystem.File.Exists(projectFilePath))
+        {
+            return null;
+        }
+
+        var state = Evaluate(projectFilePath, includeProjectFile: true);
+        if (!state.PackageReferences.TryGetValue(packageName, out var item) ||
+            item.IsVersionOverride ||
+            item.VersionExpression.Contains("$(", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        return item.IsUpdate || !string.Equals(item.FilePath, state.ProjectPath, StringComparison.OrdinalIgnoreCase)
             ? item.FilePath
             : null;
     }
@@ -358,7 +387,8 @@ internal sealed class MSBuildEvaluator(IFileSystem fileSystem)
             return;
         }
 
-        var packageName = (GetAttributeValue(item, "Include") ?? GetAttributeValue(item, "Update"))?.Trim();
+        var include = GetAttributeValue(item, "Include");
+        var packageName = (include ?? GetAttributeValue(item, "Update"))?.Trim();
         if (string.IsNullOrEmpty(packageName) ||
             !TryGetPackageVersionExpression(item, out var versionExpression, out var isVersionOverride))
         {
@@ -379,6 +409,7 @@ internal sealed class MSBuildEvaluator(IFileSystem fileSystem)
             FilePath = filePath,
             VersionExpression = versionExpression.Trim(),
             IsVersionOverride = isVersionOverride,
+            IsUpdate = include == null,
         };
     }
 

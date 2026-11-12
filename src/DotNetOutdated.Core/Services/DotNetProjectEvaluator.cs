@@ -34,6 +34,9 @@ internal sealed class DotNetProjectEvaluator(IDependencyGraphService dependencyG
     public string? GetGlobalPackageReferenceFile(string projectPath, string packageName) =>
         _evaluator.GlobalPackageReferenceFile(projectPath, packageName);
 
+    public string? GetPackageReferenceVersionFile(string projectPath, string packageName) =>
+        _evaluator.PackageReferenceVersionFile(projectPath, packageName);
+
     public IReadOnlyDictionary<string, ImportedProperty> GetImportedProperties(string appPath) =>
         _evaluator.Evaluate(appPath, includeProjectFile: false).Properties
             .ToDictionary(

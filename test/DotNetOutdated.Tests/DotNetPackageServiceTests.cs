@@ -1865,6 +1865,84 @@ Information(""Outdated Sdk"");")
             dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
         }
 
+        // `dotnet add package` fails with "Cannot edit items in imported files" for a literal version declared in an
+        // imported file, so the version is written there directly and the project restored.
+        [Fact]
+        public void ImportedPackageReference_UpdatesDirectoryBuildProps_WithoutCallingDotNetAdd()
+        {
+            var propsPath = XFS.Path(@"c:\repo\src\Directory.Build.props");
+            var projectPath = XFS.Path(@"c:\repo\src\MyProject\MyProject.csproj");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { propsPath, new MockFileData(DirectoryBuildPropsContent) },
+                { projectPath, new MockFileData("<Project Sdk=\"Microsoft.NET.Sdk\"></Project>") }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus(string.Empty, string.Empty, 0));
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
+
+            var result = service.Upgrade(projectPath, "Contoso.Widgets", "net8.0", new VersionRange(new NuGetVersion("1.5.0")));
+
+            Assert.True(result.IsSuccess);
+            dotNetRunner.DidNotReceive().Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[0] == "add"));
+            dotNetRunner.Received(1).Run(XFS.Path(@"c:\repo\src\MyProject"), Arg.Is<string[]>(a => a.Length == 2 && a[0] == "restore" && a[1] == "MyProject.csproj"));
+            Assert.Equal(
+                DirectoryBuildPropsContent.Replace("Version=\"1.0.0\"", "Version=\"1.5.0\"", StringComparison.Ordinal),
+                mockFileSystem.File.ReadAllText(propsPath));
+        }
+
+        [Fact]
+        public void ImportedPackageReference_WithNoRestore_UpdatesDirectoryBuildPropsWithoutRunningDotNet()
+        {
+            var propsPath = XFS.Path(@"c:\repo\src\Directory.Build.props");
+            var projectPath = XFS.Path(@"c:\repo\src\MyProject\MyProject.csproj");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { propsPath, new MockFileData(DirectoryBuildPropsContent) },
+                { projectPath, new MockFileData("<Project Sdk=\"Microsoft.NET.Sdk\"></Project>") }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
+
+            var result = service.Upgrade(projectPath, "Contoso.Gadgets", "net8.0", new VersionRange(new NuGetVersion("2.1.0")), noRestore: true);
+
+            Assert.True(result.IsSuccess);
+            dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
+            Assert.Equal(
+                DirectoryBuildPropsContent.Replace("Version=\"2.0.0\"", "Version=\"2.1.0\"", StringComparison.Ordinal),
+                mockFileSystem.File.ReadAllText(propsPath));
+        }
+
+        // dotnet add package targets the imported item, not a project's Update override of it, and fails.
+        [Fact]
+        public void ImportedPackageReference_WhenProjectOverridesVersion_UpdatesCsproj_NotImportedProps()
+        {
+            var propsPath = XFS.Path(@"c:\repo\src\Directory.Build.props");
+            var projectPath = XFS.Path(@"c:\repo\src\MyProject\MyProject.csproj");
+            const string projectContent = @"<Project Sdk=""Microsoft.NET.Sdk"">
+  <ItemGroup>
+    <PackageReference Update=""Contoso.Widgets"" Version=""1.2.0"" />
+  </ItemGroup>
+</Project>";
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { propsPath, new MockFileData(DirectoryBuildPropsContent) },
+                { projectPath, new MockFileData(projectContent) }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus(string.Empty, string.Empty, 0));
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
+
+            var result = service.Upgrade(projectPath, "Contoso.Widgets", "net8.0", new VersionRange(new NuGetVersion("1.5.0")));
+
+            Assert.True(result.IsSuccess);
+            dotNetRunner.DidNotReceive().Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[0] == "add"));
+            Assert.Equal(
+                projectContent.Replace("Version=\"1.2.0\"", "Version=\"1.5.0\"", StringComparison.Ordinal),
+                mockFileSystem.File.ReadAllText(projectPath));
+            Assert.Equal(DirectoryBuildPropsContent, mockFileSystem.File.ReadAllText(propsPath));
+        }
+
         [Fact]
         public void PackageWithDirectIncludeInProject_CallsDotNetAddPackage_LeavesImportedPropsUntouched()
         {

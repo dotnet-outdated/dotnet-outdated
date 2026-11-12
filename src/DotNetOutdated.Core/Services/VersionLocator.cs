@@ -29,6 +29,13 @@ internal sealed record MSBuildVariableVersion(PackageVariableInfo Variable, bool
 /// </summary>
 internal sealed record GlobalPackageReferenceVersion(string FilePath) : VersionLocation;
 
+/// <summary>
+/// A literal version on a <c>PackageReference</c> in <paramref name="FilePath"/> that <c>dotnet add package</c> can't
+/// edit ("Cannot edit items in imported files"): one in an imported file such as a shared Directory.Build.props, or an
+/// <c>Update</c> item. The version must be written directly.
+/// </summary>
+internal sealed record PackageReferenceVersionInFile(string FilePath) : VersionLocation;
+
 /// <summary>A versioned MSBuild project SDK declared in the project file.</summary>
 internal sealed record ProjectSdkVersion(ProjectSdkReference Sdk) : VersionLocation;
 
@@ -147,8 +154,13 @@ internal sealed class VersionLocator(IFileSystem fileSystem, IProjectEvaluator e
     {
         if (!_evaluator.GetVersionVariables(projectPath).TryGetValue(name, out var variableInfo))
         {
-            return _evaluator.GetGlobalPackageReferenceFile(projectPath, name) is { } globalReferenceFile
-                ? new GlobalPackageReferenceVersion(globalReferenceFile)
+            if (_evaluator.GetGlobalPackageReferenceFile(projectPath, name) is { } globalReferenceFile)
+            {
+                return new GlobalPackageReferenceVersion(globalReferenceFile);
+            }
+
+            return _evaluator.GetPackageReferenceVersionFile(projectPath, name) is { } packageReferenceFile
+                ? new PackageReferenceVersionInFile(packageReferenceFile)
                 : new LiteralVersion();
         }
 

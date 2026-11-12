@@ -67,6 +67,7 @@ namespace DotNetOutdated.Core.Services
                     UpdateVariable(location.Variable, options),
                 MSBuildVariableVersion location => AddWithDotNet(options, location.Variable),
                 GlobalPackageReferenceVersion location => UpdateGlobalPackageReference(location.FilePath, options),
+                PackageReferenceVersionInFile location => UpdatePackageReferenceInFile(location.FilePath, options),
                 LiteralVersion location => UpdateLiteral(location, options),
                 var location => throw new InvalidOperationException($"Unexpected version location {location}."),
             };
@@ -158,6 +159,12 @@ namespace DotNetOutdated.Core.Services
         // instead, which central package management rejects.
         private RunStatus UpdateGlobalPackageReference(string filePath, UpgradeOptions options) =>
             UpdateLiteralVersionInFile(filePath, "GlobalPackageReference", options);
+
+        // Writes a PackageReference's literal version in the file that declares it: `dotnet add package` fails with
+        // "Cannot edit items in imported files" when that is an imported file (such as a shared Directory.Build.props)
+        // or the item is an Update. Deciding this up front avoids running it and parsing its localized error text.
+        private RunStatus UpdatePackageReferenceInFile(string filePath, UpgradeOptions options) =>
+            UpdateLiteralVersionInFile(filePath, "PackageReference", options);
 
         private RunStatus UpdateLiteralVersionInFile(string filePath, string elementName, UpgradeOptions options)
         {

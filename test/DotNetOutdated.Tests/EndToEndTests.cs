@@ -721,25 +721,25 @@ public static class EndToEndTests
         AssertRestores(project.Path);
     }
 
-    // #301: packages, including pinned transitive dependencies, whose version is in Directory.Build.props can't be
-    // upgraded: `dotnet add package` refuses to edit them ("Cannot edit items in imported files"), so the upgrade fails
-    // and leaves both files as they were.
+    // #301: packages, including pinned transitive dependencies, whose version is in Directory.Build.props are upgraded
+    // there; `dotnet add package` can't edit them ("Cannot edit items in imported files").
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public static void Cannot_Upgrade_Packages_Pinned_In_Directory_Build_Props(bool noRestore)
+    public static void Can_Upgrade_Packages_Pinned_In_Directory_Build_Props(bool noRestore)
     {
         using var project = TestSetup("build-props-pinned");
-        var propsPath = Path.Combine(project.Path, "Directory.Build.props");
         var projectPath = Path.Combine(project.Path, "build-props-pinned.csproj");
-        var originalProps = File.ReadAllText(propsPath);
         var originalProject = File.ReadAllText(projectPath);
 
         var actual = Program.Main([.. UpgradeArgs(project.Path, noRestore)]);
 
-        Assert.NotEqual(0, actual);
-        Assert.Equal(originalProps, File.ReadAllText(propsPath));
+        Assert.Equal(0, actual);
+        var versions = PackageVersions(Path.Combine(project.Path, "Directory.Build.props"), "PackageReference");
+        Assert.Equal("10.0.0", versions["DotNetOutdated.Fake.Logging"]);
+        Assert.Equal("10.0.0", versions["DotNetOutdated.Fake.DependencyInjection"]);
         Assert.Equal(originalProject, File.ReadAllText(projectPath));
+        AssertRestores(project.Path);
     }
 
     private static List<string> UpgradeArgs(string path, bool noRestore, params string[] extra)

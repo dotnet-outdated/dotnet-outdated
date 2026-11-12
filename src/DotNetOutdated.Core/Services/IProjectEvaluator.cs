@@ -44,6 +44,14 @@ internal interface IProjectEvaluator
     string? GetGlobalPackageReferenceFile(string projectPath, string packageName);
 
     /// <summary>
+    /// The full path of the file whose <c>PackageReference</c> sets a literal version of <paramref name="packageName"/>
+    /// for a project when <c>dotnet add package</c> can't edit it there: the item is in an imported file (such as a
+    /// shared Directory.Build.props) or is an <c>Update</c>. <see langword="null"/> when the project file's own
+    /// <c>Include</c> sets the version, or the version isn't a literal set by a <c>PackageReference</c>.
+    /// </summary>
+    string? GetPackageReferenceVersionFile(string projectPath, string packageName);
+
+    /// <summary>
     /// The properties that the <c>Directory.*</c> files MSBuild would import define for a file-based app, keyed by
     /// property name.
     /// </summary>
