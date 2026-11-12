@@ -549,7 +549,6 @@ namespace DotNetOutdated.Tests
         [Theory]
         [InlineData("<PackageVersion Version='12.0.3' Include='Newtonsoft.Json' />")]
         [InlineData("<PackageVersion\n      Include = \"Newtonsoft.Json\"\n      Version = \"12.0.3\"\n    />")]
-        [InlineData("<GlobalPackageReference Version=\"12.0.3\" Update=\"Newtonsoft.Json\" PrivateAssets=\"all\" />")]
         [InlineData("<PackageVersion Include=\"newtonsoft.json\" Version=\"12.0.3\"></PackageVersion>")]
         public void CpmProjectWithRestore_PreservesPackageAttributeFormatting(string packageElement)
         {
@@ -928,6 +927,86 @@ namespace DotNetOutdated.Tests
             var updatedContent = mockFileSystem.File.ReadAllText(propsPath);
             Assert.Contains("Version=\"2.0.0\"", updatedContent);
             Assert.DoesNotContain("Version=\"1.0.0\"", updatedContent);
+        }
+
+        // `dotnet add package` can't update a GlobalPackageReference: it adds a PackageReference, which central package
+        // management rejects (#681). The version is written directly and the project restored.
+        [Theory]
+        [InlineData("<GlobalPackageReference Include=\"StyleCop.Analyzers\" Version=\"{0}\" PrivateAssets=\"All\" />")]
+        [InlineData("<GlobalPackageReference Version='{0}' Update='StyleCop.Analyzers' PrivateAssets='all' />")]
+        [InlineData("<GlobalPackageReference Include=\"StyleCop.Analyzers\" Version=\"{0}\">\n      <PrivateAssets>all</PrivateAssets>\n    </GlobalPackageReference>")]
+        public void CpmProjectWithRestore_UpdatesGlobalPackageReferenceAndRestores(string packageElement)
+        {
+            var propsPath = XFS.Path(@"c:\repo\Directory.Packages.props");
+            var projectPath = XFS.Path(@"c:\repo\src\MyProject\MyProject.csproj");
+            const string propsTemplate = "<Project>\n  <PropertyGroup>\n    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>\n  </PropertyGroup>\n" +
+                "  <ItemGroup Condition=\"'$(MSBuildProjectExtension)' == '.csproj'\">\n    {0}\n  </ItemGroup>\n</Project>\n";
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { propsPath, new MockFileData(string.Format(propsTemplate, string.Format(packageElement, "1.2.0-beta.556"))) },
+                { projectPath, new MockFileData("<Project Sdk=\"Microsoft.NET.Sdk\"></Project>") }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
+            var service = new DotNetPackageService(dotNetRunner, fileSystem);
+
+            var result = service.Upgrade(projectPath, "StyleCop.Analyzers", "net8.0",
+                new VersionRange(new NuGetVersion("1.3.180")), noRestore: false);
+
+            Assert.True(result.IsSuccess, result.Errors);
+            Assert.Equal(
+                string.Format(propsTemplate, string.Format(packageElement, "1.3.180")),
+                fileSystem.File.ReadAllText(propsPath));
+            dotNetRunner.Received(1).Run(XFS.Path(@"c:\repo\src\MyProject"), Arg.Is<string[]>(a => a.Length == 2 && a[0] == "restore" && a[1] == "MyProject.csproj"));
+            dotNetRunner.DidNotReceive().Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[0] == "add"));
+        }
+
+        [Fact]
+        public void CpmProjectWithRestore_GlobalPackageReferenceSharedByTargetFrameworks_RestoresOnce()
+        {
+            var propsPath = XFS.Path(@"c:\repo\Directory.Packages.props");
+            var projectPath = XFS.Path(@"c:\repo\MyProject.csproj");
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { propsPath, new MockFileData(GlobalPackageReferenceContent) },
+                { projectPath, new MockFileData("<Project></Project>") }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
+            var service = new DotNetPackageService(dotNetRunner, fileSystem);
+            var version = new VersionRange(new NuGetVersion("2.0.0"));
+
+            Assert.True(service.Upgrade(projectPath, "SomeAnalyzer", "net8.0", version, noRestore: false).IsSuccess);
+            Assert.True(service.Upgrade(projectPath, "SomeAnalyzer", "net9.0", version, noRestore: false).IsSuccess);
+
+            Assert.Equal(GlobalPackageReferenceContent.Replace("1.0.0", "2.0.0"), fileSystem.File.ReadAllText(propsPath));
+            dotNetRunner.Received(1).Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[0] == "restore"));
+            dotNetRunner.DidNotReceive().Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[0] == "add"));
+        }
+
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public void GlobalPackageReferenceInDirectoryBuildProps_IsUpdatedWhereItIsDeclared(bool noRestore)
+        {
+            var buildPropsPath = XFS.Path(@"c:\repo\Directory.Build.props");
+            var projectPath = XFS.Path(@"c:\repo\MyProject.csproj");
+            const string buildProps = "<Project>\n  <ItemGroup>\n    <GlobalPackageReference Include=\"SomeAnalyzer\" Version=\"1.0.0\" />\n  </ItemGroup>\n</Project>\n";
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { buildPropsPath, new MockFileData(buildProps) },
+                { XFS.Path(@"c:\repo\Directory.Packages.props"), new MockFileData(DirectoryPackagesPropsContent) },
+                { projectPath, new MockFileData("<Project></Project>") }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
+            var service = new DotNetPackageService(dotNetRunner, fileSystem);
+
+            var result = service.Upgrade(projectPath, "SomeAnalyzer", "net8.0", new VersionRange(new NuGetVersion("2.0.0")), noRestore);
+
+            Assert.True(result.IsSuccess, result.Errors);
+            Assert.Equal(buildProps.Replace("1.0.0", "2.0.0"), fileSystem.File.ReadAllText(buildPropsPath));
+            dotNetRunner.DidNotReceive().Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[0] == "add"));
         }
 
         [Fact]

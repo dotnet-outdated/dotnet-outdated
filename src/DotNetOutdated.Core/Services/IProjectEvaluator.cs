@@ -37,6 +37,13 @@ internal interface IProjectEvaluator
     IReadOnlyDictionary<string, PackageVariableInfo> GetVersionVariables(string projectPath);
 
     /// <summary>
+    /// The full path of the file whose <c>GlobalPackageReference</c> sets the version of <paramref name="packageName"/>
+    /// for a project, or <see langword="null"/> when the version doesn't come from one (a <c>PackageReference</c>
+    /// version takes precedence, as in <see cref="GetVersionVariables"/>).
+    /// </summary>
+    string? GetGlobalPackageReferenceFile(string projectPath, string packageName);
+
+    /// <summary>
     /// The properties that the <c>Directory.*</c> files MSBuild would import define for a file-based app, keyed by
     /// property name.
     /// </summary>
