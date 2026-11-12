@@ -213,21 +213,11 @@ namespace DotNetOutdated.Core.Services
             }
 
             // When --no-restore is used, `dotnet add package` has an upstream bug where it writes
-            // version info to .csproj instead of Directory.Packages.props for CPM projects.
-            // See: https://github.com/NuGet/Home/issues/12552
-            if (options.NoRestore)
+            // version info to .csproj instead of Directory.Packages.props for CPM projects, so write the central
+            // version directly. See: https://github.com/NuGet/Home/issues/12552
+            if (options.NoRestore && location.Declaration is { ElementType: PackageVersionDeclaration.PackageVersion } central)
             {
-                switch (TryUpdateCentralPackageVersion(options.ProjectPath, options.PackageName, options.VersionRange, out var centralPackagesPath))
-                {
-                    case CentralPackageVersionUpdate.Updated:
-                        return Success();
-                    case CentralPackageVersionUpdate.NoMatchingEntry:
-                        // Don't fall back to `dotnet add package --no-restore`: it would write the
-                        // version into the project file (NuGet/Home#12552).
-                        return Failure(
-                            $"Could not update '{options.PackageName}' in '{centralPackagesPath}': no <PackageVersion> or <GlobalPackageReference> " +
-                            "element was found with an Include or Update attribute and a Version attribute. Update the version manually.");
-                }
+                return UpdateCentralPackageVersion(central.FilePath, options);
             }
 
             return AddWithDotNet(options, variableInfo: null);
@@ -304,50 +294,28 @@ namespace DotNetOutdated.Core.Services
             return _dotNetRunner.Run(_fileSystem.Path.GetDirectoryName(options.ProjectPath), [.. arguments]);
         }
 
-        private enum CentralPackageVersionUpdate
+        private RunStatus UpdateCentralPackageVersion(string centralPackagesPath, UpgradeOptions options)
         {
-            /// <summary>No Directory.Packages.props mentions the package.</summary>
-            NotFound,
+            var file = EncodedText.Read(_fileSystem, centralPackagesPath);
+            var newContent = PackageVersionMarkup.ReplaceVersion(
+                file.Content, PackageVersionMarkup.CentralPackageElements, options.PackageName, options.VersionRange.ToVersionString(), out var matched);
 
-            /// <summary>The entry was found and now has the requested version.</summary>
-            Updated,
-
-            /// <summary>The nearest Directory.Packages.props mentions the package, but no entry could be updated.</summary>
-            NoMatchingEntry,
-        }
-
-        private CentralPackageVersionUpdate TryUpdateCentralPackageVersion(string projectPath, string packageName, VersionRange versionRange, out string? centralPackagesPath)
-        {
-            centralPackagesPath = null;
-            foreach (var cpvmFile in FindCentralPackagesFiles(projectPath))
+            if (!matched)
             {
-                var file = EncodedText.Read(_fileSystem, cpvmFile.FullName);
-                var fileContent = file.Content;
-                if (!fileContent.Contains($"\"{packageName}\"", StringComparison.OrdinalIgnoreCase) &&
-                    !fileContent.Contains($"'{packageName}'", StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                centralPackagesPath = cpvmFile.FullName;
-                var newFileContent = PackageVersionMarkup.ReplaceVersion(
-                    fileContent, PackageVersionMarkup.CentralPackageElements, packageName, versionRange.ToVersionString(), out var matched);
-
-                if (!matched)
-                {
-                    return CentralPackageVersionUpdate.NoMatchingEntry;
-                }
-
-                if (newFileContent != fileContent)
-                {
-                    // Keep the original encoding and byte order mark.
-                    file.Write(_fileSystem, cpvmFile.FullName, newFileContent);
-                }
-
-                return CentralPackageVersionUpdate.Updated;
+                // Don't fall back to `dotnet add package --no-restore`: it would write the version into the project
+                // file (NuGet/Home#12552).
+                return Failure(
+                    $"Could not update '{options.PackageName}' in '{centralPackagesPath}': no <PackageVersion> or <GlobalPackageReference> " +
+                    "element was found with an Include or Update attribute and a Version attribute. Update the version manually.");
             }
 
-            return CentralPackageVersionUpdate.NotFound;
+            if (newContent != file.Content)
+            {
+                // Keep the original encoding and byte order mark.
+                file.Write(_fileSystem, centralPackagesPath, newContent);
+            }
+
+            return Success();
         }
 
         private IEnumerable<IFileInfo> FindCentralPackagesFiles(string projectPath)

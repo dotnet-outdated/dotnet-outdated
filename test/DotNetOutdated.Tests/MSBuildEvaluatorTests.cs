@@ -389,5 +389,47 @@ namespace DotNetOutdated.Tests
             Assert.Equal(ProjectPath, info.FilePath);
             Assert.Null(info.UnsupportedReason);
         }
+
+        [Fact]
+        public void PackageVersions_ReportsTheFileAndEvaluatedRangeOfEachDeclaration()
+        {
+            var centralPath = XFS.Path(@"c:\repo\Directory.Packages.props");
+            var fileSystem = FileSystem(new()
+            {
+                [centralPath] = Props("""
+                    <PropertyGroup><BarVersion>2.0.0</BarVersion></PropertyGroup>
+                    <ItemGroup>
+                      <PackageVersion Include="Foo" Version="[1.0.0, 2.0.0)" />
+                      <PackageVersion Include="Bar" Version="[$(BarVersion), 3.0.0)" />
+                      <GlobalPackageReference Include="Analyzer" Version="1.5.0" />
+                      <PackageVersion Include="Baz" Version="1.0.0" />
+                    </ItemGroup>
+                    """),
+                [ProjectPath] = Project("""<ItemGroup><PackageReference Include="Baz" VersionOverride="1.2.0" /></ItemGroup>"""),
+            });
+
+            var versions = new MSBuildEvaluator(fileSystem).PackageVersions(ProjectPath);
+
+            Assert.Equal(new PackageVersionDeclaration("PackageVersion", centralPath, "[1.0.0, 2.0.0)", false, NuGet.Versioning.VersionRange.Parse("[1.0.0, 2.0.0)"), null), versions["Foo"]);
+            Assert.Equal(NuGet.Versioning.VersionRange.Parse("[2.0.0, 3.0.0)"), versions["Bar"].VersionRange);
+            Assert.Equal("BarVersion", versions["Bar"].Variable?.VariableName);
+            Assert.Equal(("GlobalPackageReference", centralPath), (versions["Analyzer"].ElementType, versions["Analyzer"].FilePath));
+            // A version on the PackageReference takes precedence over the central one.
+            Assert.Equal(("PackageReference", ProjectPath, true), (versions["Baz"].ElementType, versions["Baz"].FilePath, versions["Baz"].IsVersionOverride));
+        }
+
+        [Fact]
+        public void PackageVersions_OfAVersionThatCantBeEvaluated_HasNoRange()
+        {
+            var fileSystem = FileSystem(new()
+            {
+                [ProjectPath] = Project("""<ItemGroup><PackageReference Include="Foo" Version="$(SdkDefinedVersion)" /></ItemGroup>"""),
+            });
+
+            var declaration = new MSBuildEvaluator(fileSystem).PackageVersions(ProjectPath)["Foo"];
+
+            Assert.Null(declaration.VersionRange);
+            Assert.NotNull(declaration.Variable);
+        }
     }
 }

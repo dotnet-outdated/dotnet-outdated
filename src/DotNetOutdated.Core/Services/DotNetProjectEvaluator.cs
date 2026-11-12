@@ -28,11 +28,8 @@ internal sealed class DotNetProjectEvaluator(IDependencyGraphService dependencyG
     public IReadOnlyList<PackageReferenceItem>? GetPackageReferenceItems(string projectPath, string targetFramework, string? runtime) =>
         _dependencyGraphService.GetPackageReferenceItems(projectPath, targetFramework, runtime);
 
-    public IReadOnlyDictionary<string, PackageVariableInfo> GetVersionVariables(string projectPath) =>
-        _evaluator.PackageVariables(projectPath);
-
-    public string? GetGlobalPackageReferenceFile(string projectPath, string packageName) =>
-        _evaluator.GlobalPackageReferenceFile(projectPath, packageName);
+    public IReadOnlyDictionary<string, PackageVersionDeclaration> GetPackageVersions(string projectPath) =>
+        _evaluator.PackageVersions(projectPath);
 
     public IReadOnlyDictionary<string, ImportedProperty> GetImportedProperties(string appPath) =>
         _evaluator.Evaluate(appPath, includeProjectFile: false).Properties

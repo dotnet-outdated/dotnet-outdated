@@ -49,6 +49,10 @@ internal sealed class MSBuildEvaluator(IFileSystem fileSystem)
         public required string ElementType { get; init; }
         public required string FilePath { get; init; }
         public required string VersionExpression { get; init; }
+
+        /// <summary><see cref="VersionExpression"/> with its property references expanded; <see langword="null"/> when that isn't possible.</summary>
+        public string? VersionValue { get; init; }
+
         public bool IsVersionOverride { get; init; }
     }
 
@@ -73,26 +77,46 @@ internal sealed class MSBuildEvaluator(IFileSystem fileSystem)
     /// the project file and Directory.Build.targets. Packages whose version is a literal are left out.
     /// </summary>
     public Dictionary<string, PackageVariableInfo> PackageVariables(string projectFilePath) =>
-        _fileSystem.File.Exists(projectFilePath)
-            ? BuildPackageVariables(Evaluate(projectFilePath, includeProjectFile: true))
-            : new Dictionary<string, PackageVariableInfo>(StringComparer.OrdinalIgnoreCase);
+        PackageVersions(projectFilePath)
+            .Where(pair => pair.Value.Variable != null)
+            .ToDictionary(pair => pair.Key, pair => pair.Value.Variable!, StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
-    /// The file whose <c>GlobalPackageReference</c> sets the package's version for the project, or
-    /// <see langword="null"/> when a <c>PackageReference</c> sets it or no <c>GlobalPackageReference</c> includes it.
+    /// The item that sets each package's version for the project, from one evaluation of its Directory.*.props, the
+    /// project file and Directory.Build.targets. A version on a <c>PackageReference</c> (<c>Version</c> or
+    /// <c>VersionOverride</c>) takes precedence over a <c>GlobalPackageReference</c>, which takes precedence over a
+    /// <c>PackageVersion</c>.
     /// </summary>
-    public string? GlobalPackageReferenceFile(string projectFilePath, string packageName)
+    public Dictionary<string, PackageVersionDeclaration> PackageVersions(string projectFilePath)
     {
+        var result = new Dictionary<string, PackageVersionDeclaration>(StringComparer.OrdinalIgnoreCase);
         if (!_fileSystem.File.Exists(projectFilePath))
         {
-            return null;
+            return result;
         }
 
         var state = Evaluate(projectFilePath, includeProjectFile: true);
-        return !state.PackageReferences.ContainsKey(packageName) &&
-               state.GlobalPackageReferences.TryGetValue(packageName, out var item)
-            ? item.FilePath
-            : null;
+        var packageNames = state.PackageReferences.Keys
+            .Concat(state.GlobalPackageReferences.Keys)
+            .Concat(state.PackageVersions.Keys)
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var packageName in packageNames)
+        {
+            var item = state.PackageReferences.GetValueOrDefault(packageName) ??
+                       state.GlobalPackageReferences.GetValueOrDefault(packageName) ??
+                       state.PackageVersions[packageName];
+
+            result[packageName] = new PackageVersionDeclaration(
+                item.ElementType,
+                item.FilePath,
+                item.VersionExpression,
+                item.IsVersionOverride,
+                item.VersionValue != null && VersionRange.TryParse(item.VersionValue, out var range) ? range : null,
+                CreatePackageVariableInfo(item, state));
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -378,6 +402,7 @@ internal sealed class MSBuildEvaluator(IFileSystem fileSystem)
             ElementType = item.Name.LocalName,
             FilePath = filePath,
             VersionExpression = versionExpression.Trim(),
+            VersionValue = Expand(versionExpression.Trim(), filePath, state, null),
             IsVersionOverride = isVersionOverride,
         };
     }
@@ -542,31 +567,6 @@ internal sealed class MSBuildEvaluator(IFileSystem fileSystem)
     internal static bool IsPropertyElement(XElement element) =>
         element.Parent != null &&
         element.Parent.Name.LocalName.Equals("PropertyGroup", StringComparison.OrdinalIgnoreCase);
-
-    private Dictionary<string, PackageVariableInfo> BuildPackageVariables(EvaluationState state)
-    {
-        var result = new Dictionary<string, PackageVariableInfo>(StringComparer.OrdinalIgnoreCase);
-        var packageNames = state.PackageReferences.Keys
-            .Concat(state.GlobalPackageReferences.Keys)
-            .Concat(state.PackageVersions.Keys)
-            .Distinct(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var packageName in packageNames)
-        {
-            // A version on the PackageReference (Version or VersionOverride) takes precedence over central versions.
-            var item = state.PackageReferences.GetValueOrDefault(packageName) ??
-                       state.GlobalPackageReferences.GetValueOrDefault(packageName) ??
-                       state.PackageVersions[packageName];
-
-            var info = CreatePackageVariableInfo(item, state);
-            if (info != null)
-            {
-                result[packageName] = info;
-            }
-        }
-
-        return result;
-    }
 
     private static PackageVariableInfo? CreatePackageVariableInfo(PackageItem item, EvaluationState state)
     {

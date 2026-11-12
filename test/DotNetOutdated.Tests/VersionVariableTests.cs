@@ -28,7 +28,9 @@ namespace DotNetOutdated.Tests
             {
                 if (!projectFilePath.IsCSharpFile())
                 {
-                    return new Dictionary<string, PackageVariableInfo>(_evaluator.GetVersionVariables(projectFilePath), StringComparer.OrdinalIgnoreCase);
+                    return _evaluator.GetPackageVersions(projectFilePath)
+                        .Where(pair => pair.Value.Variable != null)
+                        .ToDictionary(pair => pair.Key, pair => pair.Value.Variable, StringComparer.OrdinalIgnoreCase);
                 }
 
                 var variables = Directives.PackageVariables(projectFilePath, ReferenceKind.Package);

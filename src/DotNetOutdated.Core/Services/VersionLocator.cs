@@ -11,9 +11,10 @@ internal abstract record VersionLocation;
 
 /// <summary>
 /// A literal version in the project file or a central <c>Directory.Packages.props</c>, which <c>dotnet add package</c>
-/// can rewrite. <see cref="Warning"/> is set when a version expression is replaced by the literal.
+/// can rewrite, or no version at all (a transitive package), which it adds. <see cref="Declaration"/> is the item that
+/// holds the version, if any; <see cref="Warning"/> is set when a version expression is replaced by the literal.
 /// </summary>
-internal sealed record LiteralVersion(string? Warning = null) : VersionLocation;
+internal sealed record LiteralVersion(PackageVersionDeclaration? Declaration = null, string? Warning = null) : VersionLocation;
 
 /// <summary>An MSBuild property behind a <c>PackageReference</c>, <c>PackageVersion</c> or <c>GlobalPackageReference</c>.</summary>
 /// <param name="DotNetAddCanUpdate">
@@ -145,17 +146,22 @@ internal sealed class VersionLocator(IFileSystem fileSystem, IProjectEvaluator e
 
     private VersionLocation LocatePackage(string projectPath, string name)
     {
-        if (!_evaluator.GetVersionVariables(projectPath).TryGetValue(name, out var variableInfo))
+        if (!_evaluator.GetPackageVersions(projectPath).TryGetValue(name, out var declaration))
         {
-            return _evaluator.GetGlobalPackageReferenceFile(projectPath, name) is { } globalReferenceFile
-                ? new GlobalPackageReferenceVersion(globalReferenceFile)
-                : new LiteralVersion();
+            return new LiteralVersion();
+        }
+
+        if (declaration.Variable is not { } variableInfo)
+        {
+            return declaration.ElementType == PackageVersionDeclaration.GlobalPackageReference
+                ? new GlobalPackageReferenceVersion(declaration.FilePath)
+                : new LiteralVersion(declaration);
         }
 
         bool dotNetAddCanUpdate =
-            variableInfo.ElementType != "GlobalPackageReference" &&
+            variableInfo.ElementType != PackageVersionDeclaration.GlobalPackageReference &&
             !variableInfo.IsVersionOverride &&
-            !(variableInfo.ElementType == "PackageReference" &&
+            !(variableInfo.ElementType == PackageVersionDeclaration.PackageReference &&
               !string.Equals(variableInfo.PackageReferenceFilePath, projectPath, StringComparison.OrdinalIgnoreCase));
 
         if (variableInfo.UnsupportedReason == null)
@@ -172,6 +178,7 @@ internal sealed class VersionLocator(IFileSystem fileSystem, IProjectEvaluator e
 
         // Treat it like a literal version: the expression is replaced with the new version.
         return new LiteralVersion(
+            declaration,
             $"'{name}' in '{variableInfo.PackageReferenceFilePath}' will be set to a literal version because " +
             $"{variableInfo.UnsupportedReason}; its version expression '{variableInfo.PackageReferenceVersion}' is not preserved.");
     }

@@ -21,7 +21,7 @@ namespace DotNetOutdated.Tests
     {
         private sealed class FakeProjectEvaluator : IProjectEvaluator
         {
-            public Dictionary<string, PackageVariableInfo> VersionVariables { get; } = new(StringComparer.OrdinalIgnoreCase);
+            public Dictionary<string, PackageVersionDeclaration> PackageVersions { get; } = new(StringComparer.OrdinalIgnoreCase);
 
             public Task<DependencyGraphSpec> GetRestoreGraphAsync(string projectPath, string? runtime) =>
                 throw new NotSupportedException();
@@ -29,9 +29,7 @@ namespace DotNetOutdated.Tests
             public IReadOnlyList<PackageReferenceItem>? GetPackageReferenceItems(string projectPath, string targetFramework, string? runtime) =>
                 throw new NotSupportedException();
 
-            public IReadOnlyDictionary<string, PackageVariableInfo> GetVersionVariables(string projectPath) => VersionVariables;
-
-            public string? GetGlobalPackageReferenceFile(string projectPath, string packageName) => null;
+            public IReadOnlyDictionary<string, PackageVersionDeclaration> GetPackageVersions(string projectPath) => PackageVersions;
 
             public IReadOnlyDictionary<string, ImportedProperty> GetImportedProperties(string appPath) =>
                 new Dictionary<string, ImportedProperty>();
@@ -64,7 +62,7 @@ namespace DotNetOutdated.Tests
             });
 
             var evaluator = new FakeProjectEvaluator();
-            evaluator.VersionVariables["Foo"] = new PackageVariableInfo
+            var variable = new PackageVariableInfo
             {
                 PackageName = "Foo",
                 VariableName = "FooVersion",
@@ -75,6 +73,8 @@ namespace DotNetOutdated.Tests
                 PackageReferenceVersion = "$(FooVersion)",
                 ElementType = "PackageReference",
             };
+            evaluator.PackageVersions["Foo"] = new PackageVersionDeclaration(
+                "PackageReference", projectPath, "$(FooVersion)", IsVersionOverride: false, VersionRange.Parse("1.0.0"), variable);
 
             var runner = Substitute.For<IDotNetRunner>();
             var service = new DotNetPackageService(runner, fileSystem, evaluator);
