@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO.Abstractions;
 using System.Linq;
@@ -134,13 +134,23 @@ internal sealed class MSBuildVariableWriter(IFileSystem fileSystem, Action<strin
         {
             var elements = PropertyElements(doc, variableInfo.VariableName);
             var topLevel = elements.FindLastIndex(e => e.Parent != null && IsUnconditionalTopLevel(e.Parent) && e.Attribute("Condition") == null);
-            newContent = topLevel >= 0
+            var index = topLevel >= 0
                 // Already defined (for example by an earlier upgrade that inserted it): update that definition.
-                ? PackageVersionMarkup.ReplacePropertyValueAt(content, variableInfo.VariableName, topLevel, newValue)
+                ? topLevel
                 : !variableInfo.InsertProperty && elements.Count > 0
                     // Callers that don't say which definition: the last one.
-                    ? PackageVersionMarkup.ReplacePropertyValueAt(content, variableInfo.VariableName, elements.Count - 1, newValue)
-                    : PackageVersionMarkup.InsertProperty(content, InsertionGroupIndex(doc), variableInfo.VariableName, newValue);
+                    ? elements.Count - 1
+                    : -1;
+
+            // Compare the parsed value: the text can spell the same value differently (2&#46;0&#46;0).
+            if (index >= 0 && string.Equals(elements[index].Value.Trim(), newValue, StringComparison.Ordinal))
+            {
+                return PropertyWrite.AlreadyCurrent;
+            }
+
+            newContent = index >= 0
+                ? PackageVersionMarkup.ReplacePropertyValueAt(content, variableInfo.VariableName, index, newValue)
+                : PackageVersionMarkup.InsertProperty(content, InsertionGroupIndex(doc), variableInfo.VariableName, newValue);
         }
         else
         {
