@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Abstractions.TestingHelpers;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
@@ -14,6 +15,7 @@ using NSubstitute;
 using NuGet.Frameworks;
 using NuGet.Versioning;
 using Xunit;
+using XFS = System.IO.Abstractions.TestingHelpers.MockUnixSupport;
 
 namespace DotNetOutdated.Tests
 {
@@ -22,7 +24,7 @@ namespace DotNetOutdated.Tests
         private readonly IServiceProvider _serviceProvider;
         private readonly IProjectDiscoveryService _projectDiscoveryService;
         private readonly IProjectAnalysisService _projectAnalysisService;
-        private readonly IDotNetPackageService _dotNetPackageService;
+        private IReferenceUpgrader _referenceUpgrader;
         private readonly IOutdatedDependencyService _outdatedDependencyService;
 
         public McpServerTests()
@@ -30,7 +32,7 @@ namespace DotNetOutdated.Tests
             _serviceProvider = Substitute.For<IServiceProvider>();
             _projectDiscoveryService = Substitute.For<IProjectDiscoveryService>();
             _projectAnalysisService = Substitute.For<IProjectAnalysisService>();
-            _dotNetPackageService = Substitute.For<IDotNetPackageService>();
+            _referenceUpgrader = Substitute.For<IReferenceUpgrader>();
             _outdatedDependencyService = Substitute.For<IOutdatedDependencyService>();
         }
 
@@ -43,7 +45,7 @@ namespace DotNetOutdated.Tests
                 _serviceProvider,
                 _projectDiscoveryService,
                 _projectAnalysisService,
-                _dotNetPackageService,
+                _referenceUpgrader,
                 _outdatedDependencyService,
                 inputStream,
                 outputStream
@@ -313,11 +315,13 @@ namespace DotNetOutdated.Tests
             Assert.Equal(["net9.0", "net8.0-windows"], names.Select(name => name.GetString()));
         }
 
-        private static JsonElement ParseAnalyzeProjectResult(string output)
+        private static JsonElement ParseAnalyzeProjectResult(string output) =>
+            JsonDocument.Parse(ToolResultText(output)).RootElement.Clone();
+
+        private static string ToolResultText(string output)
         {
             using var response = JsonDocument.Parse(output);
-            var text = response.RootElement.GetProperty("result").GetProperty("content")[0].GetProperty("text").GetString()!;
-            return JsonDocument.Parse(text).RootElement.Clone();
+            return response.RootElement.GetProperty("result").GetProperty("content")[0].GetProperty("text").GetString()!;
         }
 
         [Theory]
@@ -333,7 +337,7 @@ namespace DotNetOutdated.Tests
             var output = await RunServerAsync(input);
 
             Assert.Contains("Invalid version", output);
-            _dotNetPackageService.ReceivedCalls().ToList().ForEach(call => Assert.NotEqual(nameof(IDotNetPackageService.Upgrade), call.GetMethodInfo().Name));
+            _referenceUpgrader.DidNotReceiveWithAnyArgs().Upgrade(default!);
         }
 
         [Fact]
@@ -341,12 +345,52 @@ namespace DotNetOutdated.Tests
         {
             var input = "{\"jsonrpc\": \"2.0\", \"method\": \"tools/call\", \"params\": { \"name\": \"update_package\", \"arguments\": " +
                 "{ \"projectPath\": \"/test/p.csproj\", \"packageName\": \"Newtonsoft.Json\", \"version\": \"13.0.1\", \"framework\": \"net8.0\" } }, \"id\": 5}\n";
-            _dotNetPackageService.Upgrade(new ReferenceUpgrade { ProjectPath = "/test/p.csproj", Name = "Newtonsoft.Json", TargetFramework = "net8.0", Version = new VersionRange(new NuGetVersion("13.0.1")) })
-                .Returns(new RunStatus("", "", 0));
+            UpgradeReturns(UpgradeOutcome.Upgraded);
 
             var output = await RunServerAsync(input);
 
             Assert.Contains("Successfully updated Newtonsoft.Json to 13.0.1", output);
+            _referenceUpgrader.Received(1).Upgrade(Arg.Is<ReferenceUpgrade>(upgrade =>
+                upgrade.Name == "Newtonsoft.Json" && upgrade.Version == new NuGetVersion("13.0.1") &&
+                upgrade.Projects.Single() == new UpgradeProject("/test/p.csproj", "net8.0")));
+        }
+
+        [Theory]
+        [InlineData(UpgradeOutcome.Upgraded, "Successfully updated Newtonsoft.Json to 13.0.1")]
+        [InlineData(UpgradeOutcome.AlreadyCurrent, "Newtonsoft.Json is already at 13.0.1")]
+        public async Task UpdatePackage_ReportsTheOutcomeAndWarnings(UpgradeOutcome outcome, string expected)
+        {
+            var input = "{\"jsonrpc\": \"2.0\", \"method\": \"tools/call\", \"params\": { \"name\": \"update_package\", \"arguments\": " +
+                "{ \"projectPath\": \"/test/p.csproj\", \"packageName\": \"Newtonsoft.Json\", \"version\": \"13.0.1\", \"framework\": \"net8.0\" } }, \"id\": 5}\n";
+            UpgradeReturns(outcome, warnings: ["a version expression was replaced"]);
+
+            var output = await RunServerAsync(input);
+
+            var text = ToolResultText(output);
+            Assert.StartsWith(expected, text);
+            Assert.Contains("Warning: a version expression was replaced", text);
+            Assert.DoesNotContain("\"isError\":true", output);
+        }
+
+        [Fact]
+        public async Task UpdatePackage_KeepsTheUpperBoundOfADeclaredRange()
+        {
+            // The same range policy as the CLI: [6.0.13, 7.0.0) upgraded to 6.0.36 stays below 7.0.0.
+            var projectPath = XFS.Path(@"c:\repo\App\App.csproj");
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                [projectPath] = new(@"<Project Sdk=""Microsoft.NET.Sdk""><ItemGroup><PackageReference Include=""Foo"" Version=""[6.0.13, 7.0.0)"" /></ItemGroup></Project>"),
+            });
+            var runner = Substitute.For<IDotNetRunner>();
+            runner.Run(default, default!).ReturnsForAnyArgs(new RunStatus("", "", 0));
+            _referenceUpgrader = new ReferenceUpgrader(runner, fileSystem);
+            var input = "{\"jsonrpc\": \"2.0\", \"method\": \"tools/call\", \"params\": { \"name\": \"update_package\", \"arguments\": " +
+                $"{{ \"projectPath\": {JsonSerializer.Serialize(projectPath)}, \"packageName\": \"Foo\", \"version\": \"6.0.36\", \"framework\": \"net8.0\" }} }}, \"id\": 5}}\n";
+
+            var output = await RunServerAsync(input);
+
+            Assert.Contains("Successfully updated Foo to 6.0.36", output);
+            runner.Received(1).Run(Arg.Any<string>(), Arg.Is<string[]>(args => args[0] == "add" && args[5] == "[6.0.36, 7.0.0)"));
         }
 
         [Fact]
@@ -355,12 +399,12 @@ namespace DotNetOutdated.Tests
             // Clients written before "kind" existed omit it, so the SDK has to be recognised by name (#827).
             var input = "{\"jsonrpc\": \"2.0\", \"method\": \"tools/call\", \"params\": { \"name\": \"update_package\", \"arguments\": " +
                 "{ \"projectPath\": \"/test/p.csproj\", \"packageName\": \"Aspire.AppHost.Sdk\", \"version\": \"9.1.0\", \"framework\": \"net8.0\" } }, \"id\": 6}\n";
-            _dotNetPackageService.Upgrade(Arg.Any<ReferenceUpgrade>()).Returns(new RunStatus("", "", 0));
+            UpgradeReturns(UpgradeOutcome.Upgraded);
 
             var output = await RunServerAsync(input);
 
             Assert.Contains("Successfully updated Aspire.AppHost.Sdk to 9.1.0", output);
-            _dotNetPackageService.Received(1).Upgrade(Arg.Is<ReferenceUpgrade>(upgrade => upgrade.Name == "Aspire.AppHost.Sdk" && upgrade.Kind == null));
+            _referenceUpgrader.Received(1).Upgrade(Arg.Is<ReferenceUpgrade>(upgrade => upgrade.Name == "Aspire.AppHost.Sdk" && upgrade.Kind == null));
         }
 
         [Fact]
@@ -368,12 +412,12 @@ namespace DotNetOutdated.Tests
         {
             var input = "{\"jsonrpc\": \"2.0\", \"method\": \"tools/call\", \"params\": { \"name\": \"update_package\", \"arguments\": " +
                 "{ \"projectPath\": \"/test/p.csproj\", \"packageName\": \"Aspire.AppHost.Sdk\", \"version\": \"9.1.0\", \"framework\": \"net8.0\", \"kind\": \"sdk\" } }, \"id\": 6}\n";
-            _dotNetPackageService.Upgrade(new ReferenceUpgrade { ProjectPath = "/test/p.csproj", Name = "Aspire.AppHost.Sdk", TargetFramework = "net8.0", Version = new VersionRange(new NuGetVersion("9.1.0")), Kind = ReferenceKind.Sdk })
-                .Returns(new RunStatus("", "", 0));
+            UpgradeReturns(UpgradeOutcome.Upgraded);
 
             var output = await RunServerAsync(input);
 
             Assert.Contains("Successfully updated Aspire.AppHost.Sdk to 9.1.0", output);
+            _referenceUpgrader.Received(1).Upgrade(Arg.Is<ReferenceUpgrade>(upgrade => upgrade.Name == "Aspire.AppHost.Sdk" && upgrade.Kind == ReferenceKind.Sdk));
         }
 
         [Theory]
@@ -389,7 +433,7 @@ namespace DotNetOutdated.Tests
             var output = await RunServerAsync(input);
 
             Assert.Contains("Invalid kind", output);
-            _dotNetPackageService.DidNotReceiveWithAnyArgs().Upgrade(default!);
+            _referenceUpgrader.DidNotReceiveWithAnyArgs().Upgrade(default!);
         }
 
         [Fact]
@@ -397,23 +441,22 @@ namespace DotNetOutdated.Tests
         {
             var input = "{\"jsonrpc\": \"2.0\", \"method\": \"tools/call\", \"params\": { \"name\": \"update_package\", \"arguments\": " +
                 "{ \"projectPath\": \"/test/p.csproj\", \"packageName\": \"Newtonsoft.Json\", \"version\": \"13.0.1\", \"framework\": \"net8.0\", \"kind\": null } }, \"id\": 8}\n";
-            _dotNetPackageService.Upgrade(new ReferenceUpgrade { ProjectPath = "/test/p.csproj", Name = "Newtonsoft.Json", TargetFramework = "net8.0", Version = new VersionRange(new NuGetVersion("13.0.1")), Kind = null })
-                .Returns(new RunStatus("", "", 0));
+            UpgradeReturns(UpgradeOutcome.Upgraded);
 
             var output = await RunServerAsync(input);
 
             Assert.Contains("Successfully updated Newtonsoft.Json to 13.0.1", output);
+            _referenceUpgrader.Received(1).Upgrade(Arg.Is<ReferenceUpgrade>(upgrade => upgrade.Kind == null));
         }
 
         [Fact]
         public async Task UpdatePackage_WhenUpgradeFails_ReturnsOutputAndErrors()
         {
             // Arrange
-            // dotnet add package reports NuGet failures on stdout, so the tool result must include it.
+            // dotnet add package reports NuGet failures on stdout, so the failure details include it.
             var input = "{\"jsonrpc\": \"2.0\", \"method\": \"tools/call\", \"params\": { \"name\": \"update_package\", \"arguments\": { \"projectPath\": \"/test/project1.csproj\", \"packageName\": \"Contoso.Widgets\", \"version\": \"2.0.0\", \"framework\": \"net8.0\" } }, \"id\": 4}\n";
 
-            _dotNetPackageService.Upgrade(new ReferenceUpgrade { ProjectPath = "/test/project1.csproj", Name = "Contoso.Widgets", TargetFramework = "net8.0", Version = new VersionRange(new NuGetVersion("2.0.0")) })
-                .Returns(new RunStatus("error: Cannot edit items in imported files", "stderr detail", 1));
+            UpgradeReturns(UpgradeOutcome.Failed, "error: Cannot edit items in imported files\nstderr detail");
 
             // Act
             var output = await RunServerAsync(input);
@@ -423,5 +466,16 @@ namespace DotNetOutdated.Tests
             Assert.Contains("stderr detail", output);
             Assert.Contains("\"isError\":true", output);
         }
+
+        private void UpgradeReturns(UpgradeOutcome outcome, string failureDetails = "", string[] warnings = null) =>
+            _referenceUpgrader.Upgrade(Arg.Any<ReferenceUpgrade>()).Returns(call => call.Arg<ReferenceUpgrade>().Projects
+                .Select(project => new ProjectUpgradeResult
+                {
+                    ProjectPath = project.Path,
+                    Outcome = outcome,
+                    FailureDetails = failureDetails,
+                    Warnings = warnings ?? [],
+                })
+                .ToList());
     }
 }

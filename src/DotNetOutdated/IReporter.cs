@@ -1,4 +1,3 @@
-using DotNetOutdated.Core.Services;
 using System;
 using System.IO;
 
@@ -7,9 +6,11 @@ namespace DotNetOutdated
    /// <summary>
    /// Reports warnings and errors that are not part of the report itself.
    /// </summary>
-   /// <remarks><see cref="IWarningReporter.Warn"/> writes a warning to standard output, in yellow.</remarks>
-   public interface IReporter : IWarningReporter
+   public interface IReporter
    {
+      /// <summary>Writes a warning to standard output, in yellow.</summary>
+      void Warn(string message);
+
       /// <summary>Writes an error to standard error, in red.</summary>
       void Error(string message);
    }

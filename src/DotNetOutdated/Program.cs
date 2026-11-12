@@ -29,7 +29,7 @@ namespace DotNetOutdated
         IOutdatedDependencyService outdatedDependencyService,
         IProjectAnalysisService projectAnalysisService,
         IProjectDiscoveryService projectDiscoveryService,
-        IDotNetPackageService dotNetPackageService,
+        IReferenceUpgrader referenceUpgrader,
         DotNetRunnerOptions dotNetRunnerOptions)
    {
       private readonly IFileSystem _fileSystem = fileSystem;
@@ -37,7 +37,7 @@ namespace DotNetOutdated
       private readonly IOutdatedDependencyService _outdatedDependencyService = outdatedDependencyService;
       private readonly IProjectAnalysisService _projectAnalysisService = projectAnalysisService;
       private readonly IProjectDiscoveryService _projectDiscoveryService = projectDiscoveryService;
-      private readonly IDotNetPackageService _dotNetPackageService = dotNetPackageService;
+      private readonly IReferenceUpgrader _referenceUpgrader = referenceUpgrader;
       private readonly DotNetRunnerOptions _dotNetRunnerOptions = dotNetRunnerOptions;
 
       public bool IncludeAutoReferences { get; set; } = false;
@@ -91,7 +91,6 @@ namespace DotNetOutdated
          using var services = new ServiceCollection()
                  .AddSingleton(PhysicalConsole.Singleton)
                  .AddSingleton<IReporter>(provider => new ConsoleReporter(provider.GetService<IConsole>()))
-                 .AddSingleton<IWarningReporter>(provider => provider.GetRequiredService<IReporter>())
                  .AddSingleton<ILogger>(provider => new ConsoleLogger(provider.GetService<IConsole>(), LogLevel.Warning))
                  .AddDotNetOutdated()
                  .BuildServiceProvider();
@@ -250,49 +249,45 @@ namespace DotNetOutdated
                console.Write("...");
                console.WriteLine();
 
-               foreach (var project in package.Projects)
+               var results = _referenceUpgrader.Upgrade(new ReferenceUpgrade
                {
-                  RunStatus status = null;
+                  Name = package.Name,
+                  Kind = package.Kind,
+                  Version = package.LatestVersion,
+                  Projects = package.Projects
+                     .Select(project => new UpgradeProject(
+                        project.ProjectFilePath,
+                        string.IsNullOrEmpty(project.TargetAlias) ? project.Framework.GetShortFolderName() : project.TargetAlias))
+                     .ToList(),
+                  NoRestore = NoRestore,
+                  IgnoreFailedSources = IgnoreFailedSources,
+               });
 
-                  if (package.Kind == ReferenceKind.Package && !project.IsProjectSdkStyle())
+               foreach (var result in results)
+               {
+                  string projectName = package.Projects.First(project => project.ProjectFilePath == result.ProjectPath).Project;
+                  foreach (var warning in result.Warnings)
                   {
-                     console.WriteLine("Project format not SDK style or centrally managed, removing package before upgrade.");
-                     status = _dotNetPackageService.RemovePackage(project.ProjectFilePath, package.Name);
+                     console.WriteLine(warning, ConsoleColor.Yellow);
                   }
 
-                  if (status is null || status.IsSuccess)
+                  if (result.IsSuccess)
                   {
-                     var newVersionRange = UpgradeVersionRange.Compute(project.OriginalVersionRange, package.LatestVersion, package.IsTransitive);
-                     var frameworkName = string.IsNullOrEmpty(project.TargetAlias)
-                         ? project.Framework.GetShortFolderName()
-                         : project.TargetAlias;
-
-                     status = _dotNetPackageService.Upgrade(new ReferenceUpgrade
-                     {
-                        ProjectPath = project.ProjectFilePath,
-                        Name = package.Name,
-                        Kind = package.Kind,
-                        TargetFramework = frameworkName,
-                        Version = newVersionRange,
-                        NoRestore = NoRestore,
-                        IgnoreFailedSources = IgnoreFailedSources,
-                     });
-                  }
-
-                  if (status.IsSuccess)
-                  {
-                     console.Write($"Project {project.Description} upgraded successfully", Constants.ReportingColors.UpgradeSuccess);
+                     console.Write(
+                        result.Outcome == UpgradeOutcome.AlreadyCurrent
+                           ? $"Project {projectName} already has {package.Name} {package.LatestVersion}"
+                           : $"Project {projectName} upgraded successfully",
+                        Constants.ReportingColors.UpgradeSuccess);
                      console.WriteLine();
                   }
                   else
                   {
                      success = false;
-                     console.Write($"An error occurred while upgrading {project.Project}", Constants.ReportingColors.UpgradeFailure);
+                     console.Write($"An error occurred while upgrading {projectName}", Constants.ReportingColors.UpgradeFailure);
                      console.WriteLine();
-                     string failureDetails = status.FailureDetails;
-                     if (failureDetails.Length > 0)
+                     if (result.FailureDetails.Length > 0)
                      {
-                        console.Write(failureDetails, Constants.ReportingColors.UpgradeFailure);
+                        console.Write(result.FailureDetails, Constants.ReportingColors.UpgradeFailure);
                         console.WriteLine();
                      }
                   }

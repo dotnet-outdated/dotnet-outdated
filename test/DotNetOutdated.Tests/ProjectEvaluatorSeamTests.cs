@@ -77,9 +77,9 @@ namespace DotNetOutdated.Tests
                 "PackageReference", projectPath, "$(FooVersion)", IsVersionOverride: false, VersionRange.Parse("1.0.0"), variable);
 
             var runner = Substitute.For<IDotNetRunner>();
-            var service = new DotNetPackageService(runner, fileSystem, evaluator);
+            var service = new ReferenceUpgrader(runner, fileSystem, evaluator);
 
-            var status = service.Upgrade(projectPath, "Foo", "net9.0", new VersionRange(new NuGetVersion("2.0.0")), noRestore: true);
+            var status = service.Upgrade(projectPath, "Foo", "net9.0", new NuGetVersion("2.0.0"), noRestore: true);
 
             Assert.True(status.IsSuccess, status.FailureDetails);
             Assert.Contains("<FooVersion>2.0.0</FooVersion>", fileSystem.File.ReadAllText(versionsPath), StringComparison.Ordinal);

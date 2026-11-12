@@ -706,7 +706,7 @@ public static class EndToEndTests
             services,
             services.GetRequiredService<IProjectDiscoveryService>(),
             services.GetRequiredService<IProjectAnalysisService>(),
-            services.GetRequiredService<IDotNetPackageService>(),
+            services.GetRequiredService<IReferenceUpgrader>(),
             services.GetRequiredService<IOutdatedDependencyService>(),
             input,
             output);

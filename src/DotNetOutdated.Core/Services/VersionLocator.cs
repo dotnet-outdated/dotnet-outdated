@@ -1,34 +1,48 @@
 using System;
 using System.IO.Abstractions;
 using System.Linq;
+using NuGet.Versioning;
 
 namespace DotNetOutdated.Core.Services;
 
 /// <summary>
 /// Where a reference's version is written, which decides how it can be upgraded.
 /// </summary>
-internal abstract record VersionLocation;
+internal abstract record VersionLocation
+{
+    /// <summary>The range the reference declares at this location, when it can hold one and it could be evaluated.</summary>
+    public virtual VersionRange? DeclaredRange => null;
+}
 
 /// <summary>
 /// A literal version in the project file or a central <c>Directory.Packages.props</c>, which <c>dotnet add package</c>
 /// can rewrite, or no version at all (a transitive package), which it adds. <see cref="Declaration"/> is the item that
 /// holds the version, if any; <see cref="Warning"/> is set when a version expression is replaced by the literal.
 /// </summary>
-internal sealed record LiteralVersion(PackageVersionDeclaration? Declaration = null, string? Warning = null) : VersionLocation;
+internal sealed record LiteralVersion(PackageVersionDeclaration? Declaration = null, string? Warning = null) : VersionLocation
+{
+    public override VersionRange? DeclaredRange => Declaration?.VersionRange;
+}
 
 /// <summary>An MSBuild property behind a <c>PackageReference</c>, <c>PackageVersion</c> or <c>GlobalPackageReference</c>.</summary>
 /// <param name="DotNetAddCanUpdate">
 /// Whether <c>dotnet add package</c> can rewrite the reference (it can't for a <c>GlobalPackageReference</c>, a
 /// <c>VersionOverride</c>, or a <c>PackageReference</c> in an imported file), so the property must be written directly.
 /// </param>
-internal sealed record MSBuildVariableVersion(PackageVariableInfo Variable, bool DotNetAddCanUpdate) : VersionLocation;
+internal sealed record MSBuildVariableVersion(PackageVariableInfo Variable, bool DotNetAddCanUpdate, VersionRange? Declared) : VersionLocation
+{
+    public override VersionRange? DeclaredRange => Declared;
+}
 
 /// <summary>
 /// A literal version on a <c>GlobalPackageReference</c> in <paramref name="FilePath"/>. <c>dotnet add package</c> can't
 /// update one (it adds a <c>PackageReference</c> instead, which central package management rejects), so the version
 /// must be written directly.
 /// </summary>
-internal sealed record GlobalPackageReferenceVersion(string FilePath) : VersionLocation;
+internal sealed record GlobalPackageReferenceVersion(string FilePath, VersionRange? Declared) : VersionLocation
+{
+    public override VersionRange? DeclaredRange => Declared;
+}
 
 /// <summary>A versioned MSBuild project SDK declared in the project file.</summary>
 internal sealed record ProjectSdkVersion(ProjectSdkReference Sdk) : VersionLocation;
@@ -53,18 +67,23 @@ internal sealed class VersionLocator(IFileSystem fileSystem, IProjectEvaluator e
     private readonly IProjectEvaluator _evaluator = evaluator;
     private readonly FileBasedAppDirectives _fileBasedAppDirectives = fileBasedAppDirectives;
 
-    /// <param name="kind">
-    /// Whether <paramref name="name"/> is a package or an SDK; when <see langword="null"/>, a name the project
-    /// declares as an SDK is treated as one.
-    /// </param>
-    public VersionLocation Locate(string projectPath, string name, ReferenceKind? kind)
+    /// <summary>
+    /// <paramref name="kind"/> when it is set; otherwise <see cref="ReferenceKind.Sdk"/> for a name the project declares
+    /// as a versioned SDK, and <see cref="ReferenceKind.Package"/> for any other name.
+    /// </summary>
+    public ReferenceKind ResolveKind(string projectPath, string name, ReferenceKind? kind) =>
+        kind ?? (projectPath.IsCSharpFile()
+            ? FileBasedAppReferenceKind(projectPath, name)
+            : ProjectReferenceKind(projectPath, name));
+
+    public VersionLocation Locate(string projectPath, string name, ReferenceKind kind)
     {
         if (projectPath.IsCSharpFile())
         {
-            return LocateInFileBasedApp(projectPath, name, kind ?? FileBasedAppReferenceKind(projectPath, name));
+            return LocateInFileBasedApp(projectPath, name, kind);
         }
 
-        return (kind ?? ProjectReferenceKind(projectPath, name)) == ReferenceKind.Sdk
+        return kind == ReferenceKind.Sdk
             ? LocateProjectSdk(projectPath, name)
             : LocatePackage(projectPath, name);
     }
@@ -154,7 +173,7 @@ internal sealed class VersionLocator(IFileSystem fileSystem, IProjectEvaluator e
         if (declaration.Variable is not { } variableInfo)
         {
             return declaration.ElementType == PackageVersionDeclaration.GlobalPackageReference
-                ? new GlobalPackageReferenceVersion(declaration.FilePath)
+                ? new GlobalPackageReferenceVersion(declaration.FilePath, declaration.VersionRange)
                 : new LiteralVersion(declaration);
         }
 
@@ -166,7 +185,7 @@ internal sealed class VersionLocator(IFileSystem fileSystem, IProjectEvaluator e
 
         if (variableInfo.UnsupportedReason == null)
         {
-            return new MSBuildVariableVersion(variableInfo, dotNetAddCanUpdate);
+            return new MSBuildVariableVersion(variableInfo, dotNetAddCanUpdate, declaration.VersionRange);
         }
 
         if (!dotNetAddCanUpdate)

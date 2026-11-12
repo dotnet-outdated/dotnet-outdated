@@ -1,11 +1,16 @@
-﻿using System;
-using System.IO;
-using System.Threading.Tasks;
+﻿using System.Collections.Generic;
+using System.IO.Abstractions.TestingHelpers;
+using System.Linq;
+using DotNetOutdated.Core.Services;
+using NSubstitute;
+using NuGet.Versioning;
 using Xunit;
+using XFS = System.IO.Abstractions.TestingHelpers.MockUnixSupport;
 
 namespace DotNetOutdated.Tests;
 
-public static class ProjectExtensionsTests
+/// <summary>A project that isn't SDK-style has a package removed before it is added back at the new version.</summary>
+public static class NonSdkStyleProjectUpgradeTests
 {
     public static TheoryData<string, bool> ProjectContents()
     {
@@ -142,38 +147,34 @@ public static class ProjectExtensionsTests
 
     [Theory]
     [MemberData(nameof(ProjectContents))]
-    public static async Task IsProjectSdkStyle_Returns_Correct_Value(string contents, bool expected)
+    public static void Upgrade_RemovesThePackageFirstOnlyFromAProjectThatIsNotSdkStyle(string contents, bool sdkStyle)
     {
-        // Arrange
-        using var file = new TemporaryFile();
-        var project = new PackageProjectReference()
-        {
-            ProjectFilePath = file.Path,
-        };
+        var projectPath = XFS.Path(@"c:\repo\App\App.csproj");
+        var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData> { [projectPath] = new(contents) });
+        var dotNetRunner = Substitute.For<IDotNetRunner>();
+        dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
 
-        await File.WriteAllTextAsync(file.Path, contents);
+        var result = new ReferenceUpgrader(dotNetRunner, fileSystem).Upgrade(projectPath, "Foo", "net8.0", new NuGetVersion("2.0.0"));
 
-        // Act
-        var actual = project.IsProjectSdkStyle();
-
-        // Assert
-        Assert.Equal(expected, actual);
+        Assert.True(result.IsSuccess);
+        dotNetRunner.Received(sdkStyle ? 0 : 1).Run(
+            XFS.Path(@"c:\repo\App"), Arg.Is<string[]>(a => a.SequenceEqual(new[] { "remove", "App.csproj", "package", "Foo" })));
+        dotNetRunner.Received(1).Run(XFS.Path(@"c:\repo\App"), Arg.Is<string[]>(a => a[0] == "add" && a[3] == "Foo"));
+        Assert.Equal(sdkStyle ? 0 : 1, result.Warnings.Count);
     }
 
-    private sealed class TemporaryFile : IDisposable
+    [Fact]
+    public static void Upgrade_StopsWhenRemovingThePackageFails()
     {
-        public string Path { get; } = System.IO.Path.GetTempFileName();
+        var projectPath = XFS.Path(@"c:\repo\App\App.csproj");
+        var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData> { [projectPath] = new("<Project ToolsVersion=\"15.0\"></Project>") });
+        var dotNetRunner = Substitute.For<IDotNetRunner>();
+        dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "could not remove", 1));
 
-        public void Dispose()
-        {
-            try
-            {
-                File.Delete(Path);
-            }
-            catch (Exception)
-            {
-                // Ignore
-            }
-        }
+        var result = new ReferenceUpgrader(dotNetRunner, fileSystem).Upgrade(projectPath, "Foo", "net8.0", new NuGetVersion("2.0.0"));
+
+        Assert.Equal(UpgradeOutcome.Failed, result.Outcome);
+        Assert.Equal("could not remove", result.FailureDetails);
+        dotNetRunner.ReceivedWithAnyArgs(1).Run(default, default);
     }
 }
