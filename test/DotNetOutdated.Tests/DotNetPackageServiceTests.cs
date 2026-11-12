@@ -35,6 +35,17 @@ namespace DotNetOutdated.Tests
   </ItemGroup>
 </Project>";
 
+        private const string DirectoryBuildPropsContent = @"<Project>
+  <ItemGroup>
+    <PackageReference
+        Include=""Contoso.Widgets""
+        Version=""1.0.0""
+        PrivateAssets=""all""
+        Condition=""$(MSBuildProjectExtension) == '.csproj'"" />
+    <PackageReference Include=""Contoso.Gadgets"" Version=""2.0.0"" />
+  </ItemGroup>
+</Project>";
+
         [Fact]
         public void CpmProjectWithNoRestore_UpdatesDirectoryPackagesProps_DoesNotCallDotNet()
         {
@@ -1852,6 +1863,51 @@ Information(""Outdated Sdk"");")
             Assert.Equal(appContent, fileSystem.File.ReadAllText(appPath));
             Assert.Equal(propsContent, fileSystem.File.ReadAllText(propsPath));
             dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
+        }
+
+        [Fact]
+        public void PackageWithDirectIncludeInProject_CallsDotNetAddPackage_LeavesImportedPropsUntouched()
+        {
+            var propsPath = XFS.Path(@"c:\repo\src\Directory.Build.props");
+            var projectPath = XFS.Path(@"c:\repo\src\MyProject\MyProject.csproj");
+            const string projectContent = @"<Project Sdk=""Microsoft.NET.Sdk"">
+  <ItemGroup>
+    <PackageReference Include=""Contoso.Widgets"" Version=""1.0.0"" />
+  </ItemGroup>
+</Project>";
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { propsPath, new MockFileData(DirectoryBuildPropsContent) },
+                { projectPath, new MockFileData(projectContent) }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus(string.Empty, string.Empty, 0));
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
+
+            service.Upgrade(projectPath, "Contoso.Widgets", "net8.0", new VersionRange(new NuGetVersion("1.5.0")));
+
+            dotNetRunner.Received(1).Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[0] == "add"));
+            Assert.Equal(DirectoryBuildPropsContent, mockFileSystem.File.ReadAllText(propsPath));
+        }
+
+        [Fact]
+        public void PackageNotDeclaredInAnyEditableFile_FallsThroughToDotNetAddPackage()
+        {
+            var propsPath = XFS.Path(@"c:\repo\src\Directory.Build.props");
+            var projectPath = XFS.Path(@"c:\repo\src\MyProject\MyProject.csproj");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { propsPath, new MockFileData(DirectoryBuildPropsContent) },
+                { projectPath, new MockFileData("<Project Sdk=\"Microsoft.NET.Sdk\"></Project>") }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus(string.Empty, string.Empty, 0));
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
+
+            service.Upgrade(projectPath, "Contoso.Unlisted", "net8.0", new VersionRange(new NuGetVersion("1.5.0")));
+
+            dotNetRunner.Received(1).Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[0] == "add"));
+            Assert.Equal(DirectoryBuildPropsContent, mockFileSystem.File.ReadAllText(propsPath));
         }
     }
 }
