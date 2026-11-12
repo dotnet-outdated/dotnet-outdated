@@ -7,6 +7,16 @@ using Xunit;
 
 namespace DotNetOutdated.Tests;
 
+// These tests time real processes against the idle timeout. The runner resets that timer from stream readers on the
+// thread pool, so they run on their own: with the rest of the suite running in parallel on a small CI agent, the pool
+// can be busy for long enough that a process which never stops writing looks idle.
+[CollectionDefinition(Name, DisableParallelization = true)]
+public class DotNetRunnerTestsCollection
+{
+    public const string Name = "DotNetRunner timing";
+}
+
+[Collection(DotNetRunnerTestsCollection.Name)]
 public class DotNetRunnerTests
 {
     [Fact]
