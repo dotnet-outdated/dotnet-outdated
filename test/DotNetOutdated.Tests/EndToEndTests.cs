@@ -1,3 +1,5 @@
+#nullable enable annotations
+
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -368,7 +370,7 @@ public static class EndToEndTests
     [InlineData("empty-solution", "Empty.sln", "Empty.sln")]
     [InlineData("empty-slnx", "Empty.slnx", "Empty.slnx")]
     [InlineData("empty-solution-filter", "Empty.slnf", "Empty.slnf")]
-    public static void Reports_Friendly_Message_For_Solution_With_No_Projects(string testProjectName, string inputFile, string reportedFile)
+    public static void Reports_Friendly_Message_For_Solution_With_No_Projects(string testProjectName, string? inputFile, string reportedFile)
     {
         using var project = TestSetup(testProjectName);
         var input = inputFile is null ? project.Path : Path.Combine(project.Path, inputFile);
