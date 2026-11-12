@@ -99,6 +99,53 @@ namespace DotNetOutdated.Tests
         }
 
         [Fact]
+        public async Task SeveralIncludeFilters_ReportDependenciesMatchingAnyOfThem()
+        {
+            foreach (var name in new[] { "Contoso.Core", "Fabrikam.Core", "Other" })
+            {
+                _latestVersions[name] = "2.0.0";
+            }
+
+            var project = Project("App", Dependency("Contoso.Core", "1.0.0"), Dependency("Fabrikam.Core", "1.0.0"), Dependency("Other", "1.0.0"));
+
+            var result = await Service().FindOutdatedAsync([project], new OutdatedOptions
+            {
+                IncludeFilters = ["Contoso", "Fabrikam"],
+            });
+
+            Assert.Equal(["Contoso.Core", "Fabrikam.Core"], result.Single().TargetFrameworks.Single().Dependencies.Select(d => d.Dependency.Name));
+        }
+
+        [Fact]
+        public async Task Projects_AreOrderedByNameThenPath_AndFrameworksByFrameworkIdentifier()
+        {
+            _latestVersions["Package"] = "2.0.0";
+            Project ProjectAt(string name, string filePath, params string[] frameworks) => Project(name, Dependency("Package", "1.0.0")) with
+            {
+                FilePath = filePath,
+                TargetFrameworks =
+                [
+                    .. frameworks.Select(framework => new TargetFramework
+                    {
+                        Name = NuGetFramework.Parse(framework),
+                        TargetAlias = framework,
+                        Dependencies = [Dependency("Package", "1.0.0")],
+                    }),
+                ],
+            };
+
+            var result = await Service().FindOutdatedAsync(
+            [
+                ProjectAt("Beta", "/src/a/Beta.csproj", "net9.0"),
+                ProjectAt("Alpha", "/src/b/Alpha.csproj", "net9.0"),
+                ProjectAt("Alpha", "/src/a/Alpha.csproj", "netstandard2.0", "net9.0"),
+            ]);
+
+            Assert.Equal(["/src/a/Alpha.csproj", "/src/b/Alpha.csproj", "/src/a/Beta.csproj"], result.Select(p => p.FilePath));
+            Assert.Equal(["net9.0", "netstandard2.0"], result[0].TargetFrameworks.Select(f => f.TargetAlias));
+        }
+
+        [Fact]
         public async Task MaximumVersion_CapsTheAllowedRangeWithoutWideningIt()
         {
             _latestVersions["Open"] = "2.0.0";
