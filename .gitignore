@@ -333,3 +333,6 @@ ASALocalRun/
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
+
+# Mutation testing (mutato) reports
+.mutato/
