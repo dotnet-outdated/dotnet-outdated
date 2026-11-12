@@ -36,4 +36,10 @@ public sealed record PackageVersionsQuery
 
     /// <summary>Treat package sources that fail as having no versions rather than failing.</summary>
     public bool IgnoreFailedSources { get; init; }
+
+    /// <summary>
+    /// Keep versions that reach a .NET <see cref="TargetFramework"/> only through a netstandard fallback while declaring
+    /// it unsupported with a build warning, as the .NET runtime packages do for .NET versions they no longer support.
+    /// </summary>
+    public bool AllowUnsupportedFrameworks { get; init; }
 }

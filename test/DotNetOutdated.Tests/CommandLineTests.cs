@@ -69,6 +69,8 @@ public class CommandLineTests
         { ["--ignore-failed-sources"], "Run: IgnoreFailedSources=True" },
         { ["-utd"], "Run: IncludeUpToDate=True" },
         { ["--include-up-to-date"], "Run: IncludeUpToDate=True" },
+        { ["-auf"], "Run: AllowUnsupportedFrameworks=True" },
+        { ["--allow-unsupported-frameworks"], "Run: AllowUnsupportedFrameworks=True" },
         { ["-t", "-r", "-f", "-n", "-i", "-fba", "-ifs", "-utd"], "Run: IncludeAutoReferences=True, Transitive=True, FailOnUpdates=True, NoRestore=True, Recursive=True, IncludeFileBasedApps=True, IgnoreFailedSources=True, IncludeUpToDate=True" },
 
         // Integers
@@ -413,7 +415,7 @@ public class CommandLineTests
             p.Path, p.IncludeAutoReferences, p.Prerelease, p.VersionLock, p.Transitive, p.TransitiveDepth, p.Upgrade,
             p.FailOnUpdates, string.Join("|", p.FilterInclude), string.Join("|", p.FilterExclude), p.OutputFilename,
             p.OutputFileFormat, p.OlderThanDays, p.NoRestore, p.Recursive, p.IncludeFileBasedApps, p.IgnoreFailedSources,
-            p.IncludeUpToDate, p.PrereleaseLabel, p.NuGetCredLogLevel, p.Runtime, p.MaxVersion, p.IdleTimeout));
+            p.IncludeUpToDate, p.AllowUnsupportedFrameworks, p.PrereleaseLabel, p.NuGetCredLogLevel, p.Runtime, p.MaxVersion, p.IdleTimeout));
     }
 
     private static string Describe(Values values)
@@ -449,6 +451,7 @@ public class CommandLineTests
         bool IncludeFileBasedApps,
         bool IgnoreFailedSources,
         bool IncludeUpToDate,
+        bool AllowUnsupportedFrameworks,
         string PrereleaseLabel,
         LogLevel NuGetCredLogLevel,
         string Runtime,
@@ -457,7 +460,7 @@ public class CommandLineTests
     {
         public static Values Default { get; } = new(
             null, false, PrereleaseReporting.Auto, VersionLock.None, false, 1, default, false, "", "", null,
-            OutputFormat.Json, 0, false, false, false, false, false, string.Empty, LogLevel.Warning, string.Empty,
+            OutputFormat.Json, 0, false, false, false, false, false, false, string.Empty, LogLevel.Warning, string.Empty,
             string.Empty, 120);
     }
 }

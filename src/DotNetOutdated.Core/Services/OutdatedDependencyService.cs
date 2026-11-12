@@ -112,6 +112,7 @@ internal sealed class OutdatedDependencyService(INuGetPackageResolutionService r
                 PrereleaseLabel = options.PrereleaseLabel,
                 OlderThanDays = options.OlderThanDays,
                 IgnoreFailedSources = options.IgnoreFailedSources,
+                AllowUnsupportedFrameworks = options.AllowUnsupportedFrameworks,
             }
             : null;
 

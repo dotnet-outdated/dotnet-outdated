@@ -90,6 +90,8 @@ Options:
   -fba|--include-file-based-apps                        Include loose file-based apps when recursively searching a directory.
   -ifs|--ignore-failed-sources                          Treat package source failures as warnings.
   -utd|--include-up-to-date                             Include all dependencies in the report even the ones not outdated.
+  -auf|--allow-unsupported-frameworks                   Allow upgrades to package versions that reach a .NET target framework only through netstandard and warn at build
+                                                        time that they don't support it.
   -prl|--pre-release-label <PRERELEASE_LABEL>           Specifies an optional label to restrict matches to when looking for pre-release versions of packages. For example, a label of 'rc.1' would only match
                                                         pre-release packages with a pre-release label that starts with that prefix.
   -ncll|--nuget-cred-log-level <NU_GET_CRED_LOG_LEVEL>  Specifies the minimum level of logs for NuGet Credential Service. Possible values: debug, verbose, information, warning (default), or error
@@ -157,6 +159,14 @@ The default value of `None` will return the absolute latest package, regardless 
 Passing a value of `Major` will only report on later packages in the current major version range. For example, if the current version for a package is `4.1.0`, **dotnet-outdated** will only report on later packages in the `4.x` version range.
 
 Passing a value of `Minor` will only report on later packages in the current minor version range. For example, if the current version for a package is `4.1.0`, **dotnet-outdated** will only report on later packages in the `4.1.x` version range.
+
+## Target frameworks a package no longer supports
+
+NuGet considers a package compatible with a .NET target framework when one of its netstandard assets applies. The .NET runtime packages (such as `Microsoft.Extensions.*`) keep a netstandard asset after they drop a .NET version, but add a build warning that the version is not supported, for example `Microsoft.Extensions.Options 11.0.0 doesn't support net8.0 and has not been tested with it`. With `TreatWarningsAsErrors`, that fails the build.
+
+**dotnet-outdated** does not report such versions. When a version reaches a .NET target framework only through netstandard while it has assets for other .NET versions, it downloads the package and checks whether the MSBuild files restore would use for that framework, or those of the dependencies it brings in for it, contain that warning. In a multi-targeting project with framework-specific references, a `net8.0` reference is then upgraded to the latest `10.0.x` instead of `11.0.0`.
+
+Pass `-auf|--allow-unsupported-frameworks` to report these versions anyway, for example when the project sets `SuppressTfmSupportBuildWarnings`.
 
 ## Reporting on transitive dependencies
 

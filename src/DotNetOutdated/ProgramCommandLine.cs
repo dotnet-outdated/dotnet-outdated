@@ -131,6 +131,9 @@ namespace DotNetOutdated
       public Option<bool> IncludeUpToDate { get; } = Flag("--include-up-to-date", "-utd",
           "Include all dependencies in the report even the ones not outdated.");
 
+      public Option<bool> AllowUnsupportedFrameworks { get; } = Flag("--allow-unsupported-frameworks", "-auf",
+          "Allow upgrades to package versions that reach a .NET target framework only through netstandard and warn at build time that they don't support it.");
+
       public Option<string> PrereleaseLabel { get; } = new("--pre-release-label", "-prl")
       {
          Description = "Specifies an optional label to restrict matches to when looking for pre-release versions of packages. " +
@@ -217,6 +220,7 @@ namespace DotNetOutdated
             IncludeFileBasedApps,
             IgnoreFailedSources,
             IncludeUpToDate,
+            AllowUnsupportedFrameworks,
             PrereleaseLabel,
             NuGetCredLogLevel,
             Runtime,
@@ -271,6 +275,7 @@ namespace DotNetOutdated
          program.IncludeFileBasedApps = parseResult.GetValue(IncludeFileBasedApps);
          program.IgnoreFailedSources = parseResult.GetValue(IgnoreFailedSources);
          program.IncludeUpToDate = parseResult.GetValue(IncludeUpToDate);
+         program.AllowUnsupportedFrameworks = parseResult.GetValue(AllowUnsupportedFrameworks);
          program.PrereleaseLabel = parseResult.GetValue(PrereleaseLabel);
          program.NuGetCredLogLevel = parseResult.GetValue(NuGetCredLogLevel);
          program.Runtime = parseResult.GetValue(Runtime);

@@ -89,6 +89,81 @@ namespace DotNetOutdated.Tests
         }
 
         [Theory]
+        [InlineData("net8.0", false, new[] { "1.0.0", "3.0.0" })]
+        [InlineData("net8.0", true, new[] { "1.0.0", "2.0.0", "3.0.0" })]
+        [InlineData("net10.0", false, new[] { "1.0.0", "2.0.0", "3.0.0" })]
+        [InlineData("netstandard2.0", false, new[] { "1.0.0", "2.0.0", "3.0.0" })]
+        public async Task GetAllVersionsAsync_LeavesOutVersionsThatDeclareTheTargetFrameworkUnsupported(string targetFramework, bool allowUnsupportedFrameworks, string[] expected)
+        {
+            // Modeled on the .NET runtime packages (Microsoft.Extensions.*): a netstandard fallback for older frameworks,
+            // with a buildTransitive target that warns "doesn't support netX.0" for .NET versions no longer supported.
+            const string compatError = """
+                <Project InitialTargets="NETStandardCompatError_Contoso_Widgets_net10_0">
+                  <Target Name="NETStandardCompatError_Contoso_Widgets_net10_0" Condition="'$(SuppressTfmSupportBuildWarnings)' == ''">
+                    <Warning Text="Contoso.Widgets doesn't support $(TargetFramework) and has not been tested with it." />
+                  </Target>
+                </Project>
+                """;
+            const string otherTargets = "<Project />";
+            using var feed = new LocalFeed();
+
+            // Supports net8.0 itself: the warning only applies to the frameworks below it (netcoreapp2.0 folder).
+            feed.Add("Contoso.Widgets", "1.0.0", published: DateTime.UtcNow.AddDays(-3),
+                dependencyFrameworks: ["net8.0", "netstandard2.0"],
+                files: [("buildTransitive/net8.0/Contoso.Widgets.targets", otherTargets),
+                        ("buildTransitive/netcoreapp2.0/Contoso.Widgets.targets", compatError)]);
+
+            // Dropped net8.0: net8.0 only reaches it through netstandard2.0, and the netcoreapp2.0 target warns.
+            feed.Add("Contoso.Widgets", "2.0.0", published: DateTime.UtcNow.AddDays(-2),
+                dependencyFrameworks: ["net10.0", "netstandard2.0"],
+                files: [("buildTransitive/net10.0/Contoso.Widgets.targets", otherTargets),
+                        ("buildTransitive/netcoreapp2.0/Contoso.Widgets.targets", compatError)]);
+
+            // Also only reaches net8.0 through netstandard2.0, but doesn't warn, so the fallback is supported.
+            feed.Add("Contoso.Widgets", "3.0.0", published: DateTime.UtcNow.AddDays(-1),
+                dependencyFrameworks: ["net10.0", "netstandard2.0"]);
+            using var service = new NuGetPackageInfoService();
+
+            var versions = await service.GetAllVersionsAsync(new PackageVersionsQuery
+            {
+                PackageId = "Contoso.Widgets",
+                Sources = [feed.Uri],
+                TargetFramework = NuGetFramework.Parse(targetFramework),
+                AllowUnsupportedFrameworks = allowUnsupportedFrameworks,
+            });
+
+            Assert.Equal(expected, versions.Select(v => v.ToNormalizedString()).Order(StringComparer.Ordinal));
+        }
+
+        [Theory]
+        [InlineData(false, new[] { "1.0.0" })]
+        [InlineData(true, new[] { "1.0.0", "2.0.0" })]
+        public async Task GetAllVersionsAsync_LeavesOutVersionsWhoseDependenciesDeclareTheTargetFrameworkUnsupported(bool allowUnsupportedFrameworks, string[] expected)
+        {
+            // Like Microsoft.Extensions.Diagnostics.HealthChecks 11.0.0: no targets of its own, but its netstandard2.0
+            // dependencies warn that net8.0 is not supported.
+            using var feed = new LocalFeed();
+            feed.Add("Contoso.Widgets", "2.0.0", published: DateTime.UtcNow.AddDays(-5),
+                dependencyFrameworks: ["net10.0", "netstandard2.0"],
+                files: [("buildTransitive/netcoreapp2.0/Contoso.Widgets.targets",
+                    """<Project><Target Name="NETStandardCompatError_Contoso_Widgets_net10_0" /></Project>""")]);
+            feed.Add("Contoso.Gadgets", "1.0.0", published: DateTime.UtcNow.AddDays(-2), dependencyFrameworks: ["net8.0", "netstandard2.0"]);
+            feed.Add("Contoso.Gadgets", "2.0.0", published: DateTime.UtcNow.AddDays(-1),
+                dependencyFrameworks: ["net10.0", "netstandard2.0"], dependencies: [("Contoso.Widgets", "2.0.0")]);
+            using var service = new NuGetPackageInfoService();
+
+            var versions = await service.GetAllVersionsAsync(new PackageVersionsQuery
+            {
+                PackageId = "Contoso.Gadgets",
+                Sources = [feed.Uri],
+                TargetFramework = NuGetFramework.Parse("net8.0"),
+                AllowUnsupportedFrameworks = allowUnsupportedFrameworks,
+            });
+
+            Assert.Equal(expected, versions.Select(v => v.ToNormalizedString()).Order(StringComparer.Ordinal));
+        }
+
+        [Theory]
         [InlineData("Contoso.Widgets", new[] { "2.0.0" })]
         [InlineData("Fabrikam.Gadgets", new[] { "1.0.0" })]
         [InlineData("Unmapped.Package", new string[0])]
@@ -171,7 +246,9 @@ namespace DotNetOutdated.Tests
 
             public Uri Uri => new(Path + System.IO.Path.DirectorySeparatorChar);
 
-            public void Add(string id, string version, DateTime published, string? dependencyFramework = null)
+            public void Add(string id, string version, DateTime published, string? dependencyFramework = null,
+                string[]? dependencyFrameworks = null, (string Path, string Content)[]? files = null,
+                (string Id, string Version)[]? dependencies = null)
             {
                 var builder = new PackageBuilder(deterministic: true)
                 {
@@ -184,6 +261,17 @@ namespace DotNetOutdated.Tests
                 if (dependencyFramework != null)
                 {
                     builder.DependencyGroups.Add(new PackageDependencyGroup(NuGetFramework.Parse(dependencyFramework), []));
+                }
+
+                foreach (var framework in dependencyFrameworks ?? [])
+                {
+                    builder.DependencyGroups.Add(new PackageDependencyGroup(NuGetFramework.Parse(framework),
+                        (dependencies ?? []).Select(d => new NuGet.Packaging.Core.PackageDependency(d.Id, VersionRange.Parse(d.Version)))));
+                }
+
+                foreach (var (filePath, content) in files ?? [])
+                {
+                    builder.Files.Add(new PhysicalPackageFile(new MemoryStream(System.Text.Encoding.UTF8.GetBytes(content))) { TargetPath = filePath });
                 }
 
                 var path = System.IO.Path.Combine(Path, $"{id}.{version}.nupkg".ToLowerInvariant());

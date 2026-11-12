@@ -38,7 +38,7 @@ namespace DotNetOutdated.Core.Services
             else if (prerelease == PrereleaseReporting.Never)
                 includePrerelease = false;
 
-            string cacheKey = (packageName + "-" + includePrerelease + "-" + targetFrameworkName + "-" + olderThanDays).ToUpperInvariant();
+            string cacheKey = (packageName + "-" + includePrerelease + "-" + targetFrameworkName + "-" + olderThanDays + "-" + query.AllowUnsupportedFrameworks).ToUpperInvariant();
 
             // Get all the available versions
             // The request is shared by every caller with the same key, so it doesn't take one caller's cancellation token.
@@ -53,6 +53,7 @@ namespace DotNetOutdated.Core.Services
                     IsDevelopmentDependency = query.IsDevelopmentDependency,
                     OlderThanDays = olderThanDays,
                     IgnoreFailedSources = query.IgnoreFailedSources,
+                    AllowUnsupportedFrameworks = query.AllowUnsupportedFrameworks,
                 },
                 CancellationToken.None));
             var allVersions = await _cache.GetOrAdd(cacheKey, allVersionsRequest).Value.WaitAsync(cancellationToken).ConfigureAwait(false);
