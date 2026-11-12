@@ -1,2 +1,7 @@
 [tools]
-dotnet = "11.0.100"
+dotnet = [
+  "11.0.100",
+  # The tests also target net8.0 and net9.0, whose runtimes the 11.0 SDK doesn't include.
+  { version = "9.0.23", runtime = "dotnet" },
+  { version = "8.0.34", runtime = "dotnet" },
+]
