@@ -1987,5 +1987,38 @@ Information(""Outdated Sdk"");")
             dotNetRunner.Received(1).Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[0] == "add"));
             Assert.Equal(DirectoryBuildPropsContent, mockFileSystem.File.ReadAllText(propsPath));
         }
+
+        // A version written as a <Version> child element is valid MSBuild, but isn't found, so the upgrade fails.
+        [Fact]
+        public void ImportedPackageReference_WithVersionChildElement_FailsAndLeavesDirectoryBuildPropsUnchanged()
+        {
+            var propsPath = XFS.Path(@"c:\repo\src\Directory.Build.props");
+            var projectPath = XFS.Path(@"c:\repo\src\MyProject\MyProject.csproj");
+            const string propsContent = @"<Project>
+  <ItemGroup>
+    <PackageReference Include=""Contoso.Widgets"">
+      <Version>1.0.0</Version>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+</Project>";
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { propsPath, new MockFileData(propsContent) },
+                { projectPath, new MockFileData("<Project Sdk=\"Microsoft.NET.Sdk\"></Project>") }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
+
+            var result = service.Upgrade(projectPath, "Contoso.Widgets", "net8.0", new VersionRange(new NuGetVersion("1.5.0")), noRestore: true);
+
+            Assert.False(result.IsSuccess);
+            Assert.Equal(
+                $"Could not update 'Contoso.Widgets' in '{propsPath}': no <PackageReference> element was found " +
+                "with an Include or Update attribute and a literal Version attribute. Update the version manually.",
+                result.Errors);
+            dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
+            Assert.Equal(propsContent, mockFileSystem.File.ReadAllText(propsPath));
+        }
     }
 }

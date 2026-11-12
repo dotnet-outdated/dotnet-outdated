@@ -46,6 +46,27 @@ namespace DotNetOutdated.Tests
             Assert.False(matched);
         }
 
+        // MSBuild accepts item metadata as child elements as well as attributes, so a version can be written as
+        // <Version>, but it isn't found.
+        [Theory]
+        [InlineData("<PackageReference Include=\"A\"><Version>1.0.0</Version></PackageReference>")]
+        [InlineData("<PackageReference Include=\"A\">\n  <PrivateAssets>all</PrivateAssets>\n  <Version>\n    1.0.0\n  </Version>\n</PackageReference>")]
+        public void ReplaceVersion_VersionChildElement_IsNotFound(string content)
+        {
+            Assert.Equal(content, PackageVersionMarkup.ReplaceVersion(content, PackageReference, "A", "2.0.0", out var matched));
+            Assert.False(matched);
+        }
+
+        // MSBuild decodes XML entity references in a package id, but the raw text is compared, so it doesn't match.
+        [Fact]
+        public void ReplaceVersion_EntityInPackageId_DoesNotMatchTheDecodedId()
+        {
+            const string content = "<PackageReference Include=\"A&#46;B\" Version=\"1.0.0\" />";
+
+            Assert.Equal(content, PackageVersionMarkup.ReplaceVersion(content, PackageReference, "A.B", "2.0.0", out var matched));
+            Assert.False(matched);
+        }
+
         // Markup that only looks like an element (inside a comment, CDATA or a property value) is never edited.
         [Theory]
         [InlineData("<!-- <PackageReference Include=\"A\" Version=\"1.0.0\" /> -->")]
