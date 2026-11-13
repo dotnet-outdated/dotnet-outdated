@@ -168,26 +168,24 @@ internal static class ProjectSdkReferenceHelper
 
         var edits = new List<(int Index, int Length, string Value)>();
 
-        // Each Sdk="Id/Version" entry is checked on the decoded value, and the attribute is rewritten from it when one
-        // of them changes.
+        // Each Sdk="Id/Version" entry is matched on the decoded value, as MSBuild reads it, and only the matching
+        // version's text is replaced, so the rest of the attribute keeps its line breaks and entity references.
         if (root.Attributes.FirstOrDefault(attribute => attribute.Name == "Sdk") is { } projectSdk)
         {
-            var changed = false;
-            var sdks = projectSdk.Value.Split(';').Select(sdk =>
+            var (decoded, rawStarts, rawEnds) = DecodeAttributeValue(content.AsSpan(projectSdk.ValueStart, projectSdk.ValueLength));
+            var entryStart = 0;
+            foreach (var entry in decoded.Split(';'))
             {
-                var separatorIndex = sdk.IndexOf('/');
-                if (separatorIndex > 0 && IsLiteralMatch(sdk[..separatorIndex], sdk[(separatorIndex + 1)..], name))
+                var separatorIndex = entry.IndexOf('/');
+                if (separatorIndex > 0 && IsLiteralMatch(entry[..separatorIndex], entry[(separatorIndex + 1)..], name))
                 {
-                    changed = true;
-                    return $"{sdk[..(separatorIndex + 1)]}{newVersion}";
+                    var version = entry[(separatorIndex + 1)..];
+                    var start = entryStart + separatorIndex + 1 + (version.Length - version.TrimStart().Length);
+                    var end = entryStart + separatorIndex + 1 + version.TrimEnd().Length;
+                    edits.Add((projectSdk.ValueStart + rawStarts[start], rawEnds[end - 1] - rawStarts[start], newVersion.ToString()));
                 }
 
-                return sdk;
-            }).ToList();
-
-            if (changed)
-            {
-                edits.Add((projectSdk.ValueStart, projectSdk.ValueLength, PackageXml.Escape(string.Join(';', sdks))));
+                entryStart += entry.Length + 1;
             }
         }
 
@@ -274,6 +272,36 @@ internal static class ProjectSdkReferenceHelper
             ResolvedVersion = resolvedVersion,
             VersionRange = FileBasedAppReferenceHelper.CreateMinimumVersionRange(resolvedVersion)
         });
+    }
+
+    // An attribute value's raw text decoded as an XML parser reads it, with the raw span each decoded character came
+    // from: an entity or character reference is decoded, and a literal tab or line break reads as a space.
+    private static (string Decoded, List<int> RawStarts, List<int> RawEnds) DecodeAttributeValue(ReadOnlySpan<char> raw)
+    {
+        var decoded = new StringBuilder(raw.Length);
+        var rawStarts = new List<int>(raw.Length);
+        var rawEnds = new List<int>(raw.Length);
+        for (var i = 0; i < raw.Length;)
+        {
+            var length = 1;
+            var text = raw[i] is '\t' or '\r' or '\n' ? " " : raw[i].ToString();
+            if (raw[i] == '&' && raw[i..].IndexOf(';') is var referenceEnd and > 0)
+            {
+                length = referenceEnd + 1;
+                text = System.Net.WebUtility.HtmlDecode(raw.Slice(i, length).ToString());
+            }
+
+            foreach (var character in text)
+            {
+                decoded.Append(character);
+                rawStarts.Add(i);
+                rawEnds.Add(i + length);
+            }
+
+            i += length;
+        }
+
+        return (decoded.ToString(), rawStarts, rawEnds);
     }
 
     private static bool IsLiteralMatch(string name, string version, string expectedName) =>
