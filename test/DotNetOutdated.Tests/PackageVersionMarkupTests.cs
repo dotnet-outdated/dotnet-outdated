@@ -177,6 +177,15 @@ namespace DotNetOutdated.Tests
                 PackageVersionMarkup.ReplacePackageVersion(content, PackageVersionMarkup.CentralPackageElements, "A", "$(V)"));
         }
 
+        // MSBuild decodes XML entity references in a package id, but the raw text is compared, so it doesn't match.
+        [Fact]
+        public void ReplacePackageVersion_EntityInPackageId_DoesNotMatchTheDecodedId()
+        {
+            Assert.Equal(
+                "<PackageReference Include=\"A&#46;B\" Version=\"1.0.0\" />",
+                PackageVersionMarkup.ReplacePackageVersion("<PackageReference Include=\"A&#46;B\" Version=\"1.0.0\" />", PackageReference, "A.B", "$(V)"));
+        }
+
         // ── ReplacePropertyValueAt ────────────────────────────────────────────────
 
         [Theory]
@@ -196,6 +205,15 @@ namespace DotNetOutdated.Tests
         public void ReplacePropertyValueAt_ReplacesTheIndexedDefinition(string content, int index, string expected)
         {
             Assert.Equal(expected, PackageVersionMarkup.ReplacePropertyValueAt(content, "V", index, "2.0.0"));
+        }
+
+        // A closing tag inside a comment ends the group early, so the definition after it isn't found.
+        [Fact]
+        public void ReplacePropertyValueAt_ClosingTagInAComment_DoesNotFindTheDefinition()
+        {
+            Assert.Equal(
+                "<PropertyGroup><!-- </PropertyGroup> --><V>1.0.0</V></PropertyGroup>",
+                PackageVersionMarkup.ReplacePropertyValueAt("<PropertyGroup><!-- </PropertyGroup> --><V>1.0.0</V></PropertyGroup>", "V", 0, "2.0.0"));
         }
 
         // ── InsertProperty ────────────────────────────────────────────────────────
@@ -274,6 +292,15 @@ namespace DotNetOutdated.Tests
                 PackageVersionMarkup.InsertProperty("<Project><PropertyGroup><A>1</A></PropertyGroup></Project>", 1, "V", "2.0.0"));
         }
 
+        // A closing tag inside a comment ends the group early, so the property is inserted inside the comment.
+        [Fact]
+        public void InsertProperty_ClosingTagInAComment_InsertsInsideTheComment()
+        {
+            Assert.Equal(
+                "<Project><PropertyGroup><!-- <V>2.0.0</V></PropertyGroup> --><A>1</A></PropertyGroup></Project>",
+                PackageVersionMarkup.InsertProperty("<Project><PropertyGroup><!-- </PropertyGroup> --><A>1</A></PropertyGroup></Project>", 0, "V", "2.0.0"));
+        }
+
         // ── InsertPropertyBefore ──────────────────────────────────────────────────
 
         [Theory]
@@ -312,6 +339,15 @@ namespace DotNetOutdated.Tests
         public void InsertPropertyBefore_InsertsBeforeTheAnchor(string content, int anchorIndex, string expected)
         {
             Assert.Equal(expected, PackageVersionMarkup.InsertPropertyBefore(content, "A", anchorIndex, "V", "2.0.0"));
+        }
+
+        // A closing tag inside a comment ends the group early, so the anchor after it isn't found.
+        [Fact]
+        public void InsertPropertyBefore_ClosingTagInAComment_DoesNotFindTheAnchor()
+        {
+            Assert.Equal(
+                "<PropertyGroup><!-- </PropertyGroup> --><A>$(V)</A></PropertyGroup>",
+                PackageVersionMarkup.InsertPropertyBefore("<PropertyGroup><!-- </PropertyGroup> --><A>$(V)</A></PropertyGroup>", "A", 0, "V", "2.0.0"));
         }
     }
 }
