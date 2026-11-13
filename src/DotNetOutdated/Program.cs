@@ -76,6 +76,8 @@ namespace DotNetOutdated
 
       public bool IncludeUpToDate { get; set; } = false;
 
+      public bool AllowUnsupportedFrameworks { get; set; } = false;
+
       public string PrereleaseLabel { get; set; } = string.Empty;
 
       public LogLevel NuGetCredLogLevel { get; set; } = LogLevel.Warning;
@@ -466,6 +468,7 @@ namespace DotNetOutdated
             OlderThanDays = OlderThanDays,
             MaximumVersion = ParseMaximumVersion(),
             IgnoreFailedSources = IgnoreFailedSources,
+            AllowUnsupportedFrameworks = AllowUnsupportedFrameworks,
             IncludeAutoReferences = IncludeAutoReferences,
             IncludeUpToDate = IncludeUpToDate,
             IncludeFilters = FilterInclude,

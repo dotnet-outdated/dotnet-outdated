@@ -348,6 +348,12 @@ DotNetOutdated.Core.Models.LatestVersionUnknownReason.NotProvided = 3 -> DotNetO
 DotNetOutdated.Core.Models.LatestVersionUnknownReason.Unresolved = 1 -> DotNetOutdated.Core.Models.LatestVersionUnknownReason
 DotNetOutdated.Core.Models.OutdatedDependency.LatestVersionUnknownReason.get -> DotNetOutdated.Core.Models.LatestVersionUnknownReason
 static DotNetOutdated.Core.Models.OutdatedDependency.GetLatestVersionUnknownReason(DotNetOutdated.Core.Models.Dependency! dependency, NuGet.Versioning.NuGetVersion? latestVersion) -> DotNetOutdated.Core.Models.LatestVersionUnknownReason
+DotNetOutdated.Core.Services.LatestVersionQuery.AllowUnsupportedFrameworks.get -> bool
+DotNetOutdated.Core.Services.LatestVersionQuery.AllowUnsupportedFrameworks.init -> void
+DotNetOutdated.Core.Services.OutdatedOptions.AllowUnsupportedFrameworks.get -> bool
+DotNetOutdated.Core.Services.OutdatedOptions.AllowUnsupportedFrameworks.init -> void
+DotNetOutdated.Core.Services.PackageVersionsQuery.AllowUnsupportedFrameworks.get -> bool
+DotNetOutdated.Core.Services.PackageVersionsQuery.AllowUnsupportedFrameworks.init -> void
 DotNetOutdated.Core.Services.IReferenceUpgrader
 DotNetOutdated.Core.Services.IReferenceUpgrader.Upgrade(DotNetOutdated.Core.Services.ReferenceUpgrade! upgrade) -> System.Collections.Generic.IReadOnlyList<DotNetOutdated.Core.Services.ProjectUpgradeResult!>!
 DotNetOutdated.Core.Services.ProjectUpgradeResult

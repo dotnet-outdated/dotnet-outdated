@@ -27,6 +27,9 @@ public sealed record OutdatedOptions
     /// <summary>Treat package sources that fail as having no versions rather than failing.</summary>
     public bool IgnoreFailedSources { get; init; }
 
+    /// <inheritdoc cref="PackageVersionsQuery.AllowUnsupportedFrameworks"/>
+    public bool AllowUnsupportedFrameworks { get; init; }
+
     /// <summary>Report auto-referenced dependencies, such as those an SDK adds.</summary>
     public bool IncludeAutoReferences { get; init; }
 
