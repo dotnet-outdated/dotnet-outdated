@@ -1,6 +1,5 @@
 ﻿using DotNetOutdated.Core.Models;
 #nullable enable
-using DotNetOutdated.Models;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -21,7 +20,7 @@ internal class MarkdownFormatter : IOutputFormatter
         {DependencyUpgradeSeverity.Unknown,default},
     };
 
-    public async Task FormatAsync(IReadOnlyList<AnalyzedProject> projects, TextWriter writer)
+    public async Task FormatAsync(IReadOnlyList<OutdatedProject> projects, TextWriter writer)
     {
         var sb = new StringBuilder();
 
@@ -40,11 +39,11 @@ internal class MarkdownFormatter : IOutputFormatter
                 foreach (var dependency in targetFramework.Dependencies)
                 {
                     sb.Append('|');
-                    sb.Append(dependency.Name);
+                    sb.Append(dependency.Dependency.Name);
                     sb.Append('|');
-                    sb.Append(dependency.IsTransitive.ToString());
+                    sb.Append(dependency.Dependency.IsTransitive.ToString());
                     sb.Append('|');
-                    sb.Append(dependency.ResolvedVersion);
+                    sb.Append(dependency.Dependency.ResolvedVersion);
                     sb.Append('|');
                     if (GetFormattedLatestVersion(dependency) is { } latestVersion)
                     {
@@ -90,13 +89,13 @@ internal class MarkdownFormatter : IOutputFormatter
         await writer.WriteAsync(sb.ToString()).ConfigureAwait(false);
     }
 
-    private static (string? color, string? matching, string? rest)? GetFormattedLatestVersion(AnalyzedDependency dependency)
+    private static (string? color, string? matching, string? rest)? GetFormattedLatestVersion(OutdatedDependency dependency)
     {
         if (dependency.LatestVersion is { } latestVersion)
         {
             var latestString = latestVersion.ToString();
             _colorMaps.TryGetValue(dependency.UpgradeSeverity, out var color);
-            if (dependency.ResolvedVersion is { } resolvedVersion)
+            if (dependency.Dependency.ResolvedVersion is { } resolvedVersion)
             {
                 if (resolvedVersion.IsPrerelease)
                 {

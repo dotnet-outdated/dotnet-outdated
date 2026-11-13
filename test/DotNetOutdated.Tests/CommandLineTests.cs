@@ -406,7 +406,7 @@ public class CommandLineTests
         if (parseResult.GetResult(commandLine.RootCommand.Options.OfType<VersionOption>().Single()) is not null)
             return "Version";
 
-        var p = new Program(null, null, null, null, null, null, null, null);
+        var p = new Program(null, null, null, null, null, null);
         commandLine.Bind(parseResult, p);
 
         return Describe(new Values(

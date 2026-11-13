@@ -1,4 +1,5 @@
 ﻿using CsvHelper;
+using DotNetOutdated.Core.Models;
 using DotNetOutdated.Models;
 using System;
 using System.Collections.Generic;
@@ -10,7 +11,7 @@ namespace DotNetOutdated.Formatters;
 
 internal class CsvFormatter : IOutputFormatter
 {
-    public async Task FormatAsync(IReadOnlyList<AnalyzedProject> projects, TextWriter writer)
+    public async Task FormatAsync(IReadOnlyList<OutdatedProject> projects, TextWriter writer)
     {
         // CsvHelper 34 no longer derives the separator from the culture; keep the
         // culture's list separator (e.g. ';' for de-DE) as earlier versions did.
@@ -38,8 +39,8 @@ internal class CsvFormatter : IOutputFormatter
                         {
                             ProjectName = project.Name,
                             TargetFrameworkName = targetFramework.Name.DotNetFrameworkName,
-                            DependencyName = dependency.Name,
-                            ResolvedVersion = dependency.ResolvedVersion?.ToString(),
+                            DependencyName = dependency.Dependency.Name,
+                            ResolvedVersion = dependency.Dependency.ResolvedVersion?.ToString(),
                             LatestVersion = dependency.LatestVersion?.ToString(),
                             UpgradeSeverity = upgradeSeverity
                         });
