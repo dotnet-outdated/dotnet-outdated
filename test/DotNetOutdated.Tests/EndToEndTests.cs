@@ -1,3 +1,5 @@
+#nullable enable annotations
+
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -368,7 +370,7 @@ public static class EndToEndTests
     [InlineData("empty-solution", "Empty.sln", "Empty.sln")]
     [InlineData("empty-slnx", "Empty.slnx", "Empty.slnx")]
     [InlineData("empty-solution-filter", "Empty.slnf", "Empty.slnf")]
-    public static void Reports_Friendly_Message_For_Solution_With_No_Projects(string testProjectName, string inputFile, string reportedFile)
+    public static void Reports_Friendly_Message_For_Solution_With_No_Projects(string testProjectName, string? inputFile, string reportedFile)
     {
         using var project = TestSetup(testProjectName);
         var input = inputFile is null ? project.Path : Path.Combine(project.Path, inputFile);
@@ -681,6 +683,102 @@ public static class EndToEndTests
         Assert.Equal("[6.0.1, 7.0.0)", packageVersions["DotNetOutdated.Fake.TextJson"]);
     }
 
+    // #561: upgrading a transitive dependency under central package management must reference it from the project
+    // without a version and put the version in Directory.Packages.props, or restore fails with NU1008.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public static void Can_Upgrade_Transitive_Package_With_CPM(bool noRestore)
+    {
+        using var project = TestSetup("transitive-cpm");
+
+        var actual = Program.Main([.. UpgradeArgs(project.Path, noRestore, "--transitive", "--include", "DotNetOutdated.Fake.DependencyInjection")]);
+
+        Assert.Equal(0, actual);
+        var reference = PackageReference(Path.Combine(project.Path, "transitive-cpm.csproj"), "DotNetOutdated.Fake.DependencyInjection");
+        Assert.Null(reference.Attribute("Version"));
+        Assert.Null(reference.Attribute("VersionOverride"));
+        var versions = PackageVersions(Path.Combine(project.Path, "Directory.Packages.props"), "PackageVersion");
+        Assert.Equal("10.0.0", versions["DotNetOutdated.Fake.DependencyInjection"]);
+        Assert.Equal("6.0.0", versions["DotNetOutdated.Fake.Logging"]);
+        AssertRestores(project.Path);
+    }
+
+    // A transitive dependency of a package referenced from Directory.Build.props is added to the project itself.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public static void Can_Upgrade_Transitive_Package_Of_Directory_Build_Props_Reference(bool noRestore)
+    {
+        using var project = TestSetup("transitive-build-props");
+        var propsPath = Path.Combine(project.Path, "Directory.Build.props");
+        var originalProps = File.ReadAllText(propsPath);
+
+        var actual = Program.Main([.. UpgradeArgs(project.Path, noRestore, "--transitive", "--include", "DotNetOutdated.Fake.DependencyInjection")]);
+
+        Assert.Equal(0, actual);
+        var reference = PackageReference(Path.Combine(project.Path, "transitive-build-props.csproj"), "DotNetOutdated.Fake.DependencyInjection");
+        Assert.Equal("10.0.0", (string?)reference.Attribute("Version"));
+        Assert.Equal(originalProps, File.ReadAllText(propsPath));
+        AssertRestores(project.Path);
+    }
+
+    // #301: packages, including pinned transitive dependencies, whose version is in Directory.Build.props are upgraded
+    // there; `dotnet add package` can't edit them ("Cannot edit items in imported files").
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public static void Can_Upgrade_Packages_Pinned_In_Directory_Build_Props(bool noRestore)
+    {
+        using var project = TestSetup("build-props-pinned");
+        var projectPath = Path.Combine(project.Path, "build-props-pinned.csproj");
+        var originalProject = File.ReadAllText(projectPath);
+
+        var actual = Program.Main([.. UpgradeArgs(project.Path, noRestore)]);
+
+        Assert.Equal(0, actual);
+        var versions = PackageVersions(Path.Combine(project.Path, "Directory.Build.props"), "PackageReference");
+        Assert.Equal("10.0.0", versions["DotNetOutdated.Fake.Logging"]);
+        Assert.Equal("10.0.0", versions["DotNetOutdated.Fake.DependencyInjection"]);
+        Assert.Equal(originalProject, File.ReadAllText(projectPath));
+        AssertRestores(project.Path);
+    }
+
+    private static List<string> UpgradeArgs(string path, bool noRestore, params string[] extra)
+    {
+        List<string> args = [path, "--upgrade", .. extra];
+        if (noRestore)
+        {
+            args.Add("--no-restore");
+        }
+
+        return args;
+    }
+
+    private static XElement PackageReference(string projectPath, string packageName) =>
+        XDocument.Load(projectPath).Descendants("PackageReference")
+            .Single(e => string.Equals((string?)e.Attribute("Include"), packageName, StringComparison.OrdinalIgnoreCase));
+
+    private static Dictionary<string, string?> PackageVersions(string path, string elementName) =>
+        XDocument.Load(path).Descendants(elementName)
+            .ToDictionary(e => (string)e.Attribute("Include")!, e => (string?)e.Attribute("Version"), StringComparer.OrdinalIgnoreCase);
+
+    // The upgraded project must still restore: NuGet rejects a PackageReference version under central package
+    // management (NU1008).
+    private static void AssertRestores(string directory)
+    {
+        using var process = Process.Start(new ProcessStartInfo("dotnet", "restore")
+        {
+            WorkingDirectory = directory,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        })!;
+        var output = process.StandardOutput.ReadToEnd() + process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        Assert.True(process.ExitCode == 0, output);
+    }
+
     // Calls the MCP update_package tool, with no "kind", through the real services and returns the tool result.
     private static JsonElement CallMcpUpdatePackage(string projectPath, string packageName, string version, string framework)
     {
@@ -706,7 +804,7 @@ public static class EndToEndTests
             services,
             services.GetRequiredService<IProjectDiscoveryService>(),
             services.GetRequiredService<IProjectAnalysisService>(),
-            services.GetRequiredService<IDotNetPackageService>(),
+            services.GetRequiredService<IReferenceUpgrader>(),
             services.GetRequiredService<IOutdatedDependencyService>(),
             input,
             output);

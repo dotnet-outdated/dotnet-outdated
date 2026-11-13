@@ -169,22 +169,21 @@ namespace DotNetOutdated.Tests
             Assert.Contains("changed since it was scanned", Assert.Single(_warnings));
         }
 
-        // The text edit and the XML disagree when a commented-out closing tag sits inside the value: the regex
-        // edit then uncomments markup. The result is checked against the XML before anything is written.
+        // A commented-out closing tag inside the value is a comment, not markup: only the value's text changes.
         [Theory]
         [InlineData("<AVersion>1.0.0<!-- </AVersion> --></AVersion>")]
         [InlineData("<AVersion>1.0.0<!-- </AVersion><AVersion> --></AVersion>")]
         [InlineData("<AVersion>1.0.0<!-- </AVersion><AVersion>9</AVersion><AVersion> --></AVersion>")]
-        public void KnownDefinition_EditWouldChangeOtherDefinitions_DoesNothing(string definition)
+        public void KnownDefinition_CommentedOutTagsInTheValue_UpdatesOnlyTheValue(string definition)
         {
             var props = $"<Project><PropertyGroup>{definition}</PropertyGroup></Project>";
             var fileSystem = FileSystem(props);
 
-            Assert.False(Update(fileSystem, Info(propertyElementIndex: 0)));
+            Assert.True(Update(fileSystem, Info(propertyElementIndex: 0)));
 
-            Assert.Equal(props, fileSystem.File.ReadAllText(PropsPath));
-            Assert.Equal(LiteralReference, fileSystem.File.ReadAllText(ProjectPath));
-            Assert.Contains("did not change exactly one definition", Assert.Single(_warnings));
+            Assert.Equal(props.Replace("1.0.0", "2.0.0", System.StringComparison.Ordinal), fileSystem.File.ReadAllText(PropsPath));
+            Assert.Equal(RestoredReference, fileSystem.File.ReadAllText(ProjectPath));
+            Assert.Empty(_warnings);
         }
 
         // ── Property file can't be written ────────────────────────────────────────

@@ -26,4 +26,4 @@ _Avoid_: Package variable
 A single `.cs` file run with `dotnet run`, whose references are declared with `#:package`, `#:sdk` and `#:property` directives.
 
 **Upgrade**:
-Changing a reference's version at its version location to a newer version, keeping version variables and the file's formatting.
+Changing a reference's version at its version location to a newer version, keeping version variables, the file's formatting, and a declared upper bound the new version still satisfies.

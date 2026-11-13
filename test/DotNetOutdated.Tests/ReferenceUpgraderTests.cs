@@ -14,7 +14,7 @@ using XFS = System.IO.Abstractions.TestingHelpers.MockUnixSupport;
 
 namespace DotNetOutdated.Tests
 {
-    public class DotNetPackageServiceTests
+    public class ReferenceUpgraderTests
     {
         private const string DirectoryPackagesPropsContent = @"<Project>
   <PropertyGroup>
@@ -26,12 +26,25 @@ namespace DotNetOutdated.Tests
   </ItemGroup>
 </Project>";
 
+        private const string SdkProjectContent = @"<Project Sdk=""Microsoft.NET.Sdk""></Project>";
+
         private const string GlobalPackageReferenceContent = @"<Project>
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
   </PropertyGroup>
   <ItemGroup>
     <GlobalPackageReference Include=""SomeAnalyzer"" Version=""1.0.0"" />
+  </ItemGroup>
+</Project>";
+
+        private const string DirectoryBuildPropsContent = @"<Project>
+  <ItemGroup>
+    <PackageReference
+        Include=""Contoso.Widgets""
+        Version=""1.0.0""
+        PrivateAssets=""all""
+        Condition=""$(MSBuildProjectExtension) == '.csproj'"" />
+    <PackageReference Include=""Contoso.Gadgets"" Version=""2.0.0"" />
   </ItemGroup>
 </Project>";
 
@@ -45,15 +58,15 @@ namespace DotNetOutdated.Tests
             var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
             {
                 { propsPath, new MockFileData(DirectoryPackagesPropsContent) },
-                { projectPath, new MockFileData("<Project></Project>") }
+                { projectPath, new MockFileData(SdkProjectContent) }
             });
 
             var dotNetRunner = Substitute.For<IDotNetRunner>();
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, mockFileSystem);
 
             // Act
             var result = service.Upgrade(projectPath, "Newtonsoft.Json", "net8.0",
-                new VersionRange(new NuGetVersion("13.0.1")), noRestore: true);
+                new NuGetVersion("13.0.1"), noRestore: true);
 
             // Assert
             Assert.True(result.IsSuccess);
@@ -146,11 +159,11 @@ namespace DotNetOutdated.Tests
         [Fact]
         public void CpmProjectWithNoRestore_UnmatchedEntry_ReportsFailureAndLeavesFileUnchanged()
         {
-            // Version as child metadata is valid MSBuild, but it can't be updated in place.
+            // The package is mentioned, but no entry has a version to update.
             const string propsContent = @"<Project>
   <ItemGroup>
     <PackageVersion Include=""SomePackage"">
-      <Version>1.0.0</Version>
+      <Version><!-- pinned -->1.0.0</Version>
     </PackageVersion>
   </ItemGroup>
 </Project>";
@@ -159,20 +172,20 @@ namespace DotNetOutdated.Tests
             var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
             {
                 { propsPath, new MockFileData(propsContent) },
-                { projectPath, new MockFileData("<Project></Project>") }
+                { projectPath, new MockFileData(SdkProjectContent) }
             });
 
             var dotNetRunner = Substitute.For<IDotNetRunner>();
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, mockFileSystem);
 
-            var result = service.Upgrade(projectPath, "SomePackage", "net8.0", new VersionRange(new NuGetVersion("2.0.0")), noRestore: true);
+            var result = service.Upgrade(projectPath, "SomePackage", "net8.0", new NuGetVersion("2.0.0"), noRestore: true);
 
             Assert.False(result.IsSuccess);
-            Assert.Contains("SomePackage", result.Errors);
+            Assert.Contains("SomePackage", result.FailureDetails);
             Assert.Equal(
                 $"Could not update 'SomePackage' in '{propsPath}': no <PackageVersion> or <GlobalPackageReference> element was found " +
-                "with an Include or Update attribute and a Version attribute. Update the version manually.",
-                result.Errors);
+                "with an Include or Update attribute and a version (a Version attribute or <Version> child element). Update the version manually.",
+                result.FailureDetails);
             // Must not fall back to `dotnet add package --no-restore`, which writes the version into the project file.
             dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
             Assert.Equal(propsContent, mockFileSystem.File.ReadAllText(propsPath));
@@ -282,13 +295,13 @@ namespace DotNetOutdated.Tests
             var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
             {
                 { propsPath, new MockFileData(propsContent) },
-                { projectPath, new MockFileData("<Project></Project>") }
+                { projectPath, new MockFileData(SdkProjectContent) }
             });
 
             var dotNetRunner = Substitute.For<IDotNetRunner>();
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, mockFileSystem);
 
-            var result = service.Upgrade(projectPath, packageName, "net8.0", new VersionRange(new NuGetVersion(version)), noRestore: true);
+            var result = service.Upgrade(projectPath, packageName, "net8.0", new NuGetVersion(version), noRestore: true);
 
             Assert.True(result.IsSuccess);
             dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
@@ -305,16 +318,16 @@ namespace DotNetOutdated.Tests
             var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
             {
                 { propsPath, new MockFileData(DirectoryPackagesPropsContent) },
-                { projectPath, new MockFileData("<Project></Project>") }
+                { projectPath, new MockFileData(SdkProjectContent) }
             });
 
             var dotNetRunner = Substitute.For<IDotNetRunner>();
             dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, mockFileSystem);
 
             // Act
             var result = service.Upgrade(projectPath, "Newtonsoft.Json", "net8.0",
-                new VersionRange(new NuGetVersion("13.0.1")), noRestore: false);
+                new NuGetVersion("13.0.1"), noRestore: false);
 
             // Assert
             dotNetRunner.ReceivedWithAnyArgs(1).Run(default, default);
@@ -332,16 +345,16 @@ namespace DotNetOutdated.Tests
 
             var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
             {
-                { projectPath, new MockFileData("<Project></Project>") }
+                { projectPath, new MockFileData(SdkProjectContent) }
             });
 
             var dotNetRunner = Substitute.For<IDotNetRunner>();
             dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, mockFileSystem);
 
             // Act
             var result = service.Upgrade(projectPath, "Newtonsoft.Json", "net8.0",
-                new VersionRange(new NuGetVersion("13.0.1")), noRestore: true);
+                new NuGetVersion("13.0.1"), noRestore: true);
 
             // Assert - should fall through to dotnet add package
             dotNetRunner.ReceivedWithAnyArgs(1).Run(default, default);
@@ -378,7 +391,7 @@ namespace DotNetOutdated.Tests
             var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
             {
                 { propsPath, new MockFileData(original) },
-                { projectPath, new MockFileData("<Project></Project>") }
+                { projectPath, new MockFileData(SdkProjectContent) }
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
             dotNetRunner.Run(default, default).ReturnsForAnyArgs(_ =>
@@ -388,10 +401,10 @@ namespace DotNetOutdated.Tests
                     .Replace("  <ItemGroup>", "  <!-- Keep packages separate from properties. -->\n  <ItemGroup>"));
                 return new RunStatus("", "", 0);
             });
-            var service = new DotNetPackageService(dotNetRunner, fileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
 
             var result = service.Upgrade(projectPath, "Newtonsoft.Json", "net8.0",
-                new VersionRange(new NuGetVersion("13.0.1")), noRestore);
+                new NuGetVersion("13.0.1"), noRestore);
 
             Assert.True(result.IsSuccess);
             Assert.Equal(original.Replace("12.0.3", "13.0.1"), fileSystem.File.ReadAllText(propsPath));
@@ -424,7 +437,7 @@ namespace DotNetOutdated.Tests
             var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
             {
                 { propsPath, new MockFileData(original) },
-                { projectPath, new MockFileData("<Project></Project>") }
+                { projectPath, new MockFileData(SdkProjectContent) }
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
             dotNetRunner.Run(default, default).ReturnsForAnyArgs(_ =>
@@ -433,10 +446,10 @@ namespace DotNetOutdated.Tests
                 fileSystem.File.WriteAllText(propsPath, DirectoryPackagesPropsContent.Replace("12.0.3", "[13.0.4, 14.0.0)"));
                 return new RunStatus("", "", 0);
             });
-            var service = new DotNetPackageService(dotNetRunner, fileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
 
             var result = service.Upgrade(projectPath, "Newtonsoft.Json", "net8.0",
-                VersionRange.Parse("[13.0.4, 14.0.0)"), noRestore, ignoreFailedSources: false);
+                new NuGetVersion("13.0.4"), noRestore, ignoreFailedSources: false);
 
             Assert.True(result.IsSuccess);
             Assert.Equal(original.Replace("[12.0.1,14.0.0)", "[13.0.4, 14.0.0)"), fileSystem.File.ReadAllText(propsPath));
@@ -476,15 +489,15 @@ namespace DotNetOutdated.Tests
             }
 
             var dotNetRunner = Substitute.For<IDotNetRunner>();
-            var service = new DotNetPackageService(dotNetRunner, fileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
 
             var result = service.Upgrade(projectPath, "Newtonsoft.Json", "net8.0",
-                VersionRange.Parse("[13.0.4, 14.0.0)"), noRestore: true, ignoreFailedSources: false);
+                new NuGetVersion("13.0.4"), noRestore: true, ignoreFailedSources: false);
 
             Assert.Equal(expectSuccess, result.IsSuccess);
             if (!expectSuccess)
             {
-                Assert.Contains("$(NewtonsoftJsonVersion)", result.Errors);
+                Assert.Contains("$(NewtonsoftJsonVersion)", result.FailureDetails);
             }
             dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
         }
@@ -498,7 +511,7 @@ namespace DotNetOutdated.Tests
             var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
             {
                 { propsPath, new MockFileData(original) },
-                { projectPath, new MockFileData("<Project></Project>") }
+                { projectPath, new MockFileData(SdkProjectContent) }
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
             dotNetRunner.Run(default, default).ReturnsForAnyArgs(call =>
@@ -509,10 +522,10 @@ namespace DotNetOutdated.Tests
                 fileSystem.File.WriteAllText(propsPath, System.Xml.Linq.XDocument.Parse(content).ToString());
                 return new RunStatus("", "", 0);
             });
-            var service = new DotNetPackageService(dotNetRunner, fileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
 
-            var first = service.Upgrade(projectPath, "Newtonsoft.Json", "net8.0", new VersionRange(new NuGetVersion("13.0.1")), noRestore: false);
-            var second = service.Upgrade(projectPath, "Serilog", "net8.0", new VersionRange(new NuGetVersion("2.11.0")), noRestore: false);
+            var first = service.Upgrade(projectPath, "Newtonsoft.Json", "net8.0", new NuGetVersion("13.0.1"), noRestore: false);
+            var second = service.Upgrade(projectPath, "Serilog", "net8.0", new NuGetVersion("2.11.0"), noRestore: false);
 
             Assert.True(first.IsSuccess);
             Assert.True(second.IsSuccess);
@@ -527,7 +540,7 @@ namespace DotNetOutdated.Tests
             var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
             {
                 { propsPath, new MockFileData(DirectoryPackagesPropsContent) },
-                { projectPath, new MockFileData("<Project></Project>") }
+                { projectPath, new MockFileData(SdkProjectContent) }
             });
             var updated = DirectoryPackagesPropsContent.Replace("12.0.3", "13.0.1")
                 .Replace("</ItemGroup>", "  <PackageVersion Include=\"Other.Package\" Version=\"1.0.0\" />\n  </ItemGroup>");
@@ -537,10 +550,10 @@ namespace DotNetOutdated.Tests
                 fileSystem.File.WriteAllText(propsPath, updated);
                 return new RunStatus("", "", 0);
             });
-            var service = new DotNetPackageService(dotNetRunner, fileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
 
             var result = service.Upgrade(projectPath, "Newtonsoft.Json", "net8.0",
-                new VersionRange(new NuGetVersion("13.0.1")), noRestore: false);
+                new NuGetVersion("13.0.1"), noRestore: false);
 
             Assert.True(result.IsSuccess);
             Assert.Equal(updated, fileSystem.File.ReadAllText(propsPath));
@@ -558,7 +571,7 @@ namespace DotNetOutdated.Tests
             var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
             {
                 { propsPath, new MockFileData(original) },
-                { projectPath, new MockFileData("<Project></Project>") }
+                { projectPath, new MockFileData(SdkProjectContent) }
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
             dotNetRunner.Run(default, default).ReturnsForAnyArgs(_ =>
@@ -567,10 +580,10 @@ namespace DotNetOutdated.Tests
                     System.Xml.Linq.XDocument.Parse(original.Replace("12.0.3", "13.0.1")).ToString());
                 return new RunStatus("", "", 0);
             });
-            var service = new DotNetPackageService(dotNetRunner, fileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
 
             var result = service.Upgrade(projectPath, "Newtonsoft.Json", "net8.0",
-                new VersionRange(new NuGetVersion("13.0.1")), noRestore: false);
+                new NuGetVersion("13.0.1"), noRestore: false);
 
             Assert.True(result.IsSuccess);
             Assert.Equal(original.Replace("12.0.3", "13.0.1"), fileSystem.File.ReadAllText(propsPath));
@@ -590,7 +603,7 @@ namespace DotNetOutdated.Tests
             var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
             {
                 { propsPath, new MockFileData(original) },
-                { projectPath, new MockFileData("<Project></Project>") }
+                { projectPath, new MockFileData(SdkProjectContent) }
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
             dotNetRunner.Run(default, default).ReturnsForAnyArgs(_ =>
@@ -598,9 +611,9 @@ namespace DotNetOutdated.Tests
                 fileSystem.File.WriteAllText(propsPath, System.Xml.Linq.XDocument.Parse(expected).ToString());
                 return new RunStatus("", "", 0);
             });
-            var service = new DotNetPackageService(dotNetRunner, fileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
 
-            var result = service.Upgrade(projectPath, "Newtonsoft.Json", "net8.0", new VersionRange(new NuGetVersion("13.0.1")), noRestore: false);
+            var result = service.Upgrade(projectPath, "Newtonsoft.Json", "net8.0", new NuGetVersion("13.0.1"), noRestore: false);
 
             Assert.True(result.IsSuccess);
             Assert.Equal(expected, fileSystem.File.ReadAllText(propsPath));
@@ -621,7 +634,7 @@ namespace DotNetOutdated.Tests
             var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
             {
                 { propsPath, new MockFileData(originalBytes) },
-                { projectPath, new MockFileData("<Project></Project>") }
+                { projectPath, new MockFileData(SdkProjectContent) }
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
             dotNetRunner.Run(default, default).ReturnsForAnyArgs(_ =>
@@ -629,10 +642,10 @@ namespace DotNetOutdated.Tests
                 fileSystem.File.WriteAllText(propsPath, DirectoryPackagesPropsContent.Replace("12.0.3", "13.0.1"));
                 return new RunStatus("", "", 0);
             });
-            var service = new DotNetPackageService(dotNetRunner, fileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
 
             var result = service.Upgrade(projectPath, "Newtonsoft.Json", "net8.0",
-                new VersionRange(new NuGetVersion("13.0.1")), noRestore: false);
+                new NuGetVersion("13.0.1"), noRestore: false);
 
             byte[] expected = [.. encoding.GetPreamble(), .. encoding.GetBytes(original.Replace("12.0.3", "13.0.1"))];
             Assert.True(result.IsSuccess);
@@ -653,13 +666,13 @@ namespace DotNetOutdated.Tests
             var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
             {
                 { propsPath, new MockFileData(originalBytes) },
-                { projectPath, new MockFileData("<Project></Project>") }
+                { projectPath, new MockFileData(SdkProjectContent) }
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
-            var service = new DotNetPackageService(dotNetRunner, fileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
 
             var result = service.Upgrade(projectPath, "Newtonsoft.Json", "net8.0",
-                new VersionRange(new NuGetVersion("13.0.1")), noRestore: true);
+                new NuGetVersion("13.0.1"), noRestore: true);
 
             byte[] expected = [.. encoding.GetPreamble(), .. encoding.GetBytes(original.Replace("12.0.3", "13.0.1"))];
             Assert.True(result.IsSuccess);
@@ -680,7 +693,7 @@ namespace DotNetOutdated.Tests
             var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
             {
                 { propsPath, new MockFileData(originalBytes) },
-                { projectPath, new MockFileData("<Project></Project>") }
+                { projectPath, new MockFileData(SdkProjectContent) }
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
             dotNetRunner.Run(default, default).ReturnsForAnyArgs(_ =>
@@ -691,10 +704,10 @@ namespace DotNetOutdated.Tests
                 }
                 return new RunStatus("", "", 0);
             });
-            var service = new DotNetPackageService(dotNetRunner, fileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
 
             var result = service.Upgrade(projectPath, "Newtonsoft.Json", "net8.0",
-                new VersionRange(new NuGetVersion("13.0.1")), noRestore: false);
+                new NuGetVersion("13.0.1"), noRestore: false);
 
             Assert.True(result.IsSuccess);
             Assert.Equal(cliUpdatesFile ? updatedBytes : originalBytes, fileSystem.File.ReadAllBytes(propsPath));
@@ -717,7 +730,7 @@ namespace DotNetOutdated.Tests
             var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
             {
                 { propsPath, new MockFileData(original) },
-                { projectPath, new MockFileData("<Project></Project>") }
+                { projectPath, new MockFileData(SdkProjectContent) }
             });
             if (propertyPath != propsPath)
             {
@@ -730,10 +743,10 @@ namespace DotNetOutdated.Tests
                 fileSystem.File.WriteAllText(propsPath, rewritten);
                 return new RunStatus("", "", 0);
             });
-            var service = new DotNetPackageService(dotNetRunner, fileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
 
             var result = service.Upgrade(projectPath, "Newtonsoft.Json", "net8.0",
-                new VersionRange(new NuGetVersion("13.0.1")), noRestore: false);
+                new NuGetVersion("13.0.1"), noRestore: false);
 
             Assert.True(result.IsSuccess);
             Assert.Equal(original.Replace("12.0.3", "13.0.1"), fileSystem.File.ReadAllText(propsPath));
@@ -757,7 +770,7 @@ namespace DotNetOutdated.Tests
             var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
             {
                 { propsPath, new MockFileData(original) },
-                { projectPath, new MockFileData("<Project></Project>") }
+                { projectPath, new MockFileData(SdkProjectContent) }
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
             dotNetRunner.Run(default, default).ReturnsForAnyArgs(_ =>
@@ -767,10 +780,10 @@ namespace DotNetOutdated.Tests
                     System.Xml.Linq.XDocument.Parse(original.Replace("$(JsonVersion)", "13.0.1")).ToString());
                 return new RunStatus("", "", 0);
             });
-            var service = new DotNetPackageService(dotNetRunner, fileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
 
             var result = service.Upgrade(projectPath, "Newtonsoft.Json", "net8.0",
-                new VersionRange(new NuGetVersion("13.0.1")), noRestore: false);
+                new NuGetVersion("13.0.1"), noRestore: false);
 
             Assert.True(result.IsSuccess);
             Assert.Equal(original.Replace("12.0.3", "13.0.1"), fileSystem.File.ReadAllText(propsPath));
@@ -793,7 +806,7 @@ namespace DotNetOutdated.Tests
             var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
             {
                 { propsPath, new MockFileData(originalBytes) },
-                { projectPath, new MockFileData("<Project></Project>") }
+                { projectPath, new MockFileData(SdkProjectContent) }
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
             dotNetRunner.Run(default, default).ReturnsForAnyArgs(_ =>
@@ -801,10 +814,10 @@ namespace DotNetOutdated.Tests
                 fileSystem.File.WriteAllText(propsPath, original.Replace("$(JsonVersion)", "13.0.1"));
                 return new RunStatus("", "", 0);
             });
-            var service = new DotNetPackageService(dotNetRunner, fileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
 
             var result = service.Upgrade(projectPath, "Newtonsoft.Json", "net8.0",
-                new VersionRange(new NuGetVersion("13.0.1")), noRestore);
+                new NuGetVersion("13.0.1"), noRestore);
 
             byte[] expected = [.. encoding.GetPreamble(), .. encoding.GetBytes(original.Replace("12.0.3", "13.0.1"))];
             Assert.True(result.IsSuccess);
@@ -819,7 +832,7 @@ namespace DotNetOutdated.Tests
             var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
             {
                 { propsPath, new MockFileData(DirectoryPackagesPropsContent + "\n\n") },
-                { projectPath, new MockFileData("<Project></Project>") }
+                { projectPath, new MockFileData(SdkProjectContent) }
             });
             var updated = DirectoryPackagesPropsContent.Replace("12.0.3", "13.0.1");
             var dotNetRunner = Substitute.For<IDotNetRunner>();
@@ -828,10 +841,10 @@ namespace DotNetOutdated.Tests
                 fileSystem.File.WriteAllText(propsPath, updated);
                 return new RunStatus("", "Package is incompatible", 1);
             });
-            var service = new DotNetPackageService(dotNetRunner, fileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
 
             var result = service.Upgrade(projectPath, "Newtonsoft.Json", "net8.0",
-                new VersionRange(new NuGetVersion("13.0.1")), noRestore: false);
+                new NuGetVersion("13.0.1"), noRestore: false);
 
             Assert.False(result.IsSuccess);
             Assert.Equal(updated, fileSystem.File.ReadAllText(propsPath));
@@ -847,15 +860,15 @@ namespace DotNetOutdated.Tests
             var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
             {
                 { propsPath, new MockFileData(DirectoryPackagesPropsContent) },
-                { projectPath, new MockFileData("<Project></Project>") }
+                { projectPath, new MockFileData(SdkProjectContent) }
             });
 
             var dotNetRunner = Substitute.For<IDotNetRunner>();
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, mockFileSystem);
 
             // Act
             var result = service.Upgrade(projectPath, "Newtonsoft.Json", "net8.0",
-                new VersionRange(new NuGetVersion("13.0.1")), noRestore: true);
+                new NuGetVersion("13.0.1"), noRestore: true);
 
             // Assert
             Assert.True(result.IsSuccess);
@@ -879,7 +892,7 @@ namespace DotNetOutdated.Tests
             {
                 { propsPath, new MockFileData(original) },
                 { nestedPropsPath, new MockFileData(nestedContent) },
-                { projectPath, new MockFileData("<Project></Project>") }
+                { projectPath, new MockFileData(SdkProjectContent) }
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
             dotNetRunner.Run(default, default).ReturnsForAnyArgs(_ =>
@@ -887,9 +900,9 @@ namespace DotNetOutdated.Tests
                 fileSystem.File.WriteAllText(propsPath, DirectoryPackagesPropsContent.Replace("12.0.3", "13.0.1"));
                 return new RunStatus("", "", 0);
             });
-            var service = new DotNetPackageService(dotNetRunner, fileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
 
-            var result = service.Upgrade(projectPath, "Newtonsoft.Json", "net8.0", new VersionRange(new NuGetVersion("13.0.1")), noRestore);
+            var result = service.Upgrade(projectPath, "Newtonsoft.Json", "net8.0", new NuGetVersion("13.0.1"), noRestore);
 
             Assert.True(result.IsSuccess);
             Assert.Equal(original.Replace("12.0.3", "13.0.1"), fileSystem.File.ReadAllText(propsPath));
@@ -910,15 +923,15 @@ namespace DotNetOutdated.Tests
             var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
             {
                 { propsPath, new MockFileData(GlobalPackageReferenceContent) },
-                { projectPath, new MockFileData("<Project></Project>") }
+                { projectPath, new MockFileData(SdkProjectContent) }
             });
 
             var dotNetRunner = Substitute.For<IDotNetRunner>();
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, mockFileSystem);
 
             // Act
             var result = service.Upgrade(projectPath, "SomeAnalyzer", "net8.0",
-                new VersionRange(new NuGetVersion("2.0.0")), noRestore: true);
+                new NuGetVersion("2.0.0"), noRestore: true);
 
             // Assert
             Assert.True(result.IsSuccess);
@@ -948,12 +961,12 @@ namespace DotNetOutdated.Tests
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
             dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
-            var service = new DotNetPackageService(dotNetRunner, fileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
 
             var result = service.Upgrade(projectPath, "StyleCop.Analyzers", "net8.0",
-                new VersionRange(new NuGetVersion("1.3.180")), noRestore: false);
+                new NuGetVersion("1.3.180"), noRestore: false);
 
-            Assert.True(result.IsSuccess, result.Errors);
+            Assert.True(result.IsSuccess, result.FailureDetails);
             Assert.Equal(
                 string.Format(propsTemplate, string.Format(packageElement, "1.3.180")),
                 fileSystem.File.ReadAllText(propsPath));
@@ -969,12 +982,12 @@ namespace DotNetOutdated.Tests
             var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
             {
                 { propsPath, new MockFileData(GlobalPackageReferenceContent) },
-                { projectPath, new MockFileData("<Project></Project>") }
+                { projectPath, new MockFileData(SdkProjectContent) }
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
             dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
-            var service = new DotNetPackageService(dotNetRunner, fileSystem);
-            var version = new VersionRange(new NuGetVersion("2.0.0"));
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
+            var version = new NuGetVersion("2.0.0");
 
             Assert.True(service.Upgrade(projectPath, "SomeAnalyzer", "net8.0", version, noRestore: false).IsSuccess);
             Assert.True(service.Upgrade(projectPath, "SomeAnalyzer", "net9.0", version, noRestore: false).IsSuccess);
@@ -996,15 +1009,15 @@ namespace DotNetOutdated.Tests
             {
                 { buildPropsPath, new MockFileData(buildProps) },
                 { XFS.Path(@"c:\repo\Directory.Packages.props"), new MockFileData(DirectoryPackagesPropsContent) },
-                { projectPath, new MockFileData("<Project></Project>") }
+                { projectPath, new MockFileData(SdkProjectContent) }
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
             dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
-            var service = new DotNetPackageService(dotNetRunner, fileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
 
-            var result = service.Upgrade(projectPath, "SomeAnalyzer", "net8.0", new VersionRange(new NuGetVersion("2.0.0")), noRestore);
+            var result = service.Upgrade(projectPath, "SomeAnalyzer", "net8.0", new NuGetVersion("2.0.0"), noRestore);
 
-            Assert.True(result.IsSuccess, result.Errors);
+            Assert.True(result.IsSuccess, result.FailureDetails);
             Assert.Equal(buildProps.Replace("1.0.0", "2.0.0"), fileSystem.File.ReadAllText(buildPropsPath));
             dotNetRunner.DidNotReceive().Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[0] == "add"));
         }
@@ -1019,16 +1032,16 @@ namespace DotNetOutdated.Tests
             var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
             {
                 { propsPath, new MockFileData(DirectoryPackagesPropsContent) },
-                { projectPath, new MockFileData("<Project></Project>") }
+                { projectPath, new MockFileData(SdkProjectContent) }
             });
 
             var dotNetRunner = Substitute.For<IDotNetRunner>();
             dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, mockFileSystem);
 
             // Act - package "UnknownPackage" is not in Directory.Packages.props
             var result = service.Upgrade(projectPath, "UnknownPackage", "net8.0",
-                new VersionRange(new NuGetVersion("1.0.0")), noRestore: true);
+                new NuGetVersion("1.0.0"), noRestore: true);
 
             // Assert - should fall through to dotnet add package
             dotNetRunner.ReceivedWithAnyArgs(1).Run(default, default);
@@ -1049,9 +1062,9 @@ Console.WriteLine();")
                 }
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, mockFileSystem);
 
-            var result = service.Upgrade(appPath, "Humanizer", "net10.0", new VersionRange(new NuGetVersion("3.0.11")), noRestore: true);
+            var result = service.Upgrade(appPath, "Humanizer", "net10.0", new NuGetVersion("3.0.11"), noRestore: true);
 
             Assert.True(result.IsSuccess);
             dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
@@ -1075,9 +1088,9 @@ Console.WriteLine();")
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
             dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, mockFileSystem);
 
-            var result = service.Upgrade(appPath, "Humanizer", "net10.0", new VersionRange(new NuGetVersion("3.0.11")), noRestore: false);
+            var result = service.Upgrade(appPath, "Humanizer", "net10.0", new NuGetVersion("3.0.11"), noRestore: false);
 
             Assert.True(result.IsSuccess);
             dotNetRunner.Received().Run(XFS.Path(@"c:\repo"), Arg.Is<string[]>(a => a[0] == "restore" && a[1] == "app.cs"));
@@ -1097,9 +1110,9 @@ Console.WriteLine();")
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
             dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, mockFileSystem);
 
-            var result = service.Upgrade(appPath, "Humanizer", "net10.0", new VersionRange(new NuGetVersion("3.0.11")), noRestore: true);
+            var result = service.Upgrade(appPath, "Humanizer", "net10.0", new NuGetVersion("3.0.11"), noRestore: true);
 
             Assert.True(result.IsSuccess);
             dotNetRunner.Received().Run(
@@ -1127,9 +1140,9 @@ Information(""Outdated Sdk"");")
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
             dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, mockFileSystem);
 
-            var result = service.Upgrade(appPath, "Cake.Sdk", "net10.0", new VersionRange(new NuGetVersion("6.2.0")), noRestore: true, kind: ReferenceKind.Sdk);
+            var result = service.Upgrade(appPath, "Cake.Sdk", "net10.0", new NuGetVersion("6.2.0"), noRestore: true, kind: ReferenceKind.Sdk);
 
             Assert.True(result.IsSuccess);
             dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
@@ -1148,12 +1161,12 @@ Information(""Outdated Sdk"");")
                 { appPath, new MockFileData(content) }
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, mockFileSystem);
 
-            var result = service.Upgrade(appPath, "Cake.Sdk", "net10.0", new VersionRange(new NuGetVersion("6.2.0")), noRestore: true, kind: ReferenceKind.Sdk);
+            var result = service.Upgrade(appPath, "Cake.Sdk", "net10.0", new NuGetVersion("6.2.0"), noRestore: true, kind: ReferenceKind.Sdk);
 
             Assert.False(result.IsSuccess);
-            Assert.Contains("Failed to update file-based app", result.Errors);
+            Assert.Contains("Failed to update file-based app", result.FailureDetails);
             Assert.Equal(content, mockFileSystem.File.ReadAllText(appPath));
             dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
         }
@@ -1172,9 +1185,9 @@ Information(""Outdated Sdk"");")
                 }
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, mockFileSystem);
 
-            var result = service.Upgrade(appPath, "Cake.Sdk", "net10.0", new VersionRange(new NuGetVersion("6.2.0")), noRestore: true, kind: ReferenceKind.Sdk);
+            var result = service.Upgrade(appPath, "Cake.Sdk", "net10.0", new NuGetVersion("6.2.0"), noRestore: true, kind: ReferenceKind.Sdk);
 
             Assert.True(result.IsSuccess);
             dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
@@ -1197,9 +1210,9 @@ Information(""Outdated Sdk"");")
                 }
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, mockFileSystem);
 
-            var result = service.Upgrade(appPath, "Cake.Sdk", "net10.0", new VersionRange(new NuGetVersion("6.2.0")), noRestore: true, kind: ReferenceKind.Sdk);
+            var result = service.Upgrade(appPath, "Cake.Sdk", "net10.0", new NuGetVersion("6.2.0"), noRestore: true, kind: ReferenceKind.Sdk);
 
             Assert.True(result.IsSuccess);
             dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
@@ -1219,9 +1232,9 @@ Information(""Outdated Sdk"");")
                 }
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, mockFileSystem);
 
-            var result = service.Upgrade(appPath, "Cake.Sdk", "net10.0", new VersionRange(new NuGetVersion("6.2.0")), noRestore: true, kind: ReferenceKind.Sdk);
+            var result = service.Upgrade(appPath, "Cake.Sdk", "net10.0", new NuGetVersion("6.2.0"), noRestore: true, kind: ReferenceKind.Sdk);
 
             Assert.True(result.IsSuccess);
             dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
@@ -1238,9 +1251,9 @@ Information(""Outdated Sdk"");")
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
             dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus(string.Empty, string.Empty, 0));
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, mockFileSystem);
 
-            var result = service.Upgrade(projectPath, "Aspire.AppHost.Sdk", "net10.0", new VersionRange(new NuGetVersion("13.0.2")), kind: ReferenceKind.Sdk);
+            var result = service.Upgrade(projectPath, "Aspire.AppHost.Sdk", "net10.0", new NuGetVersion("13.0.2"), kind: ReferenceKind.Sdk);
 
             Assert.True(result.IsSuccess);
             Assert.Equal(@"<Project Sdk=""Aspire.AppHost.Sdk/13.0.2""></Project>", mockFileSystem.File.ReadAllText(projectPath));
@@ -1258,9 +1271,9 @@ Information(""Outdated Sdk"");")
                 { appPath, new MockFileData("#:property TargetFramework=net10.0\n#:sdk Cake.Sdk@6.0.0\n") }
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, mockFileSystem);
 
-            var result = service.Upgrade(appPath, "Cake.Sdk", "net10.0", new VersionRange(new NuGetVersion("6.2.0")), noRestore: true, kind: null);
+            var result = service.Upgrade(appPath, "Cake.Sdk", "net10.0", new NuGetVersion("6.2.0"), noRestore: true, kind: null);
 
             Assert.True(result.IsSuccess);
             dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
@@ -1276,9 +1289,9 @@ Information(""Outdated Sdk"");")
                 { appPath, new MockFileData("#:property SdkVersion=6.0.0\n#:sdk Cake.Sdk@$(SdkVersion)\n") }
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, mockFileSystem);
 
-            var result = service.Upgrade(appPath, "Cake.Sdk", "net10.0", new VersionRange(new NuGetVersion("6.2.0")), noRestore: true, kind: null);
+            var result = service.Upgrade(appPath, "Cake.Sdk", "net10.0", new NuGetVersion("6.2.0"), noRestore: true, kind: null);
 
             Assert.True(result.IsSuccess);
             dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
@@ -1295,9 +1308,9 @@ Information(""Outdated Sdk"");")
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
             dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus(string.Empty, string.Empty, 0));
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, mockFileSystem);
 
-            var result = service.Upgrade(appPath, "Humanizer", "net10.0", new VersionRange(new NuGetVersion("3.0.11")), noRestore: true, kind: null);
+            var result = service.Upgrade(appPath, "Humanizer", "net10.0", new NuGetVersion("3.0.11"), noRestore: true, kind: null);
 
             Assert.True(result.IsSuccess);
             dotNetRunner.Received(1).Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[0] == "add" && a[3] == "Humanizer"));
@@ -1314,12 +1327,12 @@ Information(""Outdated Sdk"");")
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
             dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus(string.Empty, string.Empty, 0));
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, mockFileSystem);
 
-            var result = service.Upgrade(appPath, "Cake.Sdk", "net10.0", new VersionRange(new NuGetVersion("6.2.0")), noRestore: true, kind: ReferenceKind.Package);
+            var result = service.Upgrade(appPath, "Cake.Sdk", "net10.0", new NuGetVersion("6.2.0"), noRestore: true, kind: ReferenceKind.Package);
 
             Assert.False(result.IsSuccess);
-            Assert.Contains("#:sdk", result.Errors);
+            Assert.Contains("#:sdk", result.FailureDetails);
             Assert.Equal(original, mockFileSystem.File.ReadAllText(appPath));
             dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
         }
@@ -1338,9 +1351,9 @@ Information(""Outdated Sdk"");")
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
             dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus(string.Empty, string.Empty, 0));
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, mockFileSystem);
 
-            var result = service.Upgrade(appPath, "Cake.Sdk", "net10.0", new VersionRange(new NuGetVersion("6.2.0")), noRestore: true, kind: kind);
+            var result = service.Upgrade(appPath, "Cake.Sdk", "net10.0", new NuGetVersion("6.2.0"), noRestore: true, kind: kind);
 
             Assert.True(result.IsSuccess);
             if (kind == ReferenceKind.Package)
@@ -1365,9 +1378,9 @@ Information(""Outdated Sdk"");")
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
             dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus(string.Empty, string.Empty, 0));
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, mockFileSystem);
 
-            var result = service.Upgrade(projectPath, "Aspire.AppHost.Sdk", "net10.0", new VersionRange(new NuGetVersion("13.0.2")), noRestore: true, kind: null);
+            var result = service.Upgrade(projectPath, "Aspire.AppHost.Sdk", "net10.0", new NuGetVersion("13.0.2"), noRestore: true, kind: null);
 
             Assert.True(result.IsSuccess);
             Assert.Equal(@"<Project Sdk=""Aspire.AppHost.Sdk/13.0.2""></Project>", mockFileSystem.File.ReadAllText(projectPath));
@@ -1385,9 +1398,9 @@ Information(""Outdated Sdk"");")
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
             dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus(string.Empty, string.Empty, 0));
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, mockFileSystem);
 
-            var result = service.Upgrade(projectPath, "Newtonsoft.Json", "net8.0", new VersionRange(new NuGetVersion("13.0.1")), kind: null);
+            var result = service.Upgrade(projectPath, "Newtonsoft.Json", "net8.0", new NuGetVersion("13.0.1"), kind: null);
 
             Assert.True(result.IsSuccess);
             dotNetRunner.Received(1).Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[0] == "add" && a[3] == "Newtonsoft.Json"));
@@ -1406,9 +1419,9 @@ Information(""Outdated Sdk"");")
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
             dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus(string.Empty, string.Empty, 0));
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, mockFileSystem);
 
-            var result = service.Upgrade(projectPath, "Cake.Sdk", "net10.0", new VersionRange(new NuGetVersion("6.1.0")), noRestore: true, kind: kind);
+            var result = service.Upgrade(projectPath, "Cake.Sdk", "net10.0", new NuGetVersion("6.1.0"), noRestore: true, kind: kind);
 
             Assert.True(result.IsSuccess);
             if (kind == ReferenceKind.Sdk)
@@ -1443,9 +1456,9 @@ Information(""Outdated Sdk"");")
                 { appPath, new MockFileData(original) }
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, mockFileSystem);
 
-            var result = service.Upgrade(appPath, "Cake.Sdk", "net10.0", new VersionRange(new NuGetVersion("6.1.0")), noRestore: true, kind: kind);
+            var result = service.Upgrade(appPath, "Cake.Sdk", "net10.0", new NuGetVersion("6.1.0"), noRestore: true, kind: kind);
 
             Assert.True(result.IsSuccess, result.FailureDetails);
             dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
@@ -1465,12 +1478,12 @@ Information(""Outdated Sdk"");")
             {
                 { appPath, new MockFileData([.. System.Text.Encoding.UTF8.GetPreamble(), .. System.Text.Encoding.UTF8.GetBytes(content)]) }
             });
-            var service = new DotNetPackageService(Substitute.For<IDotNetRunner>(), mockFileSystem);
+            var service = new ReferenceUpgrader(Substitute.For<IDotNetRunner>(), mockFileSystem);
             var name = kind == ReferenceKind.Sdk ? "Cake.Sdk" : "Cake.Core";
 
-            var result = service.Upgrade(appPath, name, "net10.0", new VersionRange(new NuGetVersion("6.1.0")), noRestore: true, kind: kind);
+            var result = service.Upgrade(appPath, name, "net10.0", new NuGetVersion("6.1.0"), noRestore: true, kind: kind);
 
-            Assert.True(result.IsSuccess, result.Errors);
+            Assert.True(result.IsSuccess, result.FailureDetails);
             var bytes = mockFileSystem.File.ReadAllBytes(appPath);
             Assert.Equal(System.Text.Encoding.UTF8.GetPreamble(), bytes[..3]);
             Assert.Equal(content.Replace("6.0.0", "6.1.0"), System.Text.Encoding.UTF8.GetString(bytes[3..]));
@@ -1486,12 +1499,12 @@ Information(""Outdated Sdk"");")
             });
             mockFileSystem.File.SetAttributes(projectPath, FileAttributes.ReadOnly);
             var dotNetRunner = Substitute.For<IDotNetRunner>();
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, mockFileSystem);
 
-            var result = service.Upgrade(projectPath, "Aspire.AppHost.Sdk", "net10.0", new VersionRange(new NuGetVersion("13.0.2")), kind: ReferenceKind.Sdk);
+            var result = service.Upgrade(projectPath, "Aspire.AppHost.Sdk", "net10.0", new NuGetVersion("13.0.2"), kind: ReferenceKind.Sdk);
 
             Assert.False(result.IsSuccess);
-            Assert.Contains("Aspire.AppHost.Sdk", result.Errors);
+            Assert.Contains("Aspire.AppHost.Sdk", result.FailureDetails);
             dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
         }
 
@@ -1504,9 +1517,9 @@ Information(""Outdated Sdk"");")
                 { projectPath, new MockFileData(@"<Project Sdk=""Microsoft.NET.Sdk""><Sdk Name=""Aspire.AppHost.Sdk"" Version=""13.0.2"" /></Project>") }
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, mockFileSystem);
 
-            var result = service.Upgrade(projectPath, "Aspire.AppHost.Sdk", "net10.0", new VersionRange(new NuGetVersion("13.0.2")), noRestore: true, kind: ReferenceKind.Sdk);
+            var result = service.Upgrade(projectPath, "Aspire.AppHost.Sdk", "net10.0", new NuGetVersion("13.0.2"), noRestore: true, kind: ReferenceKind.Sdk);
 
             Assert.True(result.IsSuccess);
             dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
@@ -1522,10 +1535,10 @@ Information(""Outdated Sdk"");")
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
             dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus(string.Empty, string.Empty, 0));
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, mockFileSystem);
 
-            var first = service.Upgrade(projectPath, "Microsoft.Build.NoTargets", "net8.0", new VersionRange(new NuGetVersion("3.7.134")), kind: ReferenceKind.Sdk);
-            var second = service.Upgrade(projectPath, "Microsoft.Build.NoTargets", "netstandard2.0", new VersionRange(new NuGetVersion("3.7.134")), kind: ReferenceKind.Sdk);
+            var first = service.Upgrade(projectPath, "Microsoft.Build.NoTargets", "net8.0", new NuGetVersion("3.7.134"), kind: ReferenceKind.Sdk);
+            var second = service.Upgrade(projectPath, "Microsoft.Build.NoTargets", "netstandard2.0", new NuGetVersion("3.7.134"), kind: ReferenceKind.Sdk);
 
             Assert.True(first.IsSuccess);
             Assert.True(second.IsSuccess);
@@ -1534,22 +1547,33 @@ Information(""Outdated Sdk"");")
         }
 
         [Theory]
-        [InlineData("[13.0.4, 14.0.0)", "[13.0.4, 14.0.0)")]
-        [InlineData("[7.0.0]", "[7.0.0]")]
-        [InlineData("13.0.4", "13.0.4")]
-        [InlineData("4.5.0.0", "4.5.0.0")]
-        public void AddPackage_WithVersionRange_PassesRangeToDotNetAddPackage(string range, string expectedArgument)
+        // Upper bound is kept while the new version is inside the declared range
+        [InlineData("[6.0.13,7)", "6.0.36", "[6.0.36, 7.0.0)")]
+        [InlineData("[12.0.1,14.0.0)", "13.0.4", "[13.0.4, 14.0.0)")]
+        [InlineData("(6.0.0,8)", "7.0.0", "[7.0.0, 8.0.0)")]
+        [InlineData("(,8.0.0)", "7.0.0", "[7.0.0, 8.0.0)")]
+        [InlineData("[6.0.13,7]", "7.0.0", "[7.0.0]")]
+        [InlineData("[6.*, 8)", "7.0.20", "[7.0.20, 8.0.0)")]
+        // No upper bound: plain version
+        [InlineData("6.0.13", "8.0.24", "8.0.24")]
+        [InlineData("[6.0.13,)", "8.0.24", "8.0.24")]
+        [InlineData("6.*", "8.0.24", "8.0.24")]
+        [InlineData("4.0.0", "4.5.0.0", "4.5.0.0")]
+        // New version outside the declared range (e.g. --maximum-version): drop the bound
+        [InlineData("[6.0.13,7)", "8.0.24", "8.0.24")]
+        [InlineData("[6.0.13,7]", "7.0.1", "7.0.1")]
+        public void AddPackage_KeepsTheDeclaredUpperBoundWhileTheVersionSatisfiesIt(string declared, string version, string expectedArgument)
         {
             var projectPath = XFS.Path(@"c:\repo\MyProject.csproj");
             var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
             {
-                { projectPath, new MockFileData("<Project></Project>") }
+                { projectPath, new MockFileData($@"<Project Sdk=""Microsoft.NET.Sdk""><ItemGroup><PackageReference Include=""Foo"" Version=""{declared}"" /></ItemGroup></Project>") }
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
             dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, mockFileSystem);
 
-            var result = service.Upgrade(projectPath, "Newtonsoft.Json", "net8.0", VersionRange.Parse(range));
+            var result = service.Upgrade(projectPath, "Foo", "net8.0", NuGetVersion.Parse(version));
 
             Assert.True(result.IsSuccess);
             dotNetRunner.Received(1).Run(
@@ -1558,18 +1582,38 @@ Information(""Outdated Sdk"");")
         }
 
         [Fact]
+        public void AddPackage_OfATransitivePackage_WritesAPlainVersion()
+        {
+            // e.g. AWSSDK.S3 depends on AWSSDK.Core [3.7.0, 3.8.0); promoting AWSSDK.Core must not copy that bound,
+            // and nothing in the project declares one.
+            var projectPath = XFS.Path(@"c:\repo\MyProject.csproj");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { projectPath, new MockFileData(@"<Project Sdk=""Microsoft.NET.Sdk""><ItemGroup><PackageReference Include=""AWSSDK.S3"" Version=""3.7.0"" /></ItemGroup></Project>") }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
+            var service = new ReferenceUpgrader(dotNetRunner, mockFileSystem);
+
+            var result = service.Upgrade(projectPath, "AWSSDK.Core", "net8.0", NuGetVersion.Parse("3.7.501.1"));
+
+            Assert.True(result.IsSuccess);
+            dotNetRunner.Received(1).Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[0] == "add" && a[5] == "3.7.501.1"));
+        }
+
+        [Fact]
         public void AddPackage_WithNuGetVersion_WritesVersionExactlyAsBefore()
         {
             var projectPath = XFS.Path(@"c:\repo\MyProject.csproj");
             var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
             {
-                { projectPath, new MockFileData("<Project></Project>") }
+                { projectPath, new MockFileData(SdkProjectContent) }
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
             dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, mockFileSystem);
 
-            service.Upgrade(projectPath, "Some.Package", "net8.0", new VersionRange(new NuGetVersion("4.5.0.0")));
+            service.Upgrade(projectPath, "Some.Package", "net8.0", new NuGetVersion("4.5.0.0"));
 
             dotNetRunner.Received(1).Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[5] == "4.5.0.0"));
         }
@@ -1581,27 +1625,18 @@ Information(""Outdated Sdk"");")
             var projectPath = XFS.Path(@"c:\repo\src\MyProject\MyProject.csproj");
             var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
             {
-                { propsPath, new MockFileData(DirectoryPackagesPropsContent) },
-                { projectPath, new MockFileData("<Project></Project>") }
+                { propsPath, new MockFileData(DirectoryPackagesPropsContent.Replace("12.0.3", "[12.0.3, 14.0.0)")) },
+                { projectPath, new MockFileData(SdkProjectContent) }
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
-            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, mockFileSystem);
 
             var result = service.Upgrade(projectPath, "Newtonsoft.Json", "net8.0",
-                VersionRange.Parse("[13.0.4, 14.0.0)"), noRestore: true, ignoreFailedSources: false);
+                new NuGetVersion("13.0.4"), noRestore: true, ignoreFailedSources: false);
 
             Assert.True(result.IsSuccess);
             dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
             Assert.Contains("Include=\"Newtonsoft.Json\" Version=\"[13.0.4, 14.0.0)\"", mockFileSystem.File.ReadAllText(propsPath));
-        }
-
-        [Fact]
-        public void AddPackage_WithRangeWithoutLowerBound_Throws()
-        {
-            var service = new DotNetPackageService(Substitute.For<IDotNetRunner>(), new MockFileSystem());
-
-            Assert.Throws<ArgumentException>(() =>
-                service.Upgrade(XFS.Path(@"c:\repo\MyProject.csproj"), "Newtonsoft.Json", "net8.0", VersionRange.Parse("(, 14.0.0)")));
         }
 
         [Theory]
@@ -1627,10 +1662,10 @@ Information(""Outdated Sdk"");")
             var fileSystem = new MockFileSystem(files);
             var dotNetRunner = Substitute.For<IDotNetRunner>();
             dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
-            var service = new DotNetPackageService(dotNetRunner, fileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
 
-            var first = service.Upgrade(projectPath, "Microsoft.Maui.Controls", "net8.0", new VersionRange(new NuGetVersion("8.0.100")), noRestore);
-            var second = service.Upgrade(projectPath, "Microsoft.Maui.Controls", "net9.0", new VersionRange(new NuGetVersion("8.0.100")), noRestore);
+            var first = service.Upgrade(projectPath, "Microsoft.Maui.Controls", "net8.0", new NuGetVersion("8.0.100"), noRestore);
+            var second = service.Upgrade(projectPath, "Microsoft.Maui.Controls", "net9.0", new NuGetVersion("8.0.100"), noRestore);
 
             Assert.True(first.IsSuccess);
             Assert.True(second.IsSuccess);
@@ -1663,10 +1698,10 @@ Information(""Outdated Sdk"");")
                 return new RunStatus("", "", 0);
             });
 
-            var service = new DotNetPackageService(dotNetRunner, fileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
 
-            Assert.True(service.Upgrade(projectPath, "Microsoft.Maui.Controls", "net8.0", new VersionRange(new NuGetVersion("8.0.100")), noRestore: false).IsSuccess);
-            Assert.True(service.Upgrade(projectPath, "Microsoft.Maui.Controls.Compatibility", "net8.0", new VersionRange(new NuGetVersion("8.0.100")), noRestore: false).IsSuccess);
+            Assert.True(service.Upgrade(projectPath, "Microsoft.Maui.Controls", "net8.0", new NuGetVersion("8.0.100"), noRestore: false).IsSuccess);
+            Assert.True(service.Upgrade(projectPath, "Microsoft.Maui.Controls.Compatibility", "net8.0", new NuGetVersion("8.0.100"), noRestore: false).IsSuccess);
 
             var finalContent = fileSystem.File.ReadAllText(projectPath);
             Assert.Single(Regex.Matches(finalContent, @"<MauiVersion>8\.0\.100</MauiVersion>"));
@@ -1675,7 +1710,7 @@ Information(""Outdated Sdk"");")
         }
 
         [Fact]
-        public void SharedVariableAcrossProjects_RestoresEachProjectOnce()
+        public void SharedVariableAcrossProjects_IsWrittenOnceAndRestoresEachProjectOnce()
         {
             var packagesPath = XFS.Path(@"c:\repo\Directory.Packages.props");
             var projectA = XFS.Path(@"c:\repo\A\A.csproj");
@@ -1688,16 +1723,366 @@ Information(""Outdated Sdk"");")
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
             dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
-            var service = new DotNetPackageService(dotNetRunner, fileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
 
-            foreach (var (project, framework) in new[] { (projectA, "net8.0"), (projectA, "net9.0"), (projectB, "net8.0"), (projectB, "net9.0") })
+            var results = service.Upgrade(new ReferenceUpgrade
             {
-                Assert.True(service.Upgrade(project, "Analyzers", framework, new VersionRange(new NuGetVersion("8.0.100")), noRestore: false).IsSuccess);
-            }
+                Name = "Analyzers",
+                Version = new NuGetVersion("8.0.100"),
+                Projects =
+                [
+                    new UpgradeProject(projectA, "net8.0"), new UpgradeProject(projectA, "net9.0"),
+                    new UpgradeProject(projectB, "net8.0"), new UpgradeProject(projectB, "net9.0"),
+                ],
+            });
 
+            Assert.Equal([(projectA, UpgradeOutcome.Upgraded), (projectB, UpgradeOutcome.Upgraded)], results.Select(r => (r.ProjectPath, r.Outcome)));
             dotNetRunner.Received(1).Run(XFS.Path(@"c:\repo\A"), Arg.Is<string[]>(a => a[0] == "restore"));
             dotNetRunner.Received(1).Run(XFS.Path(@"c:\repo\B"), Arg.Is<string[]>(a => a[0] == "restore"));
+            dotNetRunner.ReceivedWithAnyArgs(2).Run(default, default);
             Assert.Contains("<V>8.0.100</V>", fileSystem.File.ReadAllText(packagesPath));
+        }
+
+        [Fact]
+        public void SharedVariableAcrossUpgrades_RestoresAProjectNotYetRestored()
+        {
+            // The CLI makes one upgrade per resolved version, so projects that resolved different versions of the same
+            // package are upgraded separately: the second finds the location written but must still restore its project.
+            var packagesPath = XFS.Path(@"c:\repo\Directory.Packages.props");
+            var projectA = XFS.Path(@"c:\repo\A\A.csproj");
+            var projectB = XFS.Path(@"c:\repo\B\B.csproj");
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                [packagesPath] = new("<Project><PropertyGroup><V>8.0.3</V></PropertyGroup><ItemGroup><GlobalPackageReference Include=\"Analyzers\" Version=\"$(V)\" /></ItemGroup></Project>"),
+                [projectA] = new(SdkProjectContent),
+                [projectB] = new(SdkProjectContent),
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
+
+            var first = service.Upgrade(projectA, "Analyzers", "net8.0", new NuGetVersion("8.0.100"));
+            var second = service.Upgrade(projectB, "Analyzers", "net8.0", new NuGetVersion("8.0.100"));
+
+            Assert.Equal(UpgradeOutcome.Upgraded, first.Outcome);
+            Assert.Equal(UpgradeOutcome.Upgraded, second.Outcome);
+            dotNetRunner.Received(1).Run(XFS.Path(@"c:\repo\A"), Arg.Is<string[]>(a => a[0] == "restore"));
+            dotNetRunner.Received(1).Run(XFS.Path(@"c:\repo\B"), Arg.Is<string[]>(a => a[0] == "restore"));
+        }
+
+        [Fact]
+        public void ALocationChangedBackSinceAnUpgrade_RestoresItsProjectsWhenWrittenAgain()
+        {
+            // An upgrader outlives one upgrade (the MCP server keeps one), and the file can change between two:
+            // what was restored at the version before says nothing about the version written now.
+            var packagesPath = XFS.Path(@"c:\repo\Directory.Packages.props");
+            var projectA = XFS.Path(@"c:\repo\A\A.csproj");
+            var projectB = XFS.Path(@"c:\repo\B\B.csproj");
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                [packagesPath] = new(GlobalPackageReferenceContent),
+                [projectA] = new(SdkProjectContent),
+                [projectB] = new(SdkProjectContent),
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
+            var upgrade = new ReferenceUpgrade
+            {
+                Name = "SomeAnalyzer",
+                Version = new NuGetVersion("2.0.0"),
+                Projects = [new UpgradeProject(projectA, "net8.0"), new UpgradeProject(projectB, "net8.0")],
+            };
+
+            service.Upgrade(upgrade);
+            fileSystem.File.WriteAllText(packagesPath, GlobalPackageReferenceContent);
+            var results = service.Upgrade(upgrade);
+
+            Assert.All(results, result => Assert.Equal(UpgradeOutcome.Upgraded, result.Outcome));
+            Assert.Equal(GlobalPackageReferenceContent.Replace("1.0.0", "2.0.0"), fileSystem.File.ReadAllText(packagesPath));
+            dotNetRunner.Received(2).Run(XFS.Path(@"c:\repo\A"), Arg.Is<string[]>(a => a[0] == "restore"));
+            dotNetRunner.Received(2).Run(XFS.Path(@"c:\repo\B"), Arg.Is<string[]>(a => a[0] == "restore"));
+        }
+
+        [Fact]
+        public void ALocationSetBackToAnEarlierVersionByHand_IsAlreadyCurrent()
+        {
+            var packagesPath = XFS.Path(@"c:\repo\Directory.Packages.props");
+            var projectPath = XFS.Path(@"c:\repo\A\A.csproj");
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                [packagesPath] = new(GlobalPackageReferenceContent),
+                [projectPath] = new(SdkProjectContent),
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
+
+            service.Upgrade(projectPath, "SomeAnalyzer", "net8.0", new NuGetVersion("2.0.0"));
+            service.Upgrade(projectPath, "SomeAnalyzer", "net8.0", new NuGetVersion("3.0.0"));
+            fileSystem.File.WriteAllText(packagesPath, GlobalPackageReferenceContent.Replace("1.0.0", "2.0.0"));
+            var result = service.Upgrade(projectPath, "SomeAnalyzer", "net8.0", new NuGetVersion("2.0.0"));
+
+            // This upgrader last wrote 3.0.0 there; 2.0.0 is someone else's, as if it had never written it.
+            Assert.Equal(UpgradeOutcome.AlreadyCurrent, result.Outcome);
+            dotNetRunner.Received(2).Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[0] == "restore"));
+        }
+
+        [Fact]
+        public void ALocationAlreadyAtTheVersion_IsAlreadyCurrentAndNotRestored()
+        {
+            var packagesPath = XFS.Path(@"c:\repo\Directory.Packages.props");
+            var projectPath = XFS.Path(@"c:\repo\A\A.csproj");
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                [packagesPath] = new("<Project><PropertyGroup><V>8.0.100</V></PropertyGroup><ItemGroup><GlobalPackageReference Include=\"Analyzers\" Version=\"$(V)\" /></ItemGroup></Project>"),
+                [projectPath] = new(SdkProjectContent),
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
+
+            var result = service.Upgrade(projectPath, "Analyzers", "net8.0", new NuGetVersion("8.0.100"));
+
+            Assert.Equal(UpgradeOutcome.AlreadyCurrent, result.Outcome);
+            dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
+        }
+
+        [Fact]
+        public void AProjectListedOncePerTargetFramework_RunsDotNetAddForEachOfThem()
+        {
+            // `dotnet add package -f` changes one target framework's reference: a reference declared per target
+            // framework, or a transitive package being promoted, needs a run for each.
+            var projectPath = XFS.Path(@"c:\repo\MyProject.csproj");
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                [projectPath] = new(
+                    """
+                    <Project Sdk="Microsoft.NET.Sdk">
+                      <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'"><PackageReference Include="Foo" Version="1.0.0" /></ItemGroup>
+                      <ItemGroup Condition="'$(TargetFramework)' == 'net9.0'"><PackageReference Include="Foo" Version="1.0.0" /></ItemGroup>
+                    </Project>
+                    """),
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
+
+            var results = service.Upgrade(new ReferenceUpgrade
+            {
+                Name = "Foo",
+                Version = new NuGetVersion("2.0.0"),
+                Projects = [new UpgradeProject(projectPath, "net8.0"), new UpgradeProject(projectPath, "net9.0")],
+            });
+
+            Assert.Equal(UpgradeOutcome.Upgraded, Assert.Single(results).Outcome);
+            dotNetRunner.Received(1).Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[0] == "add" && a[6] == "-f" && a[7] == "net8.0"));
+            dotNetRunner.Received(1).Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[0] == "add" && a[6] == "-f" && a[7] == "net9.0"));
+            dotNetRunner.ReceivedWithAnyArgs(2).Run(default, default);
+        }
+
+        [Theory]
+        [InlineData("net8.0", "8.0.5", "[8.0.5, 9.0.0)")]
+        [InlineData("net9.0", "9.0.3", "[9.0.3, 10.0.0)")]
+        // Outside this target framework's range, though inside the other's.
+        [InlineData("net8.0", "9.0.3", "9.0.3")]
+        public void AReferenceDeclaredPerTargetFramework_KeepsThatTargetFrameworksUpperBound(string targetFramework, string version, string expectedArgument)
+        {
+            var projectPath = XFS.Path(@"c:\repo\MyProject.csproj");
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                [projectPath] = new(
+                    """
+                    <Project Sdk="Microsoft.NET.Sdk">
+                      <PropertyGroup><TargetFrameworks>net8.0;net9.0</TargetFrameworks></PropertyGroup>
+                      <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'"><PackageReference Include="Foo" Version="[8.0.0, 9.0.0)" /></ItemGroup>
+                      <ItemGroup Condition="'$(TargetFramework)' == 'net9.0'"><PackageReference Include="Foo" Version="[9.0.0, 10.0.0)" /></ItemGroup>
+                    </Project>
+                    """),
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
+
+            var result = service.Upgrade(projectPath, "Foo", targetFramework, NuGetVersion.Parse(version));
+
+            Assert.Equal(UpgradeOutcome.Upgraded, result.Outcome);
+            dotNetRunner.Received(1).Run(
+                Arg.Any<string>(),
+                Arg.Is<string[]>(a => a[0] == "add" && a[5] == expectedArgument && a[7] == targetFramework));
+        }
+
+        [Fact]
+        public void AProjectListedOncePerTargetFramework_KeepsEachTargetFrameworksUpperBound()
+        {
+            var projectPath = XFS.Path(@"c:\repo\MyProject.csproj");
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                [projectPath] = new(
+                    """
+                    <Project Sdk="Microsoft.NET.Sdk">
+                      <PropertyGroup><TargetFrameworks>net8.0;net9.0</TargetFrameworks></PropertyGroup>
+                      <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'"><PackageReference Include="Foo" Version="[1.0.0, 3.0.0)" /></ItemGroup>
+                      <ItemGroup Condition="'$(TargetFramework)' == 'net9.0'"><PackageReference Include="Foo" Version="[1.0.0, 4.0.0)" /></ItemGroup>
+                    </Project>
+                    """),
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
+
+            service.Upgrade(new ReferenceUpgrade
+            {
+                Name = "Foo",
+                Version = new NuGetVersion("2.0.0"),
+                Projects = [new UpgradeProject(projectPath, "net8.0"), new UpgradeProject(projectPath, "net9.0")],
+            });
+
+            dotNetRunner.Received(1).Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[5] == "[2.0.0, 3.0.0)" && a[7] == "net8.0"));
+            dotNetRunner.Received(1).Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[5] == "[2.0.0, 4.0.0)" && a[7] == "net9.0"));
+        }
+
+        [Fact]
+        public void AProjectListedOncePerTargetFramework_StopsAtTheFirstDotNetAddThatFails()
+        {
+            var projectPath = XFS.Path(@"c:\repo\MyProject.csproj");
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                [projectPath] = new(SdkProjectContent),
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "incompatible", 1));
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
+
+            var results = service.Upgrade(new ReferenceUpgrade
+            {
+                Name = "Foo",
+                Version = new NuGetVersion("2.0.0"),
+                Projects = [new UpgradeProject(projectPath, "net8.0"), new UpgradeProject(projectPath, "net9.0")],
+            });
+
+            var result = Assert.Single(results);
+            Assert.Equal(UpgradeOutcome.Failed, result.Outcome);
+            Assert.Equal("incompatible", result.FailureDetails);
+            dotNetRunner.ReceivedWithAnyArgs(1).Run(default, default);
+        }
+
+        [Theory]
+        [InlineData("#:package Foo@[12.0.1, 13.0.0)", "[12.0.3, 13.0.0)")]
+        [InlineData("#:package Foo@[12.0.1,13.0.0)", "[12.0.3, 13.0.0)")]
+        // `dotnet add package` writes a range that holds a space in quotes.
+        [InlineData("#:package Foo@\"[12.0.1, 13.0.0)\"", "[12.0.3, 13.0.0)")]
+        [InlineData("#:package foo@[12.0.1, 13.0.0)", "[12.0.3, 13.0.0)")]
+        [InlineData("#:package Foo@12.0.1", "12.0.3")]
+        [InlineData("#:package Foo@[12.0.1, 12.0.2]", "12.0.3")]
+        [InlineData("#:package Other@[12.0.1, 13.0.0)", "12.0.3")]
+        public void FileBasedAppDirectPackage_KeepsTheDeclaredUpperBoundWhileTheVersionSatisfiesIt(string directive, string expectedArgument)
+        {
+            var appPath = XFS.Path(@"c:\repo\app.cs");
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                [appPath] = new(directive + "\nConsole.WriteLine();\n"),
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
+
+            var result = service.Upgrade(appPath, "Foo", "net10.0", NuGetVersion.Parse("12.0.3"));
+
+            Assert.True(result.IsSuccess);
+            dotNetRunner.Received(1).Run(
+                Arg.Any<string>(),
+                Arg.Is<string[]>(a => a[0] == "add" && a[4] == "-v" && a[5] == expectedArgument));
+        }
+
+        [Fact]
+        public void NonSdkStyleProject_KeepsTheUpperBoundDeclaredByTheReferenceItRemoves()
+        {
+            var projectPath = XFS.Path(@"c:\repo\MyProject.csproj");
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                [projectPath] = new("<Project ToolsVersion=\"15.0\"><ItemGroup><PackageReference Include=\"Foo\" Version=\"[6.0.13, 7.0.0)\" /></ItemGroup></Project>"),
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(call =>
+            {
+                if (call.Arg<string[]>()[0] == "remove")
+                {
+                    // What `dotnet remove package` does.
+                    fileSystem.File.WriteAllText(projectPath, "<Project ToolsVersion=\"15.0\"><ItemGroup /></Project>");
+                }
+
+                return new RunStatus("", "", 0);
+            });
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
+
+            var result = service.Upgrade(projectPath, "Foo", "net48", NuGetVersion.Parse("6.0.36"));
+
+            Assert.True(result.IsSuccess);
+            Received.InOrder(() =>
+            {
+                dotNetRunner.Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[0] == "remove"));
+                dotNetRunner.Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[0] == "add" && a[5] == "[6.0.36, 7.0.0)"));
+            });
+        }
+
+        [Fact]
+        public void SharedVariableWrittenAfterDotNetAdd_RestoresAProjectThatHasItWrittenDirectly()
+        {
+            // A's reference is in its project file, so `dotnet add package` updates it and then the variable. B's is
+            // in an imported file, so its variable is written directly: it is found written, and B must be restored.
+            var propsPath = XFS.Path(@"c:\repo\Directory.Build.props");
+            var referencesPath = XFS.Path(@"c:\repo\refs.props");
+            var projectA = XFS.Path(@"c:\repo\A\A.csproj");
+            var projectB = XFS.Path(@"c:\repo\B\B.csproj");
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                [propsPath] = new("<Project><PropertyGroup><FooVersion>1.0.0</FooVersion></PropertyGroup></Project>"),
+                [referencesPath] = new("<Project><ItemGroup><PackageReference Include=\"Foo\" Version=\"$(FooVersion)\" /></ItemGroup></Project>"),
+                [projectA] = new("<Project Sdk=\"Microsoft.NET.Sdk\"><ItemGroup><PackageReference Include=\"Foo\" Version=\"$(FooVersion)\" /></ItemGroup></Project>"),
+                [projectB] = new("<Project Sdk=\"Microsoft.NET.Sdk\"><Import Project=\"../refs.props\" /></Project>"),
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
+
+            var results = service.Upgrade(new ReferenceUpgrade
+            {
+                Name = "Foo",
+                Version = new NuGetVersion("2.0.0"),
+                Projects = [new UpgradeProject(projectA, "net8.0"), new UpgradeProject(projectB, "net8.0")],
+            });
+
+            Assert.Equal([(projectA, UpgradeOutcome.Upgraded), (projectB, UpgradeOutcome.Upgraded)], results.Select(r => (r.ProjectPath, r.Outcome)));
+            dotNetRunner.Received(1).Run(XFS.Path(@"c:\repo\A"), Arg.Is<string[]>(a => a[0] == "add"));
+            dotNetRunner.Received(1).Run(XFS.Path(@"c:\repo\B"), Arg.Is<string[]>(a => a[0] == "restore"));
+            dotNetRunner.ReceivedWithAnyArgs(2).Run(default, default);
+            Assert.Contains("<FooVersion>2.0.0</FooVersion>", fileSystem.File.ReadAllText(propsPath));
+        }
+
+        [Fact]
+        public void AProjectThatFails_DoesNotStopTheOthers()
+        {
+            var projectA = XFS.Path(@"c:\repo\A\A.csproj");
+            var projectB = XFS.Path(@"c:\repo\B\B.csproj");
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                [projectA] = new(SdkProjectContent),
+                [projectB] = new(@"<Project Sdk=""Microsoft.Build.NoTargets/3.7.0""></Project>"),
+            });
+            var service = new ReferenceUpgrader(Substitute.For<IDotNetRunner>(), fileSystem);
+
+            var results = service.Upgrade(new ReferenceUpgrade
+            {
+                Name = "Microsoft.Build.NoTargets",
+                Kind = ReferenceKind.Sdk,
+                Version = new NuGetVersion("3.7.134"),
+                Projects = [new UpgradeProject(projectA), new UpgradeProject(projectB)],
+                NoRestore = true,
+            });
+
+            Assert.Equal([UpgradeOutcome.Failed, UpgradeOutcome.Upgraded], results.Select(r => r.Outcome));
+            Assert.Contains("declares no versioned SDK", results[0].FailureDetails);
+            Assert.Equal(@"<Project Sdk=""Microsoft.Build.NoTargets/3.7.134""></Project>", fileSystem.File.ReadAllText(projectB));
         }
 
         [Fact]
@@ -1712,12 +2097,12 @@ Information(""Outdated Sdk"");")
                 [projectPath] = new("<Project Sdk=\"Microsoft.NET.Sdk\"></Project>"),
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
-            var service = new DotNetPackageService(dotNetRunner, fileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
 
-            var status = service.Upgrade(projectPath, "Analyzers", "net8.0", new VersionRange(new NuGetVersion("9.0.0")), noRestore: false);
+            var status = service.Upgrade(projectPath, "Analyzers", "net8.0", new NuGetVersion("9.0.0"), noRestore: false);
 
             Assert.False(status.IsSuccess);
-            Assert.Contains("Update the version manually", status.Errors);
+            Assert.Contains("Update the version manually", status.FailureDetails);
             Assert.Equal(packagesContent, fileSystem.File.ReadAllText(packagesPath));
             dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
         }
@@ -1733,13 +2118,13 @@ Information(""Outdated Sdk"");")
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
             dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
-            var warnings = new List<string>();
-            var service = new DotNetPackageService(dotNetRunner, fileSystem, warnings.Add);
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
 
-            Assert.True(service.Upgrade(projectPath, "Serilog", "net8.0", new VersionRange(new NuGetVersion("9.0.0")), noRestore: false).IsSuccess);
+            var result = service.Upgrade(projectPath, "Serilog", "net8.0", new NuGetVersion("9.0.0"), noRestore: false);
 
+            Assert.True(result.IsSuccess);
             dotNetRunner.Received(1).Run(XFS.Path(@"c:\repo\A"), Arg.Is<string[]>(a => a[0] == "add" && a[3] == "Serilog"));
-            var warning = Assert.Single(warnings);
+            var warning = Assert.Single(result.Warnings);
             Assert.Contains("literal version", warning);
             Assert.Contains("$(Major).0.3", warning);
         }
@@ -1758,9 +2143,9 @@ Information(""Outdated Sdk"");")
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
             dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
-            var service = new DotNetPackageService(dotNetRunner, fileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
 
-            Assert.True(service.Upgrade(projectPath, "Serilog", "net8.0", new VersionRange(new NuGetVersion("3.0.0")), noRestore, ignoreFailedSources).IsSuccess);
+            Assert.True(service.Upgrade(projectPath, "Serilog", "net8.0", new NuGetVersion("3.0.0"), noRestore, ignoreFailedSources).IsSuccess);
 
             List<string> expected = ["add", "A.csproj", "package", "Serilog", "-v", "3.0.0", "-f", "net8.0"];
             if (noRestore)
@@ -1788,28 +2173,14 @@ Information(""Outdated Sdk"");")
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
             dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
-            var service = new DotNetPackageService(dotNetRunner, fileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
 
-            Assert.True(service.Upgrade(projectPath, "Aspire.AppHost.Sdk", "net9.0", new VersionRange(new NuGetVersion("9.1.0")), noRestore: false, ignoreFailedSources, kind: ReferenceKind.Sdk).IsSuccess);
+            Assert.True(service.Upgrade(projectPath, "Aspire.AppHost.Sdk", "net9.0", new NuGetVersion("9.1.0"), noRestore: false, ignoreFailedSources, kind: ReferenceKind.Sdk).IsSuccess);
 
             string[] expected = ignoreFailedSources
                 ? ["restore", "AppHost.csproj", "--ignore-failed-sources"]
                 : ["restore", "AppHost.csproj"];
             dotNetRunner.Received(1).Run(XFS.Path(@"c:\repo\AppHost"), Arg.Is<string[]>(a => a.SequenceEqual(expected)));
-        }
-
-        [Fact]
-        public void RemovePackage_RunsDotNetRemovePackageInTheProjectDirectory()
-        {
-            var projectPath = XFS.Path(@"c:\repo\A\A.csproj");
-            var dotNetRunner = Substitute.For<IDotNetRunner>();
-            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("removed", "", 0));
-            var service = new DotNetPackageService(dotNetRunner, new MockFileSystem());
-
-            var status = service.RemovePackage(projectPath, "Serilog");
-
-            Assert.Equal("removed", status.Output);
-            dotNetRunner.Received(1).Run(XFS.Path(@"c:\repo\A"), Arg.Is<string[]>(a => a.SequenceEqual(new[] { "remove", "A.csproj", "package", "Serilog" })));
         }
 
         [Fact]
@@ -1841,17 +2212,313 @@ Information(""Outdated Sdk"");")
                 [propsPath] = new(propsContent),
             });
             var dotNetRunner = Substitute.For<IDotNetRunner>();
-            var service = new DotNetPackageService(dotNetRunner, fileSystem);
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
 
-            var status = service.Upgrade(appPath, "Humanizer", "net10.0", new VersionRange(new NuGetVersion("3.0.0")), noRestore: false);
+            var status = service.Upgrade(appPath, "Humanizer", "net10.0", new NuGetVersion("3.0.0"), noRestore: false);
 
             Assert.False(status.IsSuccess);
             Assert.Equal(
                 $"Failed to update file-based app '{appPath}' for 'Humanizer'. Could not update the matching #:property value or #:package/#:sdk directive.",
-                status.Errors);
+                status.FailureDetails);
             Assert.Equal(appContent, fileSystem.File.ReadAllText(appPath));
             Assert.Equal(propsContent, fileSystem.File.ReadAllText(propsPath));
             dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
+        }
+
+        [Theory]
+        [InlineData("#:sdk Cake.Sdk@6.0.0\n", "#:sdk Cake.Sdk@7.0.0\n")]
+        [InlineData("#:property CakeVersion=6.0.0\n#:sdk Cake.Sdk@$(CakeVersion)\n", "#:property CakeVersion=7.0.0\n#:sdk Cake.Sdk@$(CakeVersion)\n")]
+        public void FileBasedAppSdk_IsUpgradedInItsDirectiveOrProperty_MatchingTheIdIgnoringCase(string content, string expected)
+        {
+            var appPath = XFS.Path(@"c:\repo\app.cs");
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData> { [appPath] = new(content) });
+            var service = new ReferenceUpgrader(Substitute.For<IDotNetRunner>(), fileSystem);
+
+            var result = service.Upgrade(appPath, "cake.sdk", "net10.0", new NuGetVersion("7.0.0"), noRestore: true, kind: ReferenceKind.Sdk);
+
+            Assert.Equal(UpgradeOutcome.Upgraded, result.Outcome);
+            Assert.Equal(expected, fileSystem.File.ReadAllText(appPath));
+        }
+
+        [Theory]
+        [InlineData("#:package Cake.Sdk@6.0.0\n")]
+        [InlineData("#:package Cake.Sdk@6.0.0\n#:sdk Other.Sdk@1.0.0\n")]
+        public void FileBasedAppSdk_IsNotFoundInAPackageDirectiveWithTheSameId(string content)
+        {
+            var appPath = XFS.Path(@"c:\repo\app.cs");
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData> { [appPath] = new(content) });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
+
+            var result = service.Upgrade(appPath, "Cake.Sdk", "net10.0", new NuGetVersion("7.0.0"), kind: ReferenceKind.Sdk);
+
+            Assert.Equal(UpgradeOutcome.Failed, result.Outcome);
+            Assert.Equal(
+                $"Failed to update file-based app '{appPath}' for 'Cake.Sdk'. Expected a literal #:sdk Cake.Sdk@<version> directive " +
+                "(id match is case-insensitive; trailing comments are preserved).",
+                result.FailureDetails);
+            Assert.Equal(content, fileSystem.File.ReadAllText(appPath));
+            dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
+        }
+
+        // `dotnet add package` fails with "Cannot edit items in imported files" for a literal version declared in an
+        // imported file, so the version is written there directly and the project restored.
+        [Fact]
+        public void ImportedPackageReference_UpdatesDirectoryBuildProps_WithoutCallingDotNetAdd()
+        {
+            var propsPath = XFS.Path(@"c:\repo\src\Directory.Build.props");
+            var projectPath = XFS.Path(@"c:\repo\src\MyProject\MyProject.csproj");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { propsPath, new MockFileData(DirectoryBuildPropsContent) },
+                { projectPath, new MockFileData("<Project Sdk=\"Microsoft.NET.Sdk\"></Project>") }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus(string.Empty, string.Empty, 0));
+            var service = new ReferenceUpgrader(dotNetRunner, mockFileSystem);
+
+            var result = service.Upgrade(projectPath, "Contoso.Widgets", "net8.0", new NuGetVersion("1.5.0"));
+
+            Assert.True(result.IsSuccess);
+            dotNetRunner.DidNotReceive().Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[0] == "add"));
+            dotNetRunner.Received(1).Run(XFS.Path(@"c:\repo\src\MyProject"), Arg.Is<string[]>(a => a.Length == 2 && a[0] == "restore" && a[1] == "MyProject.csproj"));
+            Assert.Equal(
+                DirectoryBuildPropsContent.Replace("Version=\"1.0.0\"", "Version=\"1.5.0\"", StringComparison.Ordinal),
+                mockFileSystem.File.ReadAllText(propsPath));
+        }
+
+        [Fact]
+        public void ImportedPackageReference_WithNoRestore_UpdatesDirectoryBuildPropsWithoutRunningDotNet()
+        {
+            var propsPath = XFS.Path(@"c:\repo\src\Directory.Build.props");
+            var projectPath = XFS.Path(@"c:\repo\src\MyProject\MyProject.csproj");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { propsPath, new MockFileData(DirectoryBuildPropsContent) },
+                { projectPath, new MockFileData("<Project Sdk=\"Microsoft.NET.Sdk\"></Project>") }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            var service = new ReferenceUpgrader(dotNetRunner, mockFileSystem);
+
+            var result = service.Upgrade(projectPath, "Contoso.Gadgets", "net8.0", new NuGetVersion("2.1.0"), noRestore: true);
+
+            Assert.True(result.IsSuccess);
+            dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
+            Assert.Equal(
+                DirectoryBuildPropsContent.Replace("Version=\"2.0.0\"", "Version=\"2.1.0\"", StringComparison.Ordinal),
+                mockFileSystem.File.ReadAllText(propsPath));
+        }
+
+        // A shared file can pin a package separately for each target framework; only the pin the upgraded target
+        // framework uses is written.
+        [Theory]
+        [InlineData("net6.0", "6.0.5", "8.0.0")]
+        [InlineData("net8.0", "6.0.0", "8.0.5")]
+        public void ImportedPackageReference_PinnedPerTargetFramework_UpdatesOnlyThatTargetFrameworksPin(
+            string targetFramework, string expectedNet6, string expectedNet8)
+        {
+            var propsPath = XFS.Path(@"c:\repo\Directory.Build.props");
+            var projectPath = XFS.Path(@"c:\repo\src\MyProject\MyProject.csproj");
+            const string propsContent = """
+                <Project>
+                  <ItemGroup Condition="'$(TargetFramework)' == 'net6.0'">
+                    <PackageReference Include="Foo" Version="6.0.0" />
+                  </ItemGroup>
+                  <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">
+                    <PackageReference Include="Foo" Version="8.0.0" />
+                  </ItemGroup>
+                </Project>
+                """;
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { propsPath, new MockFileData(propsContent) },
+                { projectPath, new MockFileData("<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFrameworks>net6.0;net8.0</TargetFrameworks></PropertyGroup></Project>") }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            var service = new ReferenceUpgrader(dotNetRunner, mockFileSystem);
+
+            var version = targetFramework == "net6.0" ? "6.0.5" : "8.0.5";
+            var result = service.Upgrade(projectPath, "Foo", targetFramework, new NuGetVersion(version), noRestore: true);
+
+            Assert.Equal(UpgradeOutcome.Upgraded, result.Outcome);
+            dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
+            Assert.Equal(
+                propsContent
+                    .Replace("Version=\"6.0.0\"", $"Version=\"{expectedNet6}\"", StringComparison.Ordinal)
+                    .Replace("Version=\"8.0.0\"", $"Version=\"{expectedNet8}\"", StringComparison.Ordinal),
+                mockFileSystem.File.ReadAllText(propsPath));
+        }
+
+        // Upgrading every target framework writes each one's own pin, and restores the project once per pin written.
+        [Fact]
+        public void ImportedPackageReference_PinnedPerTargetFramework_UpgradingEveryTargetFramework_UpdatesEachPin()
+        {
+            var propsPath = XFS.Path(@"c:\repo\Directory.Build.props");
+            var projectPath = XFS.Path(@"c:\repo\src\MyProject\MyProject.csproj");
+            const string propsContent = """
+                <Project>
+                  <ItemGroup Condition="'$(TargetFramework)' == 'net6.0'"><PackageReference Include="Foo" Version="1.0.0" /></ItemGroup>
+                  <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'"><PackageReference Include="Foo" Version="1.0.0" /></ItemGroup>
+                </Project>
+                """;
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { propsPath, new MockFileData(propsContent) },
+                { projectPath, new MockFileData("<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFrameworks>net6.0;net8.0</TargetFrameworks></PropertyGroup></Project>") }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            var service = new ReferenceUpgrader(dotNetRunner, mockFileSystem);
+
+            var results = service.Upgrade(new ReferenceUpgrade
+            {
+                Name = "Foo",
+                Version = new NuGetVersion("2.0.0"),
+                Projects = [new UpgradeProject(projectPath, "net6.0"), new UpgradeProject(projectPath, "net8.0")],
+                NoRestore = true,
+            });
+
+            Assert.Equal(UpgradeOutcome.Upgraded, Assert.Single(results).Outcome);
+            dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
+            Assert.Equal(propsContent.Replace("Version=\"1.0.0\"", "Version=\"2.0.0\"", StringComparison.Ordinal), mockFileSystem.File.ReadAllText(propsPath));
+        }
+
+        // dotnet add package targets the imported item, not a project's Update override of it, and fails.
+        [Fact]
+        public void ImportedPackageReference_WhenProjectOverridesVersion_UpdatesCsproj_NotImportedProps()
+        {
+            var propsPath = XFS.Path(@"c:\repo\src\Directory.Build.props");
+            var projectPath = XFS.Path(@"c:\repo\src\MyProject\MyProject.csproj");
+            const string projectContent = @"<Project Sdk=""Microsoft.NET.Sdk"">
+  <ItemGroup>
+    <PackageReference Update=""Contoso.Widgets"" Version=""1.2.0"" />
+  </ItemGroup>
+</Project>";
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { propsPath, new MockFileData(DirectoryBuildPropsContent) },
+                { projectPath, new MockFileData(projectContent) }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus(string.Empty, string.Empty, 0));
+            var service = new ReferenceUpgrader(dotNetRunner, mockFileSystem);
+
+            var result = service.Upgrade(projectPath, "Contoso.Widgets", "net8.0", new NuGetVersion("1.5.0"));
+
+            Assert.True(result.IsSuccess);
+            dotNetRunner.DidNotReceive().Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[0] == "add"));
+            Assert.Equal(
+                projectContent.Replace("Version=\"1.2.0\"", "Version=\"1.5.0\"", StringComparison.Ordinal),
+                mockFileSystem.File.ReadAllText(projectPath));
+            Assert.Equal(DirectoryBuildPropsContent, mockFileSystem.File.ReadAllText(propsPath));
+        }
+
+        [Fact]
+        public void PackageWithDirectIncludeInProject_CallsDotNetAddPackage_LeavesImportedPropsUntouched()
+        {
+            var propsPath = XFS.Path(@"c:\repo\src\Directory.Build.props");
+            var projectPath = XFS.Path(@"c:\repo\src\MyProject\MyProject.csproj");
+            const string projectContent = @"<Project Sdk=""Microsoft.NET.Sdk"">
+  <ItemGroup>
+    <PackageReference Include=""Contoso.Widgets"" Version=""1.0.0"" />
+  </ItemGroup>
+</Project>";
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { propsPath, new MockFileData(DirectoryBuildPropsContent) },
+                { projectPath, new MockFileData(projectContent) }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus(string.Empty, string.Empty, 0));
+            var service = new ReferenceUpgrader(dotNetRunner, mockFileSystem);
+
+            service.Upgrade(projectPath, "Contoso.Widgets", "net8.0", new NuGetVersion("1.5.0"));
+
+            dotNetRunner.Received(1).Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[0] == "add"));
+            Assert.Equal(DirectoryBuildPropsContent, mockFileSystem.File.ReadAllText(propsPath));
+        }
+
+        [Fact]
+        public void PackageNotDeclaredInAnyEditableFile_FallsThroughToDotNetAddPackage()
+        {
+            var propsPath = XFS.Path(@"c:\repo\src\Directory.Build.props");
+            var projectPath = XFS.Path(@"c:\repo\src\MyProject\MyProject.csproj");
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { propsPath, new MockFileData(DirectoryBuildPropsContent) },
+                { projectPath, new MockFileData("<Project Sdk=\"Microsoft.NET.Sdk\"></Project>") }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus(string.Empty, string.Empty, 0));
+            var service = new ReferenceUpgrader(dotNetRunner, mockFileSystem);
+
+            service.Upgrade(projectPath, "Contoso.Unlisted", "net8.0", new NuGetVersion("1.5.0"));
+
+            dotNetRunner.Received(1).Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[0] == "add"));
+            Assert.Equal(DirectoryBuildPropsContent, mockFileSystem.File.ReadAllText(propsPath));
+        }
+
+        // A version written as a <Version> child element is valid MSBuild, and is updated in place.
+        [Fact]
+        public void ImportedPackageReference_WithVersionChildElement_UpdatesDirectoryBuildProps()
+        {
+            var propsPath = XFS.Path(@"c:\repo\src\Directory.Build.props");
+            var projectPath = XFS.Path(@"c:\repo\src\MyProject\MyProject.csproj");
+            const string propsContent = @"<Project>
+  <ItemGroup>
+    <PackageReference Include=""Contoso.Widgets"">
+      <Version>1.0.0</Version>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+</Project>";
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { propsPath, new MockFileData(propsContent) },
+                { projectPath, new MockFileData("<Project Sdk=\"Microsoft.NET.Sdk\"></Project>") }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            var service = new ReferenceUpgrader(dotNetRunner, mockFileSystem);
+
+            var result = service.Upgrade(projectPath, "Contoso.Widgets", "net8.0", new NuGetVersion("1.5.0"), noRestore: true);
+
+            Assert.True(result.IsSuccess, result.FailureDetails);
+            dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
+            Assert.Equal(
+                propsContent.Replace("<Version>1.0.0</Version>", "<Version>1.5.0</Version>", StringComparison.Ordinal),
+                mockFileSystem.File.ReadAllText(propsPath));
+        }
+
+        // A version written as a <Version> child element is valid MSBuild and must be updated too.
+        [Fact]
+        public void CpmProjectWithNoRestore_UpdatesPackageVersionWithVersionChildElement()
+        {
+            var propsPath = XFS.Path(@"c:\repo\Directory.Packages.props");
+            var projectPath = XFS.Path(@"c:\repo\MyProject.csproj");
+            const string propsContent = @"<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageVersion Include=""Newtonsoft.Json"">
+      <Version>12.0.3</Version>
+    </PackageVersion>
+  </ItemGroup>
+</Project>";
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { propsPath, new MockFileData(propsContent) },
+                { projectPath, new MockFileData(@"<Project Sdk=""Microsoft.NET.Sdk""><ItemGroup><PackageReference Include=""Newtonsoft.Json"" /></ItemGroup></Project>") }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            var service = new ReferenceUpgrader(dotNetRunner, mockFileSystem);
+
+            var result = service.Upgrade(projectPath, "Newtonsoft.Json", "net8.0", new NuGetVersion("13.0.1"), noRestore: true);
+
+            Assert.True(result.IsSuccess, result.FailureDetails);
+            dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
+            Assert.Equal(
+                propsContent.Replace("<Version>12.0.3</Version>", "<Version>13.0.1</Version>", StringComparison.Ordinal),
+                mockFileSystem.File.ReadAllText(propsPath));
         }
     }
 }

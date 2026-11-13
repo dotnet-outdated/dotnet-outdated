@@ -1,33 +1,60 @@
 using System;
 using System.IO.Abstractions;
 using System.Linq;
+using NuGet.Versioning;
 
 namespace DotNetOutdated.Core.Services;
 
 /// <summary>
 /// Where a reference's version is written, which decides how it can be upgraded.
 /// </summary>
-internal abstract record VersionLocation;
+internal abstract record VersionLocation
+{
+    /// <summary>The range the reference declares at this location, when it can hold one and it could be evaluated.</summary>
+    public virtual VersionRange? DeclaredRange => null;
+}
 
 /// <summary>
 /// A literal version in the project file or a central <c>Directory.Packages.props</c>, which <c>dotnet add package</c>
-/// can rewrite. <see cref="Warning"/> is set when a version expression is replaced by the literal.
+/// can rewrite, or no version at all (a transitive package), which it adds. <see cref="Declaration"/> is the item that
+/// holds the version, if any; <see cref="Warning"/> is set when a version expression is replaced by the literal.
+/// <see cref="Declared"/> is the range of a version that isn't held by an item (a file-based app's directive).
 /// </summary>
-internal sealed record LiteralVersion(string? Warning = null) : VersionLocation;
+internal sealed record LiteralVersion(PackageVersionDeclaration? Declaration = null, string? Warning = null, VersionRange? Declared = null) : VersionLocation
+{
+    public override VersionRange? DeclaredRange => Declaration?.VersionRange ?? Declared;
+}
 
 /// <summary>An MSBuild property behind a <c>PackageReference</c>, <c>PackageVersion</c> or <c>GlobalPackageReference</c>.</summary>
 /// <param name="DotNetAddCanUpdate">
 /// Whether <c>dotnet add package</c> can rewrite the reference (it can't for a <c>GlobalPackageReference</c>, a
 /// <c>VersionOverride</c>, or a <c>PackageReference</c> in an imported file), so the property must be written directly.
 /// </param>
-internal sealed record MSBuildVariableVersion(PackageVariableInfo Variable, bool DotNetAddCanUpdate) : VersionLocation;
+internal sealed record MSBuildVariableVersion(PackageVariableInfo Variable, bool DotNetAddCanUpdate, VersionRange? Declared) : VersionLocation
+{
+    public override VersionRange? DeclaredRange => Declared;
+}
 
 /// <summary>
 /// A literal version on a <c>GlobalPackageReference</c> in <paramref name="FilePath"/>. <c>dotnet add package</c> can't
 /// update one (it adds a <c>PackageReference</c> instead, which central package management rejects), so the version
 /// must be written directly.
 /// </summary>
-internal sealed record GlobalPackageReferenceVersion(string FilePath) : VersionLocation;
+internal sealed record GlobalPackageReferenceVersion(string FilePath, VersionRange? Declared) : VersionLocation
+{
+    public override VersionRange? DeclaredRange => Declared;
+}
+
+/// <summary>
+/// A literal version on a <c>PackageReference</c> in <paramref name="FilePath"/> that <c>dotnet add package</c> can't
+/// edit ("Cannot edit items in imported files"): one in an imported file such as a shared Directory.Build.props, or an
+/// <c>Update</c> item. The version must be written directly, and only on that item (<paramref name="ElementIndex"/>):
+/// the file can pin the package again under other conditions, such as another target framework.
+/// </summary>
+internal sealed record PackageReferenceVersionInFile(string FilePath, int ElementIndex, VersionRange? Declared) : VersionLocation
+{
+    public override VersionRange? DeclaredRange => Declared;
+}
 
 /// <summary>A versioned MSBuild project SDK declared in the project file.</summary>
 internal sealed record ProjectSdkVersion(ProjectSdkReference Sdk) : VersionLocation;
@@ -52,20 +79,29 @@ internal sealed class VersionLocator(IFileSystem fileSystem, IProjectEvaluator e
     private readonly IProjectEvaluator _evaluator = evaluator;
     private readonly FileBasedAppDirectives _fileBasedAppDirectives = fileBasedAppDirectives;
 
-    /// <param name="kind">
-    /// Whether <paramref name="name"/> is a package or an SDK; when <see langword="null"/>, a name the project
-    /// declares as an SDK is treated as one.
+    /// <summary>
+    /// <paramref name="kind"/> when it is set; otherwise <see cref="ReferenceKind.Sdk"/> for a name the project declares
+    /// as a versioned SDK, and <see cref="ReferenceKind.Package"/> for any other name.
+    /// </summary>
+    public ReferenceKind ResolveKind(string projectPath, string name, ReferenceKind? kind) =>
+        kind ?? (projectPath.IsCSharpFile()
+            ? FileBasedAppReferenceKind(projectPath, name)
+            : ProjectReferenceKind(projectPath, name));
+
+    /// <param name="targetFramework">
+    /// The target framework the reference is upgraded for: a package declared separately for several target frameworks
+    /// is located where this one declares it.
     /// </param>
-    public VersionLocation Locate(string projectPath, string name, ReferenceKind? kind)
+    public VersionLocation Locate(string projectPath, string name, ReferenceKind kind, string? targetFramework = null)
     {
         if (projectPath.IsCSharpFile())
         {
-            return LocateInFileBasedApp(projectPath, name, kind ?? FileBasedAppReferenceKind(projectPath, name));
+            return LocateInFileBasedApp(projectPath, name, kind);
         }
 
-        return (kind ?? ProjectReferenceKind(projectPath, name)) == ReferenceKind.Sdk
+        return kind == ReferenceKind.Sdk
             ? LocateProjectSdk(projectPath, name)
-            : LocatePackage(projectPath, name);
+            : LocatePackage(projectPath, name, targetFramework);
     }
 
     private ReferenceKind ProjectReferenceKind(string projectPath, string name) =>
@@ -103,7 +139,7 @@ internal sealed class VersionLocator(IFileSystem fileSystem, IProjectEvaluator e
             }
 
             // `dotnet add package` rewrites a literal #:package directive.
-            return new LiteralVersion();
+            return new LiteralVersion(Declared: _fileBasedAppDirectives.DeclaredPackageRange(projectPath, name));
         }
 
         var reference = _fileBasedAppDirectives.References(projectPath)
@@ -143,24 +179,37 @@ internal sealed class VersionLocator(IFileSystem fileSystem, IProjectEvaluator e
                 $"Failed to update the version of SDK '{name}' in '{projectPath}': the project file declares no versioned SDK with that name.");
     }
 
-    private VersionLocation LocatePackage(string projectPath, string name)
+    private VersionLocation LocatePackage(string projectPath, string name, string? targetFramework)
     {
-        if (!_evaluator.GetVersionVariables(projectPath).TryGetValue(name, out var variableInfo))
+        if (!_evaluator.GetPackageVersions(projectPath, targetFramework).TryGetValue(name, out var declaration))
         {
-            return _evaluator.GetGlobalPackageReferenceFile(projectPath, name) is { } globalReferenceFile
-                ? new GlobalPackageReferenceVersion(globalReferenceFile)
-                : new LiteralVersion();
+            return new LiteralVersion();
+        }
+
+        if (declaration.Variable is not { } variableInfo)
+        {
+            if (declaration.ElementType == PackageVersionDeclaration.GlobalPackageReference)
+            {
+                return new GlobalPackageReferenceVersion(declaration.FilePath, declaration.VersionRange);
+            }
+
+            // `dotnet add package` can't edit a PackageReference in an imported file or an Update item.
+            return declaration.ElementType == PackageVersionDeclaration.PackageReference &&
+                   !declaration.IsVersionOverride &&
+                   (declaration.IsUpdate || !string.Equals(declaration.FilePath, projectPath, StringComparison.OrdinalIgnoreCase))
+                ? new PackageReferenceVersionInFile(declaration.FilePath, declaration.ElementIndex, declaration.VersionRange)
+                : new LiteralVersion(declaration);
         }
 
         bool dotNetAddCanUpdate =
-            variableInfo.ElementType != "GlobalPackageReference" &&
+            variableInfo.ElementType != PackageVersionDeclaration.GlobalPackageReference &&
             !variableInfo.IsVersionOverride &&
-            !(variableInfo.ElementType == "PackageReference" &&
+            !(variableInfo.ElementType == PackageVersionDeclaration.PackageReference &&
               !string.Equals(variableInfo.PackageReferenceFilePath, projectPath, StringComparison.OrdinalIgnoreCase));
 
         if (variableInfo.UnsupportedReason == null)
         {
-            return new MSBuildVariableVersion(variableInfo, dotNetAddCanUpdate);
+            return new MSBuildVariableVersion(variableInfo, dotNetAddCanUpdate, declaration.VersionRange);
         }
 
         if (!dotNetAddCanUpdate)
@@ -172,6 +221,7 @@ internal sealed class VersionLocator(IFileSystem fileSystem, IProjectEvaluator e
 
         // Treat it like a literal version: the expression is replaced with the new version.
         return new LiteralVersion(
+            declaration,
             $"'{name}' in '{variableInfo.PackageReferenceFilePath}' will be set to a literal version because " +
             $"{variableInfo.UnsupportedReason}; its version expression '{variableInfo.PackageReferenceVersion}' is not preserved.");
     }

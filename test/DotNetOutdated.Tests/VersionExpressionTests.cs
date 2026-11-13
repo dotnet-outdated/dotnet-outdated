@@ -1,3 +1,5 @@
+#nullable enable annotations
+
 using DotNetOutdated.Core.Services;
 using NuGet.Versioning;
 using Xunit;

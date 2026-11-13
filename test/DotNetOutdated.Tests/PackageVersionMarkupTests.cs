@@ -46,6 +46,53 @@ namespace DotNetOutdated.Tests
             Assert.False(matched);
         }
 
+        // MSBuild accepts item metadata as child elements as well as attributes, so a version can be written as
+        // <Version>; only its text is replaced, keeping the surrounding whitespace.
+        [Theory]
+        [InlineData(
+            "<PackageReference Include=\"A\"><Version>1.0.0</Version></PackageReference>",
+            "<PackageReference Include=\"A\"><Version>2.0.0</Version></PackageReference>")]
+        [InlineData(
+            "<PackageReference Include=\"A\">\n  <PrivateAssets>all</PrivateAssets>\n  <Version>\n    1.0.0\n  </Version>\n</PackageReference>",
+            "<PackageReference Include=\"A\">\n  <PrivateAssets>all</PrivateAssets>\n  <Version>\n    2.0.0\n  </Version>\n</PackageReference>")]
+        public void ReplaceVersion_VersionChildElement_RewritesItsText(string content, string expected)
+        {
+            Assert.Equal(expected, PackageVersionMarkup.ReplaceVersion(content, PackageReference, "A", "2.0.0", out var matched));
+            Assert.True(matched);
+        }
+
+        // The package id is compared after XML entity references are decoded, as MSBuild does.
+        [Fact]
+        public void ReplaceVersion_EntityInPackageId_MatchesTheDecodedId()
+        {
+            const string content = "<PackageReference Include=\"A&#46;B\" Version=\"1.0.0\" />";
+
+            Assert.Equal(
+                "<PackageReference Include=\"A&#46;B\" Version=\"2.0.0\" />",
+                PackageVersionMarkup.ReplaceVersion(content, PackageReference, "A.B", "2.0.0", out var matched));
+            Assert.True(matched);
+        }
+
+        // The new value is escaped, so characters special to XML can't break the file.
+        [Fact]
+        public void ReplaceVersion_EscapesTheNewValue()
+        {
+            Assert.Equal(
+                "<PackageReference Include=\"A\" Version=\"&amp;&lt;&gt;&quot;&apos;\" />",
+                PackageVersionMarkup.ReplaceVersion("<PackageReference Include=\"A\" Version=\"1.0.0\" />", PackageReference, "A", "&<>\"'"));
+        }
+
+        // Markup that only looks like an element (inside a comment, CDATA or a property value) is never edited.
+        [Theory]
+        [InlineData("<!-- <PackageReference Include=\"A\" Version=\"1.0.0\" /> -->")]
+        [InlineData("<P><![CDATA[<PackageReference Include=\"A\" Version=\"1.0.0\" />]]></P>")]
+        [InlineData("<P>&lt;PackageReference Include=\"A\" Version=\"1.0.0\" /&gt;</P>")]
+        public void ReplaceVersion_MarkupThatIsNotAnElement_IsLeftAlone(string content)
+        {
+            Assert.Equal(content, PackageVersionMarkup.ReplaceVersion(content, PackageReference, "A", "2.0.0", out var matched));
+            Assert.False(matched);
+        }
+
         // ── ReplacePackageVersion ─────────────────────────────────────────────────
 
         [Theory]
@@ -130,6 +177,15 @@ namespace DotNetOutdated.Tests
                 PackageVersionMarkup.ReplacePackageVersion(content, PackageVersionMarkup.CentralPackageElements, "A", "$(V)"));
         }
 
+        // The package id is compared after XML entity references are decoded, as MSBuild does.
+        [Fact]
+        public void ReplacePackageVersion_EntityInPackageId_MatchesTheDecodedId()
+        {
+            Assert.Equal(
+                "<PackageReference Include=\"A&#46;B\" Version=\"$(V)\" />",
+                PackageVersionMarkup.ReplacePackageVersion("<PackageReference Include=\"A&#46;B\" Version=\"1.0.0\" />", PackageReference, "A.B", "$(V)"));
+        }
+
         // ── ReplacePropertyValueAt ────────────────────────────────────────────────
 
         [Theory]
@@ -149,6 +205,15 @@ namespace DotNetOutdated.Tests
         public void ReplacePropertyValueAt_ReplacesTheIndexedDefinition(string content, int index, string expected)
         {
             Assert.Equal(expected, PackageVersionMarkup.ReplacePropertyValueAt(content, "V", index, "2.0.0"));
+        }
+
+        // A closing tag inside a comment doesn't end the group.
+        [Fact]
+        public void ReplacePropertyValueAt_ClosingTagInAComment_FindsTheDefinition()
+        {
+            Assert.Equal(
+                "<PropertyGroup><!-- </PropertyGroup> --><V>2.0.0</V></PropertyGroup>",
+                PackageVersionMarkup.ReplacePropertyValueAt("<PropertyGroup><!-- </PropertyGroup> --><V>1.0.0</V></PropertyGroup>", "V", 0, "2.0.0"));
         }
 
         // ── InsertProperty ────────────────────────────────────────────────────────
@@ -227,6 +292,15 @@ namespace DotNetOutdated.Tests
                 PackageVersionMarkup.InsertProperty("<Project><PropertyGroup><A>1</A></PropertyGroup></Project>", 1, "V", "2.0.0"));
         }
 
+        // A closing tag inside a comment doesn't end the group.
+        [Fact]
+        public void InsertProperty_ClosingTagInAComment_InsertsAtTheEndOfTheGroup()
+        {
+            Assert.Equal(
+                "<Project><PropertyGroup><!-- </PropertyGroup> --><A>1</A><V>2.0.0</V></PropertyGroup></Project>",
+                PackageVersionMarkup.InsertProperty("<Project><PropertyGroup><!-- </PropertyGroup> --><A>1</A></PropertyGroup></Project>", 0, "V", "2.0.0"));
+        }
+
         // ── InsertPropertyBefore ──────────────────────────────────────────────────
 
         [Theory]
@@ -265,6 +339,15 @@ namespace DotNetOutdated.Tests
         public void InsertPropertyBefore_InsertsBeforeTheAnchor(string content, int anchorIndex, string expected)
         {
             Assert.Equal(expected, PackageVersionMarkup.InsertPropertyBefore(content, "A", anchorIndex, "V", "2.0.0"));
+        }
+
+        // A closing tag inside a comment doesn't end the group.
+        [Fact]
+        public void InsertPropertyBefore_ClosingTagInAComment_FindsTheAnchor()
+        {
+            Assert.Equal(
+                "<PropertyGroup><!-- </PropertyGroup> --><V>2.0.0</V><A>$(V)</A></PropertyGroup>",
+                PackageVersionMarkup.InsertPropertyBefore("<PropertyGroup><!-- </PropertyGroup> --><A>$(V)</A></PropertyGroup>", "A", 0, "V", "2.0.0"));
         }
     }
 }

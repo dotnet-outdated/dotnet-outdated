@@ -1,3 +1,4 @@
+using System.Linq;
 using DotNetOutdated.Core.Services;
 using NuGet.Versioning;
 
@@ -5,25 +6,24 @@ namespace DotNetOutdated.Tests
 {
     internal static class UpgradeTestExtensions
     {
-        // Positional shorthand for the many upgrade tests that differ only in these values.
-        public static RunStatus Upgrade(
-            this IDotNetPackageService service,
+        // Positional shorthand for the many upgrade tests of a single project.
+        public static ProjectUpgradeResult Upgrade(
+            this IReferenceUpgrader upgrader,
             string projectPath,
             string name,
             string targetFramework,
-            VersionRange version,
+            NuGetVersion version,
             bool noRestore = false,
             bool ignoreFailedSources = false,
             ReferenceKind? kind = ReferenceKind.Package) =>
-            service.Upgrade(new ReferenceUpgrade
+            upgrader.Upgrade(new ReferenceUpgrade
             {
-                ProjectPath = projectPath,
                 Name = name,
                 Kind = kind,
-                TargetFramework = targetFramework,
                 Version = version,
+                Projects = [new UpgradeProject(projectPath, targetFramework)],
                 NoRestore = noRestore,
                 IgnoreFailedSources = ignoreFailedSources,
-            });
+            }).Single();
     }
 }
