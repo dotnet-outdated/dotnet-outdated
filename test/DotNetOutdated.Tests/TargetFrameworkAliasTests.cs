@@ -3,6 +3,7 @@ using System.Threading;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Abstractions;
+using System.Linq;
 using System.Threading.Tasks;
 using DotNetOutdated.Core;
 using DotNetOutdated.Core.Services;
@@ -85,12 +86,14 @@ public class TargetFrameworkAliasTests
                     query.PackageId == packageName && query.CurrentVersion == installedVersion &&
                     query.TargetFramework == framework && query.ProjectFilePath == projectPath),
                 Arg.Any<CancellationToken>()).Returns(latestVersion);
-            var packageService = Substitute.For<IDotNetPackageService>();
-            packageService.Upgrade(Arg.Any<ReferenceUpgrade>())
-                .Returns(new RunStatus(string.Empty, string.Empty, exitCode: 0));
+            var upgrader = Substitute.For<IReferenceUpgrader>();
+            upgrader.Upgrade(Arg.Any<ReferenceUpgrade>())
+                .Returns(call => call.Arg<ReferenceUpgrade>().Projects
+                    .Select(project => new ProjectUpgradeResult { ProjectPath = project.Path, Outcome = UpgradeOutcome.Upgraded })
+                    .ToList());
             var program = new Program(
                 fileSystem, Substitute.For<IReporter>(), new OutdatedDependencyService(resolutionService), analysisService,
-                discoveryService, packageService, new DotNetRunnerOptions())
+                discoveryService, upgrader, new DotNetRunnerOptions())
             {
                 Path = projectPath,
                 Upgrade = (true, UpgradeType.Auto),
@@ -100,9 +103,9 @@ public class TargetFrameworkAliasTests
             int exitCode = await program.OnExecute(console);
 
             Assert.Equal(0, exitCode);
-            packageService.Received(1).Upgrade(Arg.Is<ReferenceUpgrade>(upgrade =>
-                upgrade.ProjectPath == projectPath && upgrade.Name == packageName && upgrade.TargetFramework == expectedAlias &&
-                upgrade.Version.MinVersion == latestVersion && !upgrade.NoRestore && !upgrade.IgnoreFailedSources));
+            upgrader.Received(1).Upgrade(Arg.Is<ReferenceUpgrade>(upgrade =>
+                upgrade.Projects.Single() == new UpgradeProject(projectPath, expectedAlias) && upgrade.Name == packageName &&
+                upgrade.Version == latestVersion && !upgrade.NoRestore && !upgrade.IgnoreFailedSources));
         }
         finally
         {

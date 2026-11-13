@@ -15,7 +15,7 @@ namespace DotNetOutdated.Tests
 {
     public class VersionVariableTests
     {
-        // The version-variable modules composed as DotNetPackageService composes them: discovery through the project
+        // The version-variable modules composed as ReferenceUpgrader composes them: discovery through the project
         // evaluator or the file-based app directives, writes through the variable writer or the directives.
         private sealed class VersionVariables(IFileSystem fileSystem, Action<string> onWarning = null)
         {
@@ -28,7 +28,9 @@ namespace DotNetOutdated.Tests
             {
                 if (!projectFilePath.IsCSharpFile())
                 {
-                    return new Dictionary<string, PackageVariableInfo>(_evaluator.GetVersionVariables(projectFilePath), StringComparer.OrdinalIgnoreCase);
+                    return _evaluator.GetPackageVersions(projectFilePath)
+                        .Where(pair => pair.Value.Variable != null)
+                        .ToDictionary(pair => pair.Key, pair => pair.Value.Variable, StringComparer.OrdinalIgnoreCase);
                 }
 
                 var variables = Directives.PackageVariables(projectFilePath, ReferenceKind.Package);
