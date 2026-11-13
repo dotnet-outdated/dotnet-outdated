@@ -28,7 +28,4 @@ public interface IOutdatedDependencyService
         OutdatedOptions? options = null,
         IProgress<OutdatedReportStage>? progress = null,
         CancellationToken cancellationToken = default);
-
-    // Kept only until the front ends call the path entry point; removed before release.
-    Task<System.Collections.Generic.IReadOnlyList<OutdatedProject>> FindOutdatedAsync(System.Collections.Generic.IEnumerable<Project> projects, OutdatedOptions? options = null, CancellationToken cancellationToken = default);
 }

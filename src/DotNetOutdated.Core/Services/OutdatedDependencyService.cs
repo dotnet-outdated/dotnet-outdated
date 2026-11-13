@@ -65,15 +65,6 @@ internal sealed class OutdatedDependencyService(
         return new OutdatedReport { Projects = await FindOutdatedAsync(projects, options, cancellationToken).ConfigureAwait(false) };
     }
 
-    public async Task<IReadOnlyList<OutdatedProject>> FindOutdatedAsync(
-        IEnumerable<Project> projects,
-        OutdatedOptions? options = null,
-        CancellationToken cancellationToken = default) =>
-        (await FindOutdatedAsync(projects.ToList(), options ?? OutdatedOptions.Default, cancellationToken).ConfigureAwait(false))
-            .Select(project => project with { TargetFrameworks = [.. project.TargetFrameworks.Where(f => f.Dependencies.Count != 0)] })
-            .Where(project => project.TargetFrameworks.Count != 0)
-            .ToList();
-
     private async Task<IReadOnlyList<OutdatedProject>> FindOutdatedAsync(
         IReadOnlyList<Project> projects,
         OutdatedOptions options,

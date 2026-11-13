@@ -803,7 +803,6 @@ public static class EndToEndTests
         var server = new McpServer(
             services,
             services.GetRequiredService<IProjectDiscoveryService>(),
-            services.GetRequiredService<IProjectAnalysisService>(),
             services.GetRequiredService<IReferenceUpgrader>(),
             services.GetRequiredService<IOutdatedDependencyService>(),
             input,
