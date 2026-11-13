@@ -384,5 +384,47 @@ namespace DotNetOutdated.Tests
             Assert.False(updated);
             Assert.Equal("13.0.2", ProjectSdkReferenceHelper.Discover(fileSystem, ProjectPath).Single().ResolvedVersion.ToString());
         }
+
+        // Discovery reads the file as XML and decodes entity references, but the update compares the raw text, so an
+        // SDK it reports can't be upgraded.
+        [Theory]
+        [InlineData(@"<Project Sdk=""X&#46;Sdk/1.0.0""></Project>")]
+        [InlineData(@"<Project Sdk=""X.Sdk/1&#46;0&#46;0""></Project>")]
+        [InlineData(@"<Project><Sdk Name=""X&#46;Sdk"" Version=""1.0.0"" /></Project>")]
+        [InlineData(@"<Project><Sdk Name=""X.Sdk"" Version=""1&#46;0&#46;0"" /></Project>")]
+        [InlineData(@"<Project><Import Project=""Sdk.props"" Sdk=""X&#46;Sdk"" Version=""1.0.0"" /></Project>")]
+        public void Discover_And_TryUpdate_EntityReference_IsDiscoveredButNotUpdated(string content)
+        {
+            var fileSystem = CreateFileSystem(content);
+
+            var reference = Assert.Single(ProjectSdkReferenceHelper.Discover(fileSystem, ProjectPath));
+            Assert.Equal("X.Sdk", reference.Name);
+            Assert.Equal(new NuGetVersion("1.0.0"), reference.ResolvedVersion);
+
+            Assert.False(ProjectSdkReferenceHelper.TryUpdate(fileSystem, ProjectPath, "X.Sdk", new NuGetVersion("2.0.0")));
+            Assert.Equal(content, fileSystem.File.ReadAllText(ProjectPath));
+        }
+
+        // Only an <Sdk> element directly under <Project> declares an SDK. Discovery ignores an Sdk item in an
+        // ItemGroup, but the update rewrites its Version anyway.
+        [Fact]
+        public void Discover_And_TryUpdate_SdkItemInItemGroup_IsNotDiscoveredButIsUpdated()
+        {
+            const string content = @"<Project Sdk=""X.Sdk/1.0.0"">
+  <ItemGroup>
+    <Sdk Include=""a"" Name=""X.Sdk"" Version=""1.0.0"" />
+  </ItemGroup>
+</Project>";
+            var fileSystem = CreateFileSystem(content);
+
+            Assert.Single(ProjectSdkReferenceHelper.GetDeclarations(fileSystem, ProjectPath));
+
+            Assert.True(ProjectSdkReferenceHelper.TryUpdate(fileSystem, ProjectPath, "X.Sdk", new NuGetVersion("2.0.0")));
+            Assert.Equal(@"<Project Sdk=""X.Sdk/2.0.0"">
+  <ItemGroup>
+    <Sdk Include=""a"" Name=""X.Sdk"" Version=""2.0.0"" />
+  </ItemGroup>
+</Project>", fileSystem.File.ReadAllText(ProjectPath));
+        }
     }
 }
