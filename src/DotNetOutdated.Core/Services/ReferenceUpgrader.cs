@@ -90,7 +90,9 @@ namespace DotNetOutdated.Core.Services
         private sealed record WriteFailed(string Message) : Write;
 
         // The location was written directly with Value; Changed is false when it already held that value.
-        private sealed record Written(bool Changed, string Location, string Value) : Write;
+        // PerTargetFramework is set when another target framework may declare the reference somewhere else (a pin
+        // under its own condition), so each target framework's location is written.
+        private sealed record Written(bool Changed, string Location, string Value, bool PerTargetFramework = false) : Write;
 
         // `dotnet add package` changed the version, and restored the project unless --no-restore was set.
         private sealed record AddedWithDotNet(RunStatus Status) : Write;
@@ -117,23 +119,24 @@ namespace DotNetOutdated.Core.Services
                 }
             }
 
-            // `dotnet add package -f` changes one target framework's reference, so it runs for each target framework
-            // the project is listed with (a file-based app takes no -f). Any other location is written once.
-            var write = WriteLocation(context, locator, kind, removedRange, targetFrameworks.FirstOrDefault());
+            // `dotnet add package -f` changes one target framework's reference, and a pin in an imported file is
+            // written on the item that target framework uses, so both run for each target framework the project is
+            // listed with (a file-based app takes no -f). Any other location is written once.
+            var writes = new List<Write> { WriteLocation(context, locator, kind, removedRange, targetFrameworks.FirstOrDefault()) };
             if (!projectPath.IsCSharpFile())
             {
                 foreach (var targetFramework in targetFrameworks.Skip(1))
                 {
-                    if (write is not AddedWithDotNet { Status.IsSuccess: true })
+                    if (writes[^1] is not (AddedWithDotNet { Status.IsSuccess: true } or Written { PerTargetFramework: true }))
                     {
                         break;
                     }
 
-                    write = WriteLocation(context, locator, kind, removedRange, targetFramework);
+                    writes.Add(WriteLocation(context, locator, kind, removedRange, targetFramework));
                 }
             }
 
-            return Finish(context, write);
+            return Finish(context, writes);
         }
 
         // Finds the version location as it is now (an earlier target framework's `dotnet add package` may have changed
@@ -151,54 +154,77 @@ namespace DotNetOutdated.Core.Services
                 ProjectSdkVersion l => UpdateProjectSdk(context, l.Sdk),
                 MSBuildVariableVersion l when upgrade.NoRestore || !l.DotNetAddCanUpdate => UpdateVariable(context, l.Variable, range),
                 MSBuildVariableVersion l => AddWithDotNet(context, range, l.Variable, targetFramework),
-                GlobalPackageReferenceVersion l => UpdateGlobalPackageReference(context, l.FilePath, range),
+                GlobalPackageReferenceVersion l => UpdateLiteralVersionInFile(context, l.FilePath, "GlobalPackageReference", range),
+                PackageReferenceVersionInFile l => UpdateLiteralVersionInFile(context, l.FilePath, "PackageReference", range, l.ElementIndex),
                 LiteralVersion l => UpdateLiteral(context, l, range, targetFramework),
                 _ => throw new InvalidOperationException($"Unexpected version location {location}."),
             };
         }
 
-        private ProjectUpgradeResult Finish(Context context, Write write)
+        // The writes for each target framework of a project, in order: only the last can have failed.
+        private ProjectUpgradeResult Finish(Context context, IReadOnlyList<Write> writes)
         {
-            switch (write)
+            switch (writes[^1])
             {
                 case WriteFailed failed:
                     return Result(context, UpgradeOutcome.Failed, failed.Message);
 
-                case AddedWithDotNet added:
-                    return added.Status.IsSuccess
-                        ? Result(context, UpgradeOutcome.Upgraded)
-                        : Result(context, UpgradeOutcome.Failed, added.Status.FailureDetails);
+                case AddedWithDotNet { Status.IsSuccess: false } added:
+                    return Result(context, UpgradeOutcome.Failed, added.Status.FailureDetails);
+            }
 
-                case Written written:
-                    if (written.Changed)
-                    {
+            // The locations this upgrade changed, or an earlier one changed to the same value.
+            var upgraded = new List<WrittenLocation>();
+            foreach (var write in writes)
+            {
+                switch (write)
+                {
+                    case AddedWithDotNet:
+                        break;
+
+                    case Written { Changed: true } written:
                         // No project has been restored since this write, whatever was restored at the value before.
                         _writtenLocations[written.Location] = new WrittenLocation(written.Value);
-                    }
-                    else if (!WroteValue(written.Location, written.Value))
-                    {
-                        return Result(context, UpgradeOutcome.AlreadyCurrent);
-                    }
+                        upgraded.Add(_writtenLocations[written.Location]);
+                        break;
 
-                    var restoredProjects = _writtenLocations[written.Location].RestoredProjects;
-                    var projectFullPath = _fileSystem.Path.GetFullPath(context.ProjectPath);
-                    if (context.Upgrade.NoRestore || restoredProjects.Contains(projectFullPath))
-                    {
-                        return Result(context, UpgradeOutcome.Upgraded);
-                    }
+                    case Written written when WroteValue(written.Location, written.Value):
+                        upgraded.Add(_writtenLocations[written.Location]);
+                        break;
 
-                    var restore = Restore(context);
-                    if (!restore.IsSuccess)
-                    {
-                        return Result(context, UpgradeOutcome.Failed, restore.FailureDetails);
-                    }
+                    case Written:
+                        break;
 
-                    restoredProjects.Add(projectFullPath);
-                    return Result(context, UpgradeOutcome.Upgraded);
-
-                default:
-                    throw new InvalidOperationException($"Unexpected write {write}.");
+                    default:
+                        throw new InvalidOperationException($"Unexpected write {write}.");
+                }
             }
+
+            if (upgraded.Count == 0)
+            {
+                return writes.Any(write => write is AddedWithDotNet)
+                    ? Result(context, UpgradeOutcome.Upgraded)
+                    : Result(context, UpgradeOutcome.AlreadyCurrent);
+            }
+
+            var projectFullPath = _fileSystem.Path.GetFullPath(context.ProjectPath);
+            if (context.Upgrade.NoRestore || upgraded.All(location => location.RestoredProjects.Contains(projectFullPath)))
+            {
+                return Result(context, UpgradeOutcome.Upgraded);
+            }
+
+            var restore = Restore(context);
+            if (!restore.IsSuccess)
+            {
+                return Result(context, UpgradeOutcome.Failed, restore.FailureDetails);
+            }
+
+            foreach (var location in upgraded)
+            {
+                location.RestoredProjects.Add(projectFullPath);
+            }
+
+            return Result(context, UpgradeOutcome.Upgraded);
         }
 
         // Whether the value at the location is the one this upgrader last wrote there.
@@ -292,20 +318,25 @@ namespace DotNetOutdated.Core.Services
         private static string VariableLocation(PackageVariableInfo variableInfo) =>
             $"{variableInfo.FilePath}|$({variableInfo.VariableName})";
 
-        // Writes a GlobalPackageReference's literal version directly: `dotnet add package` would add a PackageReference
-        // instead, which central package management rejects.
-        private Write UpdateGlobalPackageReference(Context context, string filePath, VersionRange range)
+        // Writes a literal version directly in the file that declares it: for a GlobalPackageReference `dotnet add package`
+        // would add a PackageReference instead, which central package management rejects; for a PackageReference in an
+        // imported file (such as a shared Directory.Build.props) or an Update item it fails with "Cannot edit items in
+        // imported files". With an element index only that element is written, so the file's other pins of the package
+        // (under another target framework's condition, say) are kept.
+        private Write UpdateLiteralVersionInFile(Context context, string filePath, string elementName, VersionRange range, int elementIndex = -1)
         {
             var versionText = range.ToVersionString();
             var file = EncodedText.Read(_fileSystem, filePath);
-            var newContent = PackageVersionMarkup.ReplaceVersion(
-                file.Content, ["GlobalPackageReference"], context.Name, versionText, out var matched);
+            bool matched;
+            var newContent = elementIndex >= 0
+                ? PackageVersionMarkup.ReplaceVersionAt(file.Content, elementName, context.Name, elementIndex, versionText, out matched)
+                : PackageVersionMarkup.ReplaceVersion(file.Content, [elementName], context.Name, versionText, out matched);
 
             if (!matched)
             {
                 return new WriteFailed(
-                    $"Could not update '{context.Name}' in '{filePath}': no <GlobalPackageReference> element was found " +
-                    "with an Include or Update attribute and a literal Version attribute. Update the version manually.");
+                    $"Could not update '{context.Name}' in '{filePath}': no <{elementName}> element was found " +
+                    "with an Include or Update attribute and a literal version (a Version attribute or <Version> child element). Update the version manually.");
             }
 
             var updated = newContent != file.Content;
@@ -315,7 +346,9 @@ namespace DotNetOutdated.Core.Services
                 file.Write(_fileSystem, filePath, newContent);
             }
 
-            return new Written(updated, $"{filePath}|{context.Name}", versionText);
+            return elementIndex >= 0
+                ? new Written(updated, $"{filePath}|{context.Name}|{elementIndex}", versionText, PerTargetFramework: true)
+                : new Written(updated, $"{filePath}|{context.Name}", versionText);
         }
 
         private Write UpdateLiteral(Context context, LiteralVersion location, VersionRange range, string? targetFramework)
@@ -349,7 +382,7 @@ namespace DotNetOutdated.Core.Services
                 // file (NuGet/Home#12552).
                 return new WriteFailed(
                     $"Could not update '{context.Name}' in '{centralPackagesPath}': no <PackageVersion> or <GlobalPackageReference> " +
-                    "element was found with an Include or Update attribute and a Version attribute. Update the version manually.");
+                    "element was found with an Include or Update attribute and a version (a Version attribute or <Version> child element). Update the version manually.");
             }
 
             var updated = newContent != file.Content;

@@ -45,6 +45,17 @@ internal sealed record GlobalPackageReferenceVersion(string FilePath, VersionRan
     public override VersionRange? DeclaredRange => Declared;
 }
 
+/// <summary>
+/// A literal version on a <c>PackageReference</c> in <paramref name="FilePath"/> that <c>dotnet add package</c> can't
+/// edit ("Cannot edit items in imported files"): one in an imported file such as a shared Directory.Build.props, or an
+/// <c>Update</c> item. The version must be written directly, and only on that item (<paramref name="ElementIndex"/>):
+/// the file can pin the package again under other conditions, such as another target framework.
+/// </summary>
+internal sealed record PackageReferenceVersionInFile(string FilePath, int ElementIndex, VersionRange? Declared) : VersionLocation
+{
+    public override VersionRange? DeclaredRange => Declared;
+}
+
 /// <summary>A versioned MSBuild project SDK declared in the project file.</summary>
 internal sealed record ProjectSdkVersion(ProjectSdkReference Sdk) : VersionLocation;
 
@@ -177,8 +188,16 @@ internal sealed class VersionLocator(IFileSystem fileSystem, IProjectEvaluator e
 
         if (declaration.Variable is not { } variableInfo)
         {
-            return declaration.ElementType == PackageVersionDeclaration.GlobalPackageReference
-                ? new GlobalPackageReferenceVersion(declaration.FilePath, declaration.VersionRange)
+            if (declaration.ElementType == PackageVersionDeclaration.GlobalPackageReference)
+            {
+                return new GlobalPackageReferenceVersion(declaration.FilePath, declaration.VersionRange);
+            }
+
+            // `dotnet add package` can't edit a PackageReference in an imported file or an Update item.
+            return declaration.ElementType == PackageVersionDeclaration.PackageReference &&
+                   !declaration.IsVersionOverride &&
+                   (declaration.IsUpdate || !string.Equals(declaration.FilePath, projectPath, StringComparison.OrdinalIgnoreCase))
+                ? new PackageReferenceVersionInFile(declaration.FilePath, declaration.ElementIndex, declaration.VersionRange)
                 : new LiteralVersion(declaration);
         }
 

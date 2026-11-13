@@ -189,7 +189,7 @@ internal sealed class MSBuildVariableWriter(IFileSystem fileSystem, Action<strin
         return PropertyWrite.Written;
     }
 
-    // Guards the text-level edit against regex/XML disagreements: the edited document must still parse, and
+    // Guards the text-level edit against mistakes in locating the definition: the edited document must still parse, and
     // exactly one definition of the property must differ (holding newValue) or have been added; nothing else
     // about the property's definitions may change.
     private static bool IsExpectedPropertyEdit(XDocument before, string newContent, string propertyName, string newValue)

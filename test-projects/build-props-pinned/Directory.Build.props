@@ -1,0 +1,10 @@
+<Project>
+  <!-- Packages pinned here for every project: dotnet add package refuses to
+       edit them ("Cannot edit items in imported files").
+       https://github.com/dotnet-outdated/dotnet-outdated/issues/301 -->
+  <ItemGroup>
+    <PackageReference Include="DotNetOutdated.Fake.Logging" Version="6.0.0" />
+    <!-- Pins the transitive dependency of Logging above the version it asks for. -->
+    <PackageReference Include="DotNetOutdated.Fake.DependencyInjection" Version="6.0.1" />
+  </ItemGroup>
+</Project>

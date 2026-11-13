@@ -384,5 +384,71 @@ namespace DotNetOutdated.Tests
             Assert.False(updated);
             Assert.Equal("13.0.2", ProjectSdkReferenceHelper.Discover(fileSystem, ProjectPath).Single().ResolvedVersion.ToString());
         }
+
+        // Entity references are decoded, as discovery decodes them, so an SDK it reports is updated.
+        [Theory]
+        [InlineData(@"<Project Sdk=""X&#46;Sdk/1.0.0""></Project>", @"<Project Sdk=""X&#46;Sdk/2.0.0""></Project>")]
+        [InlineData(@"<Project Sdk=""X.Sdk/1&#46;0&#46;0""></Project>", @"<Project Sdk=""X.Sdk/2.0.0""></Project>")]
+        [InlineData(@"<Project><Sdk Name=""X&#46;Sdk"" Version=""1.0.0"" /></Project>", @"<Project><Sdk Name=""X&#46;Sdk"" Version=""2.0.0"" /></Project>")]
+        [InlineData(@"<Project><Sdk Name=""X.Sdk"" Version=""1&#46;0&#46;0"" /></Project>", @"<Project><Sdk Name=""X.Sdk"" Version=""2.0.0"" /></Project>")]
+        [InlineData(@"<Project><Import Project=""Sdk.props"" Sdk=""X&#46;Sdk"" Version=""1.0.0"" /></Project>", @"<Project><Import Project=""Sdk.props"" Sdk=""X&#46;Sdk"" Version=""2.0.0"" /></Project>")]
+        public void Discover_And_TryUpdate_EntityReference_IsDiscoveredAndUpdated(string content, string expected)
+        {
+            var fileSystem = CreateFileSystem(content);
+
+            var reference = Assert.Single(ProjectSdkReferenceHelper.Discover(fileSystem, ProjectPath));
+            Assert.Equal("X.Sdk", reference.Name);
+            Assert.Equal(new NuGetVersion("1.0.0"), reference.ResolvedVersion);
+
+            Assert.True(ProjectSdkReferenceHelper.TryUpdate(fileSystem, ProjectPath, "X.Sdk", new NuGetVersion("2.0.0")));
+            Assert.Equal(expected, fileSystem.File.ReadAllText(ProjectPath));
+        }
+
+        // Only the version of the matching entry in the root's Sdk attribute is replaced; the other entries keep their text.
+        [Fact]
+        public void TryUpdate_ProjectSdkAttributeWithEscapedEntry_KeepsItEscaped()
+        {
+            var fileSystem = CreateFileSystem(@"<Project Sdk=""A&amp;B.Sdk;X.Sdk/1.0.0""></Project>");
+
+            Assert.True(ProjectSdkReferenceHelper.TryUpdate(fileSystem, ProjectPath, "X.Sdk", new NuGetVersion("2.0.0")));
+            Assert.Equal(@"<Project Sdk=""A&amp;B.Sdk;X.Sdk/2.0.0""></Project>", fileSystem.File.ReadAllText(ProjectPath));
+        }
+
+        // Only an <Sdk> element directly under <Project> declares an SDK, so an Sdk item in an ItemGroup is neither
+        // discovered nor updated.
+        [Fact]
+        public void Discover_And_TryUpdate_SdkItemInItemGroup_IsNotDiscoveredOrUpdated()
+        {
+            const string content = @"<Project Sdk=""X.Sdk/1.0.0"">
+  <ItemGroup>
+    <Sdk Include=""a"" Name=""X.Sdk"" Version=""1.0.0"" />
+  </ItemGroup>
+</Project>";
+            var fileSystem = CreateFileSystem(content);
+
+            Assert.Single(ProjectSdkReferenceHelper.GetDeclarations(fileSystem, ProjectPath));
+
+            Assert.True(ProjectSdkReferenceHelper.TryUpdate(fileSystem, ProjectPath, "X.Sdk", new NuGetVersion("2.0.0")));
+            Assert.Equal(@"<Project Sdk=""X.Sdk/2.0.0"">
+  <ItemGroup>
+    <Sdk Include=""a"" Name=""X.Sdk"" Version=""1.0.0"" />
+  </ItemGroup>
+</Project>", fileSystem.File.ReadAllText(ProjectPath));
+        }
+
+        // Only the matching entry's version is replaced, so line breaks, entity references and spacing elsewhere in
+        // the root's Sdk attribute are kept.
+        [Theory]
+        [InlineData("<Project Sdk=\"Microsoft.NET.Sdk;\n    X.Sdk/1.0.0\">\n</Project>", "<Project Sdk=\"Microsoft.NET.Sdk;\n    X.Sdk/2.0.0\">\n</Project>")]
+        [InlineData("<Project Sdk=\"X.Sdk/1.0.0 ;\r\n\tOther.Sdk/1.0.0\"></Project>", "<Project Sdk=\"X.Sdk/2.0.0 ;\r\n\tOther.Sdk/1.0.0\"></Project>")]
+        [InlineData("<Project Sdk=\"A&#59;B;X.Sdk/1.0.0\"></Project>", "<Project Sdk=\"A&#59;B;X.Sdk/2.0.0\"></Project>")]
+        [InlineData("<Project Sdk='X.Sdk/1.0.0;Y&apos;.Sdk'></Project>", "<Project Sdk='X.Sdk/2.0.0;Y&apos;.Sdk'></Project>")]
+        public void TryUpdate_ProjectSdkAttribute_KeepsTheRestOfTheAttributeText(string content, string expected)
+        {
+            var fileSystem = CreateFileSystem(content);
+
+            Assert.True(ProjectSdkReferenceHelper.TryUpdate(fileSystem, ProjectPath, "X.Sdk", new NuGetVersion("2.0.0")));
+            Assert.Equal(expected, fileSystem.File.ReadAllText(ProjectPath));
+        }
     }
 }

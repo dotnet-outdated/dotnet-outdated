@@ -31,6 +31,7 @@ namespace DotNetOutdated.Tests
 
             public IReadOnlyDictionary<string, PackageVersionDeclaration> GetPackageVersions(string projectPath, string? targetFramework = null) => PackageVersions;
 
+
             public IReadOnlyDictionary<string, ImportedProperty> GetImportedProperties(string appPath) =>
                 new Dictionary<string, ImportedProperty>();
         }

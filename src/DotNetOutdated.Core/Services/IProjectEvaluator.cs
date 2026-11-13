@@ -70,13 +70,20 @@ internal sealed record ImportedProperty(string Name, string RawValue, string Fil
 /// <param name="VersionExpression">The unexpanded text of its <c>Version</c> (or <c>VersionOverride</c>).</param>
 /// <param name="VersionRange">The evaluated version, or <see langword="null"/> when it couldn't be evaluated statically.</param>
 /// <param name="Variable">The version variable behind the version; <see langword="null"/> for a literal version.</param>
+/// <param name="IsUpdate">Whether the item is an <c>Update</c> rather than an <c>Include</c>.</param>
+/// <param name="ElementIndex">
+/// The item's position among the same-named items for the package in <paramref name="FilePath"/>, in document order;
+/// -1 when unknown.
+/// </param>
 internal sealed record PackageVersionDeclaration(
     string ElementType,
     string FilePath,
     string VersionExpression,
     bool IsVersionOverride,
     VersionRange? VersionRange,
-    PackageVariableInfo? Variable)
+    PackageVariableInfo? Variable,
+    bool IsUpdate = false,
+    int ElementIndex = -1)
 {
     public const string PackageReference = "PackageReference";
     public const string GlobalPackageReference = "GlobalPackageReference";

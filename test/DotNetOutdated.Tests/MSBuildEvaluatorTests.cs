@@ -410,7 +410,7 @@ namespace DotNetOutdated.Tests
 
             var versions = new MSBuildEvaluator(fileSystem).PackageVersions(ProjectPath);
 
-            Assert.Equal(new PackageVersionDeclaration("PackageVersion", centralPath, "[1.0.0, 2.0.0)", false, NuGet.Versioning.VersionRange.Parse("[1.0.0, 2.0.0)"), null), versions["Foo"]);
+            Assert.Equal(new PackageVersionDeclaration("PackageVersion", centralPath, "[1.0.0, 2.0.0)", false, NuGet.Versioning.VersionRange.Parse("[1.0.0, 2.0.0)"), null, ElementIndex: 0), versions["Foo"]);
             Assert.Equal(NuGet.Versioning.VersionRange.Parse("[2.0.0, 3.0.0)"), versions["Bar"].VersionRange);
             Assert.Equal("BarVersion", versions["Bar"].Variable?.VariableName);
             Assert.Equal(("GlobalPackageReference", centralPath), (versions["Analyzer"].ElementType, versions["Analyzer"].FilePath));
@@ -446,6 +446,24 @@ namespace DotNetOutdated.Tests
             Assert.Equal(expected, versions["Foo"].VersionExpression);
             // A package this target framework has no item for is still found where another declares it.
             Assert.Equal("1.0.0", versions["OnlyNet8"].VersionExpression);
+        }
+
+        // The index picks out the item a target framework uses among the file's items for the package, so a write
+        // can leave the other target frameworks' items alone.
+        [Theory]
+        [InlineData("net8.0", 0)]
+        [InlineData("net9.0", 1)]
+        public void PackageVersions_OfAMultiTargetedProject_ReportsWhichOfTheFilesItemsIsUsed(string targetFramework, int expected)
+        {
+            var fileSystem = FileSystem(new()
+            {
+                [ProjectPath] = Project("<PropertyGroup><TargetFrameworks>net8.0;net9.0</TargetFrameworks></PropertyGroup>" + PerTargetFrameworkItems),
+            });
+
+            var versions = new MSBuildEvaluator(fileSystem).PackageVersions(ProjectPath, targetFramework);
+
+            Assert.Equal(expected, versions["Foo"].ElementIndex);
+            Assert.Equal(0, versions["OnlyNet8"].ElementIndex);
         }
 
         [Fact]
