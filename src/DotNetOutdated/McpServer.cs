@@ -31,7 +31,7 @@ namespace DotNetOutdated
         private readonly IServiceProvider _serviceProvider;
         private readonly IProjectDiscoveryService _projectDiscoveryService;
         private readonly IProjectAnalysisService _projectAnalysisService;
-        private readonly IDotNetPackageService _dotNetPackageService;
+        private readonly IReferenceUpgrader _referenceUpgrader;
         private readonly IOutdatedDependencyService _outdatedDependencyService;
         private readonly Stream _inputStream;
         private readonly Stream _outputStream;
@@ -40,7 +40,7 @@ namespace DotNetOutdated
             IServiceProvider serviceProvider,
             IProjectDiscoveryService projectDiscoveryService,
             IProjectAnalysisService projectAnalysisService,
-            IDotNetPackageService dotNetPackageService,
+            IReferenceUpgrader referenceUpgrader,
             IOutdatedDependencyService outdatedDependencyService,
             Stream inputStream,
             Stream outputStream)
@@ -48,7 +48,7 @@ namespace DotNetOutdated
             _serviceProvider = serviceProvider;
             _projectDiscoveryService = projectDiscoveryService;
             _projectAnalysisService = projectAnalysisService;
-            _dotNetPackageService = dotNetPackageService;
+            _referenceUpgrader = referenceUpgrader;
             _outdatedDependencyService = outdatedDependencyService;
             _inputStream = inputStream;
             _outputStream = outputStream;
@@ -222,7 +222,7 @@ namespace DotNetOutdated
                         {
                             projectPath = new { type = "string", description = "Path to the project or .cs file-based app" },
                             packageName = new { type = "string", description = "Name of the package" },
-                            version = new { type = "string", description = "Version to upgrade to" },
+                            version = new { type = "string", description = "Version to upgrade to. A declared version range keeps its upper bound when the version still satisfies it." },
                             framework = new { type = "string", description = "Target framework" },
                             kind = new
                             {
@@ -422,23 +422,21 @@ namespace DotNetOutdated
                 };
             }
 
-            RunStatus status = _dotNetPackageService.Upgrade(new ReferenceUpgrade
+            var result = _referenceUpgrader.Upgrade(new ReferenceUpgrade
             {
-                ProjectPath = projectPath,
                 Name = packageName,
                 Kind = kind,
-                TargetFramework = framework,
-                Version = new VersionRange(version),
-            });
+                Version = version,
+                Projects = [new UpgradeProject(projectPath, framework)],
+            }).Single();
 
-            if (status.IsSuccess)
+            var warnings = string.Concat(result.Warnings.Select(warning => $"{Environment.NewLine}Warning: {warning}"));
+            return result.Outcome switch
             {
-                return CreateToolResult($"Successfully updated {packageName} to {version}");
-            }
-            else
-            {
-                return CreateToolResult($"Failed to update package: {status.FailureDetails}", isError: true);
-            }
+                UpgradeOutcome.Upgraded => CreateToolResult($"Successfully updated {packageName} to {version}{warnings}"),
+                UpgradeOutcome.AlreadyCurrent => CreateToolResult($"{packageName} is already at {version}{warnings}"),
+                _ => CreateToolResult($"Failed to update package: {result.FailureDetails}{warnings}", isError: true),
+            };
         }
 
         private static string? GetRequestedProtocolVersion(JsonRpcRequest request)

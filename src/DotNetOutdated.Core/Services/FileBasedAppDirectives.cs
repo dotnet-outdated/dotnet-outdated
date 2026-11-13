@@ -91,6 +91,60 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
         return kind == ReferenceKind.Sdk ? scan.SdkVariables : scan.PackageVariables;
     }
 
+    /// <summary>
+    /// The range a literal <c>#:package Id@Version</c> directive declares for <paramref name="name"/>, such as
+    /// <c>[12.0.1, 13.0.0)</c> (which <c>dotnet add package</c> writes in quotes when it holds a space), or
+    /// <see langword="null"/> when no directive declares one that can be read.
+    /// </summary>
+    public VersionRange? DeclaredPackageRange(string projectFilePath, string name)
+    {
+        if (!projectFilePath.IsCSharpFile() || !_fileSystem.File.Exists(projectFilePath))
+        {
+            return null;
+        }
+
+        foreach (var line in _fileSystem.File.ReadLines(projectFilePath))
+        {
+            var match = PackageDirectiveLineRegex().Match(line);
+            if (!match.Success)
+            {
+                continue;
+            }
+
+            // A range can hold spaces, so the version is everything after the id rather than one token.
+            var directive = match.Groups[1].Value;
+            var separatorIndex = directive.IndexOf('@', StringComparison.Ordinal);
+            if (separatorIndex <= 0 ||
+                !string.Equals(directive[..separatorIndex].Trim(), name, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var version = directive[(separatorIndex + 1)..].Trim();
+            if (version.Length == 0)
+            {
+                return null;
+            }
+
+            // The version ends at its closing quote or bracket; a bare version ends at the first whitespace.
+            var length = version[0] switch
+            {
+                '"' => version.IndexOf('"', 1) + 1,
+                '[' or '(' => version.IndexOfAny([']', ')']) + 1,
+                _ => version.IndexOfAny([' ', '\t']),
+            };
+
+            if (length < 0)
+            {
+                length = version.Length;
+            }
+
+            return length > 0 && VersionRange.TryParse(version[..length].Trim('"'), out var range) ? range : null;
+        }
+
+        return null;
+    }
+
     /// <summary>Rewrites the version of a literal <c>#:package Id@Version</c> or <c>#:sdk Id@Version</c> directive.</summary>
     /// <returns><see langword="true"/> when the directive line was changed.</returns>
     public bool TryUpdateDirectReference(string projectFilePath, string name, ReferenceKind kind, NuGetVersion newVersion)

@@ -389,5 +389,91 @@ namespace DotNetOutdated.Tests
             Assert.Equal(ProjectPath, info.FilePath);
             Assert.Null(info.UnsupportedReason);
         }
+
+        [Fact]
+        public void PackageVersions_ReportsTheFileAndEvaluatedRangeOfEachDeclaration()
+        {
+            var centralPath = XFS.Path(@"c:\repo\Directory.Packages.props");
+            var fileSystem = FileSystem(new()
+            {
+                [centralPath] = Props("""
+                    <PropertyGroup><BarVersion>2.0.0</BarVersion></PropertyGroup>
+                    <ItemGroup>
+                      <PackageVersion Include="Foo" Version="[1.0.0, 2.0.0)" />
+                      <PackageVersion Include="Bar" Version="[$(BarVersion), 3.0.0)" />
+                      <GlobalPackageReference Include="Analyzer" Version="1.5.0" />
+                      <PackageVersion Include="Baz" Version="1.0.0" />
+                    </ItemGroup>
+                    """),
+                [ProjectPath] = Project("""<ItemGroup><PackageReference Include="Baz" VersionOverride="1.2.0" /></ItemGroup>"""),
+            });
+
+            var versions = new MSBuildEvaluator(fileSystem).PackageVersions(ProjectPath);
+
+            Assert.Equal(new PackageVersionDeclaration("PackageVersion", centralPath, "[1.0.0, 2.0.0)", false, NuGet.Versioning.VersionRange.Parse("[1.0.0, 2.0.0)"), null), versions["Foo"]);
+            Assert.Equal(NuGet.Versioning.VersionRange.Parse("[2.0.0, 3.0.0)"), versions["Bar"].VersionRange);
+            Assert.Equal("BarVersion", versions["Bar"].Variable?.VariableName);
+            Assert.Equal(("GlobalPackageReference", centralPath), (versions["Analyzer"].ElementType, versions["Analyzer"].FilePath));
+            // A version on the PackageReference takes precedence over the central one.
+            Assert.Equal(("PackageReference", ProjectPath, true), (versions["Baz"].ElementType, versions["Baz"].FilePath, versions["Baz"].IsVersionOverride));
+        }
+
+        private const string PerTargetFrameworkItems = """
+            <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">
+              <PackageReference Include="Foo" Version="[8.0.0, 9.0.0)" />
+              <PackageReference Include="OnlyNet8" Version="1.0.0" />
+            </ItemGroup>
+            <ItemGroup Condition="'$(TargetFramework)' == 'net9.0'">
+              <PackageReference Include="Foo" Version="[9.0.0, 10.0.0)" />
+            </ItemGroup>
+            """;
+
+        [Theory]
+        [InlineData("net8.0", "[8.0.0, 9.0.0)")]
+        [InlineData("net9.0", "[9.0.0, 10.0.0)")]
+        // Without a target framework, or with one the project declares nothing for, the last item that may apply.
+        [InlineData(null, "[9.0.0, 10.0.0)")]
+        [InlineData("net10.0", "[9.0.0, 10.0.0)")]
+        public void PackageVersions_OfAMultiTargetedProject_PrefersTheItemDeclaredForTheTargetFramework(string? targetFramework, string expected)
+        {
+            var fileSystem = FileSystem(new()
+            {
+                [ProjectPath] = Project("<PropertyGroup><TargetFrameworks>net8.0;net9.0</TargetFrameworks></PropertyGroup>" + PerTargetFrameworkItems),
+            });
+
+            var versions = new MSBuildEvaluator(fileSystem).PackageVersions(ProjectPath, targetFramework);
+
+            Assert.Equal(expected, versions["Foo"].VersionExpression);
+            // A package this target framework has no item for is still found where another declares it.
+            Assert.Equal("1.0.0", versions["OnlyNet8"].VersionExpression);
+        }
+
+        [Fact]
+        public void PackageVersions_OfAProjectThatSetsItsTargetFramework_IgnoresTheOneAskedFor()
+        {
+            var fileSystem = FileSystem(new()
+            {
+                [ProjectPath] = Project("<PropertyGroup><TargetFramework>net9.0</TargetFramework></PropertyGroup>" + PerTargetFrameworkItems),
+            });
+
+            var versions = new MSBuildEvaluator(fileSystem).PackageVersions(ProjectPath, "net8.0");
+
+            Assert.Equal("[9.0.0, 10.0.0)", versions["Foo"].VersionExpression);
+            Assert.DoesNotContain("OnlyNet8", versions.Keys);
+        }
+
+        [Fact]
+        public void PackageVersions_OfAVersionThatCantBeEvaluated_HasNoRange()
+        {
+            var fileSystem = FileSystem(new()
+            {
+                [ProjectPath] = Project("""<ItemGroup><PackageReference Include="Foo" Version="$(SdkDefinedVersion)" /></ItemGroup>"""),
+            });
+
+            var declaration = new MSBuildEvaluator(fileSystem).PackageVersions(ProjectPath)["Foo"];
+
+            Assert.Null(declaration.VersionRange);
+            Assert.NotNull(declaration.Variable);
+        }
     }
 }

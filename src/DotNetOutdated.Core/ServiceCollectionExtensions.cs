@@ -9,14 +9,14 @@ public static class DotNetOutdatedServiceCollectionExtensions
 {
     /// <summary>
     /// Registers the dotnet-outdated services: <see cref="IProjectDiscoveryService"/>, <see cref="IProjectAnalysisService"/>,
-    /// <see cref="IOutdatedDependencyService"/>, <see cref="IDotNetPackageService"/>, <see cref="INuGetPackageResolutionService"/>
+    /// <see cref="IOutdatedDependencyService"/>, <see cref="IReferenceUpgrader"/>, <see cref="INuGetPackageResolutionService"/>
     /// and <see cref="INuGetPackageInfoService"/>, as singletons.
     /// </summary>
     /// <remarks>
     /// Services that are already registered are kept, so register a replacement (for example an
     /// <see cref="INuGetPackageInfoService"/> backed by a test feed) before calling this. Also used when registered:
     /// <see cref="IFileSystem"/> (the real file system by default), a NuGet <see cref="ILogger"/> (none by default),
-    /// an <see cref="IWarningReporter"/> (warnings are dropped by default), and <see cref="DotNetRunnerOptions"/>.
+    /// and <see cref="DotNetRunnerOptions"/>.
     /// </remarks>
     public static IServiceCollection AddDotNetOutdated(this IServiceCollection services)
     {
@@ -38,11 +38,10 @@ public static class DotNetOutdatedServiceCollectionExtensions
             provider.GetRequiredService<IDotNetRestoreService>(),
             provider.GetRequiredService<IFileSystem>(),
             provider.GetRequiredService<ILogger>()));
-        services.TryAddSingleton<IDotNetPackageService>(provider => new DotNetPackageService(
+        services.TryAddSingleton<IReferenceUpgrader>(provider => new ReferenceUpgrader(
             provider.GetRequiredService<IDotNetRunner>(),
             provider.GetRequiredService<IFileSystem>(),
-            provider.GetRequiredService<IProjectEvaluator>(),
-            provider.GetService<IWarningReporter>() is { } warnings ? warnings.Warn : null));
+            provider.GetRequiredService<IProjectEvaluator>()));
         services.TryAddSingleton<INuGetPackageInfoService, NuGetPackageInfoService>();
         services.TryAddSingleton<INuGetPackageResolutionService, NuGetPackageResolutionService>();
         services.TryAddSingleton<IOutdatedDependencyService, OutdatedDependencyService>();

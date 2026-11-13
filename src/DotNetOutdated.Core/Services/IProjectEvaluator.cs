@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using NuGet.ProjectModel;
+using NuGet.Versioning;
 
 namespace DotNetOutdated.Core.Services;
 
@@ -31,25 +32,17 @@ internal interface IProjectEvaluator
     IReadOnlyList<PackageReferenceItem>? GetPackageReferenceItems(string projectPath, string targetFramework, string? runtime);
 
     /// <summary>
-    /// The version variable behind each package version of a project file, keyed by package id. Packages whose version
-    /// is a literal are left out. A <c>PackageReference</c> version takes precedence over a central version.
+    /// The item that sets each package's version for a project file, keyed by package id: where it is written, its
+    /// expression and evaluated range, and the version variable behind it. A <c>PackageReference</c> version takes
+    /// precedence over a <c>GlobalPackageReference</c>, which takes precedence over a central <c>PackageVersion</c>.
+    /// Packages the project doesn't give a version are left out.
     /// </summary>
-    IReadOnlyDictionary<string, PackageVariableInfo> GetVersionVariables(string projectPath);
-
-    /// <summary>
-    /// The full path of the file whose <c>GlobalPackageReference</c> sets the version of <paramref name="packageName"/>
-    /// for a project, or <see langword="null"/> when the version doesn't come from one (a <c>PackageReference</c>
-    /// version takes precedence, as in <see cref="GetVersionVariables"/>).
-    /// </summary>
-    string? GetGlobalPackageReferenceFile(string projectPath, string packageName);
-
-    /// <summary>
-    /// The full path of the file whose <c>PackageReference</c> sets a literal version of <paramref name="packageName"/>
-    /// for a project when <c>dotnet add package</c> can't edit it there: the item is in an imported file (such as a
-    /// shared Directory.Build.props) or is an <c>Update</c>. <see langword="null"/> when the project file's own
-    /// <c>Include</c> sets the version, or the version isn't a literal set by a <c>PackageReference</c>.
-    /// </summary>
-    string? GetPackageReferenceVersionFile(string projectPath, string packageName);
+    /// <param name="targetFramework">
+    /// A target framework of the project (short folder name or alias). A package whose version is declared separately
+    /// for several target frameworks gets the item declared for this one; when <see langword="null"/>, or the package
+    /// has no item for it, any of them.
+    /// </param>
+    IReadOnlyDictionary<string, PackageVersionDeclaration> GetPackageVersions(string projectPath, string? targetFramework = null);
 
     /// <summary>
     /// The properties that the <c>Directory.*</c> files MSBuild would import define for a file-based app, keyed by
@@ -70,3 +63,24 @@ internal interface IProjectEvaluator
 /// so the value in effect isn't certain.
 /// </param>
 internal sealed record ImportedProperty(string Name, string RawValue, string FilePath, int ElementIndex, bool Ambiguous);
+
+/// <summary>The item that sets a package's version for a project.</summary>
+/// <param name="ElementType"><c>PackageReference</c>, <c>GlobalPackageReference</c> or <c>PackageVersion</c>.</param>
+/// <param name="FilePath">The full path of the file the item is written in.</param>
+/// <param name="VersionExpression">The unexpanded text of its <c>Version</c> (or <c>VersionOverride</c>).</param>
+/// <param name="VersionRange">The evaluated version, or <see langword="null"/> when it couldn't be evaluated statically.</param>
+/// <param name="Variable">The version variable behind the version; <see langword="null"/> for a literal version.</param>
+/// <param name="IsUpdate">Whether the item is an <c>Update</c> rather than an <c>Include</c>.</param>
+internal sealed record PackageVersionDeclaration(
+    string ElementType,
+    string FilePath,
+    string VersionExpression,
+    bool IsVersionOverride,
+    VersionRange? VersionRange,
+    PackageVariableInfo? Variable,
+    bool IsUpdate = false)
+{
+    public const string PackageReference = "PackageReference";
+    public const string GlobalPackageReference = "GlobalPackageReference";
+    public const string PackageVersion = "PackageVersion";
+}

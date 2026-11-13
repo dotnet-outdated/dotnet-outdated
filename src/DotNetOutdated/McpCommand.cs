@@ -15,7 +15,6 @@ namespace DotNetOutdated
             var services = new ServiceCollection()
                  .AddSingleton<IConsole>(McpConsole.Singleton)
                  .AddSingleton<IReporter>(provider => new ConsoleReporter(provider.GetService<IConsole>()))
-                 .AddSingleton<IWarningReporter>(provider => provider.GetRequiredService<IReporter>())
                  .AddSingleton<ILogger>(provider => new ConsoleLogger(provider.GetService<IConsole>(), LogLevel.Warning))
                  .AddDotNetOutdated()
                  .BuildServiceProvider();
@@ -24,7 +23,7 @@ namespace DotNetOutdated
                 services,
                 services.GetRequiredService<IProjectDiscoveryService>(),
                 services.GetRequiredService<IProjectAnalysisService>(),
-                services.GetRequiredService<IDotNetPackageService>(),
+                services.GetRequiredService<IReferenceUpgrader>(),
                 services.GetRequiredService<IOutdatedDependencyService>(),
                 Console.OpenStandardInput(),
                 Console.OpenStandardOutput()
