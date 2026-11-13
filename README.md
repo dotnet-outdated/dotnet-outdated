@@ -122,6 +122,18 @@ Versioned MSBuild project SDKs declared in a project file, as `<Project Sdk="Asp
 
 If a package reference declares a [version range](https://learn.microsoft.com/nuget/concepts/package-versioning#version-ranges) with an upper bound, the latest version within that range is chosen and the upper bound is kept. For example, `[6.0.13,7)` is upgraded to `[6.0.36, 7.0.0)`, and `[6.0.13,7.0.0]` to `[7.0.0]`. This also applies to ranges in `Directory.Packages.props`, `VersionOverride` and MSBuild properties such as `$(MyPackageVersion)`. The range is rewritten in NuGet's normalized form. `--maximum-version` only narrows a declared range, so `[6.0.0, 10.0.0)` with `--maximum-version 8.0` becomes `[8.0.x, 10.0.0)`. Floating versions such as `6.*` are replaced by a plain version, and transitive packages promoted with `--transitive` are always written as a plain version.
 
+### Target frameworks a new version doesn't support
+
+NuGet treats a package as compatible with a .NET target framework when one of its netstandard assets applies. The .NET runtime packages (such as `Microsoft.Extensions.*`) keep a netstandard asset after they drop a .NET version, but warn at build time that the new version doesn't support it, for example `Microsoft.Extensions.Options 11.0.0 doesn't support net8.0 and has not been tested with it`. The report still lists these updates, so you can see what moving to a supported target framework would bring. When upgrading, a target framework the new version declares unsupported keeps its version, and the others are upgraded. For example, in a project targeting `net8.0` and `net10.0` that references `Microsoft.Extensions.Options` separately for each, the `net10.0` reference is upgraded to `11.0.0` and the `net8.0` one keeps its version:
+
+```
+Upgrading package Microsoft.Extensions.Options...
+Project MyProject upgraded successfully
+Microsoft.Extensions.Options 11.0.0 doesn't support net8.0, so MyProject [net8.0] keeps 10.0.0. Move to a supported target framework to upgrade it.
+```
+
+To find out, **dotnet-outdated** downloads a new version that reaches the target framework only through netstandard, and looks in the MSBuild files restore would use for that framework, and in those of the dependencies it brings in for it, for the warning. A version that can't be downloaded or read is treated as supported. A reference whose version is shared with a target framework being upgraded (an unconditional `PackageReference`, a central `PackageVersion`, or a shared MSBuild property) is still upgraded and restored, and you are told so (before you're asked, with `-u:prompt`); declare it separately for each target framework to keep the unsupported ones on their version.
+
 ## Working with secure feeds
 
 **dotnet-outdated** supports secure NuGet feeds, such as [MyGet](https://www.myget.org). It is suggested that you add these to your sources using the [source command of the NuGet CLI](https://docs.microsoft.com/en-us/nuget/tools/cli-ref-sources). For secure feeds, you can do one of the following:

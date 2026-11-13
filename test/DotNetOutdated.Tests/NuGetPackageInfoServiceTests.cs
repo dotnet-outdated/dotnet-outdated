@@ -158,6 +158,100 @@ namespace DotNetOutdated.Tests
             await Assert.ThrowsAnyAsync<Exception>(() => service.GetAllVersionsAsync(Query(ignoreFailedSources: false)));
         }
 
+        // Modeled on the .NET runtime packages (Microsoft.Extensions.*): a netstandard fallback for older frameworks,
+        // with a target that warns "doesn't support netX.0" for the .NET versions the package no longer supports.
+        private const string CompatError = """
+            <Project InitialTargets="NETStandardCompatError_Contoso_Widgets_net10_0">
+              <Target Name="NETStandardCompatError_Contoso_Widgets_net10_0" Condition="'$(SuppressTfmSupportBuildWarnings)' == ''">
+                <Warning Text="Contoso.Widgets doesn't support $(TargetFramework) and has not been tested with it." />
+              </Target>
+            </Project>
+            """;
+
+        private const string OtherTargets = "<Project />";
+
+        [Theory]
+        // Supports net8.0 itself (and carries the warning for the frameworks below it).
+        [InlineData("1.0.0", "net8.0", false)]
+        // Dropped net8.0: reaches it through netstandard2.0, where the netcoreapp2.0 target warns.
+        [InlineData("2.0.0", "net8.0", true)]
+        [InlineData("2.0.0", "net10.0", false)]
+        [InlineData("2.0.0", "netstandard2.0", false)]
+        // Reaches net8.0 through netstandard2.0 too, but doesn't warn.
+        [InlineData("3.0.0", "net8.0", false)]
+        // Reaches net8.0 through netstandard2.0 for its dependencies, but has MSBuild files for net8.0, which restore picks.
+        [InlineData("4.0.0", "net8.0", false)]
+        // Warns from build rather than buildTransitive, which a direct reference imports too.
+        [InlineData("5.0.0", "net8.0", true)]
+        // Not on the feed.
+        [InlineData("9.0.0", "net8.0", false)]
+        public async Task DeclaresTargetFrameworkUnsupportedAsync_FindsTheRuntimePackagesWarning(string version, string targetFramework, bool expected)
+        {
+            using var feed = new LocalFeed();
+            feed.Add("Contoso.Widgets", "1.0.0", published: DateTime.UtcNow, dependencyFrameworks: ["net8.0", "netstandard2.0"],
+                files: [("buildTransitive/net8.0/Contoso.Widgets.targets", OtherTargets), ("buildTransitive/netcoreapp2.0/Contoso.Widgets.targets", CompatError)]);
+            feed.Add("Contoso.Widgets", "2.0.0", published: DateTime.UtcNow, dependencyFrameworks: ["net10.0", "netstandard2.0"],
+                files: [("buildTransitive/net10.0/Contoso.Widgets.targets", OtherTargets), ("buildTransitive/netcoreapp2.0/Contoso.Widgets.targets", CompatError)]);
+            feed.Add("Contoso.Widgets", "3.0.0", published: DateTime.UtcNow, dependencyFrameworks: ["net11.0", "netstandard2.0"]);
+            feed.Add("Contoso.Widgets", "4.0.0", published: DateTime.UtcNow, dependencyFrameworks: ["net10.0", "netstandard2.0"],
+                files: [("buildTransitive/net8.0/Contoso.Widgets.targets", OtherTargets), ("buildTransitive/netcoreapp2.0/Contoso.Widgets.targets", CompatError)]);
+            feed.Add("Contoso.Widgets", "5.0.0", published: DateTime.UtcNow, dependencyFrameworks: ["net10.0", "netstandard2.0"],
+                files: [("build/netcoreapp2.0/Contoso.Widgets.targets", CompatError)]);
+            using var service = new NuGetPackageInfoService();
+
+            var unsupported = await service.DeclaresTargetFrameworkUnsupportedAsync(SupportQuery(feed, "Contoso.Widgets", version, targetFramework));
+
+            Assert.Equal(expected, unsupported);
+        }
+
+        [Theory]
+        // Like Microsoft.Extensions.Diagnostics.HealthChecks 11.0.0: no targets of its own, but its netstandard2.0
+        // dependencies warn that net8.0 is not supported.
+        [InlineData("Contoso.Widgets", "2.0.0", true)]
+        [InlineData("Contoso.Widgets", "1.0.0", false)]
+        // A dependency imports only buildTransitive, so a warning under build doesn't reach the project.
+        [InlineData("Contoso.Gizmos", "1.0.0", false)]
+        public async Task DeclaresTargetFrameworkUnsupportedAsync_ChecksTheDependenciesForTheTargetFramework(string dependencyId, string dependencyVersion, bool expected)
+        {
+            using var feed = new LocalFeed();
+            feed.Add("Contoso.Widgets", "1.0.0", published: DateTime.UtcNow, dependencyFrameworks: ["net8.0", "netstandard2.0"]);
+            feed.Add("Contoso.Widgets", "2.0.0", published: DateTime.UtcNow, dependencyFrameworks: ["net10.0", "netstandard2.0"],
+                files: [("buildTransitive/netcoreapp2.0/Contoso.Widgets.targets", CompatError)]);
+            feed.Add("Contoso.Gizmos", "1.0.0", published: DateTime.UtcNow, dependencyFrameworks: ["net10.0", "netstandard2.0"],
+                files: [("build/netcoreapp2.0/Contoso.Gizmos.targets", CompatError)]);
+            feed.Add("Contoso.Gadgets", "1.0.0", published: DateTime.UtcNow, dependencyFrameworks: ["net10.0", "netstandard2.0"],
+                dependencies: [(dependencyId, dependencyVersion)]);
+            using var service = new NuGetPackageInfoService();
+
+            var unsupported = await service.DeclaresTargetFrameworkUnsupportedAsync(SupportQuery(feed, "Contoso.Gadgets", "1.0.0", "net8.0"));
+
+            Assert.Equal(expected, unsupported);
+        }
+
+        [Fact]
+        public async Task DeclaresTargetFrameworkUnsupportedAsync_AsksTheNextSourceWhenOneFails()
+        {
+            using var broken = new LocalFeed();
+            File.WriteAllText(System.IO.Path.Combine(broken.Path, "contoso.widgets.2.0.0.nupkg"), "not a zip file");
+            using var working = new LocalFeed();
+            working.Add("Contoso.Widgets", "2.0.0", published: DateTime.UtcNow, dependencyFrameworks: ["net10.0", "netstandard2.0"],
+                files: [("buildTransitive/netcoreapp2.0/Contoso.Widgets.targets", CompatError)]);
+            using var service = new NuGetPackageInfoService();
+
+            var unsupported = await service.DeclaresTargetFrameworkUnsupportedAsync(
+                SupportQuery(working, "Contoso.Widgets", "2.0.0", "net8.0") with { Sources = [broken.Uri, working.Uri] });
+
+            Assert.True(unsupported);
+        }
+
+        private static TargetFrameworkSupportQuery SupportQuery(LocalFeed feed, string packageId, string version, string targetFramework) => new()
+        {
+            PackageId = packageId,
+            Version = NuGetVersion.Parse(version),
+            TargetFramework = NuGetFramework.Parse(targetFramework),
+            Sources = [feed.Uri],
+        };
+
         /// <summary>A folder of <c>.nupkg</c> files used as a package source.</summary>
         private sealed class LocalFeed : IDisposable
         {
@@ -171,7 +265,9 @@ namespace DotNetOutdated.Tests
 
             public Uri Uri => new(Path + System.IO.Path.DirectorySeparatorChar);
 
-            public void Add(string id, string version, DateTime published, string? dependencyFramework = null)
+            public void Add(string id, string version, DateTime published, string? dependencyFramework = null,
+                string[]? dependencyFrameworks = null, (string Path, string Content)[]? files = null,
+                (string Id, string Version)[]? dependencies = null)
             {
                 var builder = new PackageBuilder(deterministic: true)
                 {
@@ -184,6 +280,17 @@ namespace DotNetOutdated.Tests
                 if (dependencyFramework != null)
                 {
                     builder.DependencyGroups.Add(new PackageDependencyGroup(NuGetFramework.Parse(dependencyFramework), []));
+                }
+
+                foreach (var framework in dependencyFrameworks ?? [])
+                {
+                    builder.DependencyGroups.Add(new PackageDependencyGroup(NuGetFramework.Parse(framework),
+                        (dependencies ?? []).Select(d => new NuGet.Packaging.Core.PackageDependency(d.Id, VersionRange.Parse(d.Version)))));
+                }
+
+                foreach (var (filePath, content) in files ?? [])
+                {
+                    builder.Files.Add(new PhysicalPackageFile(new MemoryStream(System.Text.Encoding.UTF8.GetBytes(content))) { TargetPath = filePath });
                 }
 
                 var path = System.IO.Path.Combine(Path, $"{id}.{version}.nupkg".ToLowerInvariant());

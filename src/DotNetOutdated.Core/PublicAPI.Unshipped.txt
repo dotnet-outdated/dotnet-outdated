@@ -350,6 +350,7 @@ DotNetOutdated.Core.Models.OutdatedDependency.LatestVersionUnknownReason.get -> 
 static DotNetOutdated.Core.Models.OutdatedDependency.GetLatestVersionUnknownReason(DotNetOutdated.Core.Models.Dependency! dependency, NuGet.Versioning.NuGetVersion? latestVersion) -> DotNetOutdated.Core.Models.LatestVersionUnknownReason
 DotNetOutdated.Core.Services.IReferenceUpgrader
 DotNetOutdated.Core.Services.IReferenceUpgrader.Upgrade(DotNetOutdated.Core.Services.ReferenceUpgrade! upgrade) -> System.Collections.Generic.IReadOnlyList<DotNetOutdated.Core.Services.ProjectUpgradeResult!>!
+DotNetOutdated.Core.Services.IReferenceUpgrader.FindHeldBackSharingVersion(DotNetOutdated.Core.Services.ReferenceUpgrade! upgrade) -> System.Collections.Generic.IReadOnlyList<DotNetOutdated.Core.Services.UpgradeProject!>!
 DotNetOutdated.Core.Services.ProjectUpgradeResult
 DotNetOutdated.Core.Services.ProjectUpgradeResult.<Clone>$() -> DotNetOutdated.Core.Services.ProjectUpgradeResult!
 DotNetOutdated.Core.Services.ProjectUpgradeResult.Equals(DotNetOutdated.Core.Services.ProjectUpgradeResult? other) -> bool
@@ -391,3 +392,27 @@ static DotNetOutdated.Core.Services.UpgradeProject.operator ==(DotNetOutdated.Co
 static DotNetOutdated.Core.Services.UpgradeProject.operator !=(DotNetOutdated.Core.Services.UpgradeProject? left, DotNetOutdated.Core.Services.UpgradeProject? right) -> bool
 *REMOVED*DotNetOutdated.Core.Services.IDotNetPackageService
 *REMOVED*DotNetOutdated.Core.Services.IDotNetPackageService.RemovePackage(string! projectPath, string! packageName) -> DotNetOutdated.Core.Services.RunStatus!
+DotNetOutdated.Core.Services.INuGetPackageInfoService.DeclaresTargetFrameworkUnsupportedAsync(DotNetOutdated.Core.Services.TargetFrameworkSupportQuery! query, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<bool>!
+DotNetOutdated.Core.Services.ReferenceUpgrade.HeldBack.get -> System.Collections.Generic.IReadOnlyList<DotNetOutdated.Core.Services.UpgradeProject!>!
+DotNetOutdated.Core.Services.ReferenceUpgrade.HeldBack.init -> void
+DotNetOutdated.Core.Services.TargetFrameworkSupportQuery
+DotNetOutdated.Core.Services.TargetFrameworkSupportQuery.<Clone>$() -> DotNetOutdated.Core.Services.TargetFrameworkSupportQuery!
+DotNetOutdated.Core.Services.TargetFrameworkSupportQuery.Equals(DotNetOutdated.Core.Services.TargetFrameworkSupportQuery? other) -> bool
+DotNetOutdated.Core.Services.TargetFrameworkSupportQuery.PackageId.get -> string!
+DotNetOutdated.Core.Services.TargetFrameworkSupportQuery.PackageId.init -> void
+DotNetOutdated.Core.Services.TargetFrameworkSupportQuery.ProjectFilePath.get -> string?
+DotNetOutdated.Core.Services.TargetFrameworkSupportQuery.ProjectFilePath.init -> void
+DotNetOutdated.Core.Services.TargetFrameworkSupportQuery.Sources.get -> System.Collections.Generic.IReadOnlyList<System.Uri!>!
+DotNetOutdated.Core.Services.TargetFrameworkSupportQuery.Sources.init -> void
+DotNetOutdated.Core.Services.TargetFrameworkSupportQuery.TargetFramework.get -> NuGet.Frameworks.NuGetFramework!
+DotNetOutdated.Core.Services.TargetFrameworkSupportQuery.TargetFramework.init -> void
+DotNetOutdated.Core.Services.TargetFrameworkSupportQuery.TargetFrameworkSupportQuery() -> void
+DotNetOutdated.Core.Services.TargetFrameworkSupportQuery.Version.get -> NuGet.Versioning.NuGetVersion!
+DotNetOutdated.Core.Services.TargetFrameworkSupportQuery.Version.init -> void
+DotNetOutdated.Core.Services.ProjectUpgradeResult.HeldBackUpgraded.get -> System.Collections.Generic.IReadOnlyList<DotNetOutdated.Core.Services.UpgradeProject!>!
+DotNetOutdated.Core.Services.ProjectUpgradeResult.HeldBackUpgraded.init -> void
+override DotNetOutdated.Core.Services.TargetFrameworkSupportQuery.Equals(object? obj) -> bool
+override DotNetOutdated.Core.Services.TargetFrameworkSupportQuery.GetHashCode() -> int
+override DotNetOutdated.Core.Services.TargetFrameworkSupportQuery.ToString() -> string!
+static DotNetOutdated.Core.Services.TargetFrameworkSupportQuery.operator ==(DotNetOutdated.Core.Services.TargetFrameworkSupportQuery? left, DotNetOutdated.Core.Services.TargetFrameworkSupportQuery? right) -> bool
+static DotNetOutdated.Core.Services.TargetFrameworkSupportQuery.operator !=(DotNetOutdated.Core.Services.TargetFrameworkSupportQuery? left, DotNetOutdated.Core.Services.TargetFrameworkSupportQuery? right) -> bool

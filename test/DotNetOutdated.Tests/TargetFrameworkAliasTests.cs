@@ -93,7 +93,7 @@ public class TargetFrameworkAliasTests
                     .ToList());
             var program = new Program(
                 fileSystem, Substitute.For<IReporter>(), new OutdatedDependencyService(resolutionService), analysisService,
-                discoveryService, upgrader, new DotNetRunnerOptions())
+                discoveryService, upgrader, Substitute.For<INuGetPackageInfoService>(), new DotNetRunnerOptions())
             {
                 Path = projectPath,
                 Upgrade = (true, UpgradeType.Auto),

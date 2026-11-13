@@ -32,6 +32,20 @@ public sealed record ReferenceUpgrade
         init => _projects = ReadOnlySnapshot.Of(value);
     }
 
+    /// <summary>
+    /// Projects (or target frameworks of them) whose reference keeps its current version, such as ones that
+    /// <see cref="Version"/> doesn't support. One whose version is written in the same place as that of a project in
+    /// <see cref="Projects"/> (an unconditional reference, a central <c>PackageVersion</c>, a shared MSBuild property)
+    /// can't keep it, and is upgraded and restored like those projects:
+    /// <see cref="IReferenceUpgrader.FindHeldBackSharingVersion"/> finds these beforehand, and
+    /// <see cref="ProjectUpgradeResult.HeldBackUpgraded"/> lists them.
+    /// </summary>
+    public IReadOnlyList<UpgradeProject> HeldBack
+    {
+        get => _heldBack;
+        init => _heldBack = ReadOnlySnapshot.Of(value);
+    }
+
     /// <summary>Don't restore the projects after changing the version.</summary>
     public bool NoRestore { get; init; }
 
@@ -39,6 +53,7 @@ public sealed record ReferenceUpgrade
     public bool IgnoreFailedSources { get; init; }
 
     private readonly IReadOnlyList<UpgradeProject> _projects = [];
+    private readonly IReadOnlyList<UpgradeProject> _heldBack = [];
 }
 
 /// <summary>A project whose reference <see cref="IReferenceUpgrader.Upgrade"/> upgrades.</summary>
@@ -77,7 +92,15 @@ public sealed record ProjectUpgradeResult
     /// <summary>Things the user should know about an upgrade that went ahead, such as a version expression replaced by a literal.</summary>
     public IReadOnlyList<string> Warnings { get => _warnings; init => _warnings = ReadOnlySnapshot.Of(value); }
 
+    /// <summary>
+    /// The target frameworks of this project in <see cref="ReferenceUpgrade.HeldBack"/> that were upgraded too, as their
+    /// version is written where that of a project in <see cref="ReferenceUpgrade.Projects"/> is; empty unless
+    /// <see cref="Outcome"/> is <see cref="UpgradeOutcome.Upgraded"/>.
+    /// </summary>
+    public IReadOnlyList<UpgradeProject> HeldBackUpgraded { get => _heldBackUpgraded; init => _heldBackUpgraded = ReadOnlySnapshot.Of(value); }
+
     public bool IsSuccess => Outcome != UpgradeOutcome.Failed;
 
     private readonly IReadOnlyList<string> _warnings = [];
+    private readonly IReadOnlyList<UpgradeProject> _heldBackUpgraded = [];
 }

@@ -1,11 +1,17 @@
-﻿using NuGet.Common;
+﻿using NuGet.Client;
+using NuGet.Common;
 using NuGet.Configuration;
+using NuGet.ContentModel;
 using NuGet.Frameworks;
+using NuGet.Packaging;
+using NuGet.Packaging.Core;
 using NuGet.Protocol;
 using NuGet.Protocol.Core.Types;
+using NuGet.RuntimeModel;
 using NuGet.Versioning;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Threading;
@@ -24,6 +30,9 @@ namespace DotNetOutdated.Core.Services
         private readonly SourceCacheContext _context;
 
         private readonly ConcurrentDictionary<string, Task<PackageMetadataResource?>> _metadataResourceRequests = [];
+
+        // The result of checking a package version against a target framework, null when the source doesn't have it.
+        private readonly ConcurrentDictionary<(string Source, string Id, NuGetVersion Version, NuGetFramework Framework, bool IsDependency), Task<bool?>> _supportChecks = [];
 
         public NuGetPackageInfoService()
         {
@@ -48,33 +57,41 @@ namespace DotNetOutdated.Core.Services
             return _sourceSettings;
         }
 
+        /// <summary>
+        /// The repository for a source, created from the enabled sources in the NuGet settings when it is one of them,
+        /// so that its credentials apply; <see langword="null"/> when package source mapping doesn't map the package to it.
+        /// </summary>
+        private SourceRepository? GetSourceRepository(Uri source, string? projectFilePath, string packageId)
+        {
+            var sourceSettings = GetSourceSettings(projectFilePath);
+            var enabledSource = sourceSettings.EnabledSources.FirstOrDefault(s => s.SourceUri == source);
+
+            if (enabledSource != null && sourceSettings.PackageSourceMapping.IsEnabled)
+            {
+                var mappedSources = sourceSettings.PackageSourceMapping.GetConfiguredPackageSources(packageId);
+                if (mappedSources != null && !mappedSources.Any(s => string.Equals(s, enabledSource.Name, StringComparison.OrdinalIgnoreCase)))
+                {
+                    // Skip package sources that are not mapped to the package
+                    return null;
+                }
+            }
+
+            return enabledSource != null
+                       ? new SourceRepository(enabledSource, Repository.Provider.GetCoreV3())
+                       : Repository.Factory.GetCoreV3(source.AbsoluteUri);
+        }
+
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "This method is supposed to fail silently")]
         private async Task<PackageMetadataResource?> FindMetadataResourceForSource(Uri source, string? projectFilePath, string packageId, CancellationToken cancellationToken)
         {
             try
             {
                 string resourceUrl = source.AbsoluteUri;
-
-                // We try and create the source repository from the enable sources we loaded from config.
-                // This allows us to inherit the username/password for the source from the config and thus
-                // enables secure feeds to work properly
-                var sourceSettings = GetSourceSettings(projectFilePath);
-                var enabledSource = sourceSettings.EnabledSources.FirstOrDefault(s => s.SourceUri == source);
-
-
-                if (enabledSource != null && sourceSettings.PackageSourceMapping.IsEnabled)
+                var sourceRepository = GetSourceRepository(source, projectFilePath, packageId);
+                if (sourceRepository == null)
                 {
-                    var mappedSources = sourceSettings.PackageSourceMapping.GetConfiguredPackageSources(packageId);
-                    if (mappedSources != null && !mappedSources.Any(s => string.Equals(s, enabledSource.Name, StringComparison.OrdinalIgnoreCase)))
-                    {
-                        // Skip package sources that are not mapped to the package
-                        return null;
-                    }
+                    return null;
                 }
-
-                var sourceRepository = enabledSource != null
-                                           ? new SourceRepository(enabledSource, Repository.Provider.GetCoreV3())
-                                           : Repository.Factory.GetCoreV3(resourceUrl);
 
                 // The discovery request is cached per source and shared, so it doesn't take this caller's token; the caller
                 // only stops waiting for it.
@@ -170,6 +187,144 @@ namespace DotNetOutdated.Core.Services
             }
 
             return allVersions;
+        }
+
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A source that fails is skipped, like one that doesn't have the package")]
+        public async Task<bool> DeclaresTargetFrameworkUnsupportedAsync(TargetFrameworkSupportQuery query, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(query);
+            if (query.TargetFramework.Framework != FrameworkConstants.FrameworkIdentifiers.NetCoreApp)
+            {
+                return false;
+            }
+
+            foreach (var source in query.Sources)
+            {
+                SourceRepository? repository;
+                try
+                {
+                    repository = GetSourceRepository(source, query.ProjectFilePath, query.PackageId);
+                }
+                catch (Exception)
+                {
+                    continue;
+                }
+
+                if (repository == null)
+                {
+                    continue;
+                }
+
+                var unsupported = await CheckAsync(repository, new PackageIdentity(query.PackageId, query.Version), query.TargetFramework, isDependency: false)
+                    .WaitAsync(cancellationToken).ConfigureAwait(false);
+                if (unsupported != null)
+                {
+                    return unsupported.Value;
+                }
+            }
+
+            return false;
+        }
+
+        // Shared by every caller with the same key, so it doesn't take one caller's cancellation token.
+        private Task<bool?> CheckAsync(SourceRepository repository, PackageIdentity identity, NuGetFramework targetFramework, bool isDependency) =>
+            _supportChecks.GetOrAdd(
+                (repository.PackageSource.Source, identity.Id.ToUpperInvariant(), identity.Version, targetFramework, isDependency),
+                _ => ReadDeclaresUnsupportedAsync(repository, identity, targetFramework, isDependency));
+
+        /// <summary>
+        /// Whether the package declares <paramref name="targetFramework"/> unsupported, or <see langword="null"/> when
+        /// the source doesn't have it or fails, so that the next source is asked. A dependency (<paramref name="isDependency"/>) is checked on its own MSBuild
+        /// files only, which it imports through <c>buildTransitive</c>; the package itself also through <c>build</c>,
+        /// and through the dependencies it brings in for the framework (at their minimum versions, one level deep):
+        /// packages such as Microsoft.Extensions.Diagnostics.HealthChecks have no targets of their own but depend on
+        /// ones that warn.
+        /// </summary>
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A source that fails is skipped, like one that doesn't have the package")]
+        private async Task<bool?> ReadDeclaresUnsupportedAsync(SourceRepository repository, PackageIdentity identity, NuGetFramework targetFramework, bool isDependency)
+        {
+            try
+            {
+                var resource = await repository.GetResourceAsync<FindPackageByIdResource>().ConfigureAwait(false);
+                if (resource == null)
+                {
+                    return null;
+                }
+
+                var info = await resource.GetDependencyInfoAsync(identity.Id, identity.Version, _context, NullLogger.Instance, CancellationToken.None).ConfigureAwait(false);
+                if (info == null)
+                {
+                    return null;
+                }
+
+                // Only a version that has assets for some .NET versions but reaches this one through netstandard can
+                // have dropped it, so only such a version is downloaded.
+                if (!FallsBackToNetStandard(targetFramework, info.DependencyGroups))
+                {
+                    return false;
+                }
+
+                using var package = new MemoryStream();
+                if (!await resource.CopyNupkgToStreamAsync(identity.Id, identity.Version, package, _context, NullLogger.Instance, CancellationToken.None).ConfigureAwait(false))
+                {
+                    return null;
+                }
+
+                package.Position = 0;
+                if (await TargetsDeclareUnsupportedAsync(package, targetFramework, includeBuild: !isDependency).ConfigureAwait(false))
+                {
+                    return true;
+                }
+
+                if (isDependency)
+                {
+                    return false;
+                }
+
+                var dependencies = NuGetFrameworkUtility.GetNearest(info.DependencyGroups, targetFramework, group => group.TargetFramework);
+                var dependencyChecks = await Task.WhenAll((dependencies?.Packages ?? [])
+                    .Where(dependency => dependency.VersionRange.MinVersion != null)
+                    .Select(dependency => CheckAsync(repository, new PackageIdentity(dependency.Id, dependency.VersionRange.MinVersion), targetFramework, isDependency: true)))
+                    .ConfigureAwait(false);
+                return dependencyChecks.Any(unsupported => unsupported == true);
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        }
+
+        private static bool FallsBackToNetStandard(NuGetFramework targetFramework, IEnumerable<PackageDependencyGroup> dependencyGroups)
+        {
+            var frameworks = dependencyGroups.Select(group => group.TargetFramework).ToList();
+            var nearest = new FrameworkReducer().GetNearest(targetFramework, frameworks);
+            return nearest?.Framework == FrameworkConstants.FrameworkIdentifiers.NetStandard &&
+                   frameworks.Any(framework => framework.Framework == FrameworkConstants.FrameworkIdentifiers.NetCoreApp);
+        }
+
+        // Whether the .targets files restore selects for the framework hold the NETStandardCompatError_* target the
+        // .NET runtime packages generate to warn that it isn't supported. Restore takes buildTransitive when the
+        // package has it for the framework, and build otherwise (for a direct reference only).
+        private static async Task<bool> TargetsDeclareUnsupportedAsync(Stream package, NuGetFramework targetFramework, bool includeBuild)
+        {
+            using var reader = new PackageArchiveReader(package, leaveStreamOpen: true);
+            var conventions = new ManagedCodeConventions(new RuntimeGraph());
+            var items = new ContentItemCollection();
+            items.Load(reader.GetFiles());
+
+            var criteria = conventions.Criteria.ForFramework(targetFramework);
+            var group = items.FindBestItemGroup(criteria, conventions.Patterns.MSBuildTransitiveFiles)
+                        ?? (includeBuild ? items.FindBestItemGroup(criteria, conventions.Patterns.MSBuildFiles) : null);
+            foreach (var item in group?.Items.Where(i => i.Path.EndsWith(".targets", StringComparison.OrdinalIgnoreCase)) ?? [])
+            {
+                using var file = new StreamReader(reader.GetStream(item.Path));
+                if ((await file.ReadToEndAsync().ConfigureAwait(false)).Contains("NETStandardCompatError_", StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         public void Dispose()
