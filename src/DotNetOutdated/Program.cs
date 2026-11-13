@@ -5,7 +5,6 @@ using DotNetOutdated.Core.Services;
 using DotNetOutdated.Models;
 using Microsoft.Extensions.DependencyInjection;
 using NuGet.Common;
-using NuGet.Credentials;
 using NuGet.Versioning;
 using System;
 using System.Collections.Concurrent;
@@ -90,20 +89,21 @@ namespace DotNetOutdated
       
       public static int Main(string[] args)
       {
-         using var services = new ServiceCollection()
-                 .AddSingleton(PhysicalConsole.Singleton)
-                 .AddSingleton<IReporter>(provider => new ConsoleReporter(provider.GetService<IConsole>()))
-                 .AddSingleton<ILogger>(provider => new ConsoleLogger(provider.GetService<IConsole>(), LogLevel.Warning))
-                 .AddDotNetOutdated()
-                 .BuildServiceProvider();
-
          ProgramCommandLine commandLine = null;
          commandLine = new ProgramCommandLine(
-            run: (parseResult, _) =>
+            run: async (parseResult, _) =>
             {
+               // NuGet logs at the level --nuget-cred-log-level asks for, credential providers included.
+               await using var services = new ServiceCollection()
+                       .AddSingleton(PhysicalConsole.Singleton)
+                       .AddSingleton<IReporter>(provider => new ConsoleReporter(provider.GetService<IConsole>()))
+                       .AddSingleton<ILogger>(provider => new ConsoleLogger(provider.GetService<IConsole>(), parseResult.GetValue(commandLine.NuGetCredLogLevel)))
+                       .AddDotNetOutdated()
+                       .BuildServiceProvider();
+
                var program = ActivatorUtilities.CreateInstance<Program>(services);
                commandLine.Bind(parseResult, program);
-               return program.OnExecute(services.GetRequiredService<IConsole>());
+               return await program.OnExecute(services.GetRequiredService<IConsole>());
             },
             runMcp: _ => new McpCommand().OnExecuteAsync());
 
@@ -131,8 +131,6 @@ namespace DotNetOutdated
 
             // Get all the projects
             console.WriteLine("Discovering projects...");
-
-            DefaultCredentialServiceUtility.SetupDefaultCredentialService(new ConsoleLogger(console, NuGetCredLogLevel), true);
 
             var projectPaths = _projectDiscoveryService.DiscoverProjects(Path, Recursive, IncludeFileBasedApps);
 
