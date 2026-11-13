@@ -92,7 +92,7 @@ public class UnknownLatestVersionReportTests
 
         var program = new Program(
             new FileSystem(), Substitute.For<IReporter>(), outdated, analysis, discovery,
-            Substitute.For<IReferenceUpgrader>(), new DotNetRunnerOptions())
+            Substitute.For<IReferenceUpgrader>(), Substitute.For<INuGetPackageInfoService>(), new DotNetRunnerOptions())
         {
             Path = projectPath,
         };

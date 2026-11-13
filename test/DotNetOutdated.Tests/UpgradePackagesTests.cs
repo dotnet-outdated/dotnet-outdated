@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using DotNetOutdated.Core.Models;
 using DotNetOutdated.Core.Services;
 using DotNetOutdated.Models;
@@ -19,8 +20,10 @@ public class UpgradePackagesTests
 
     private readonly IReferenceUpgrader _upgrader = Substitute.For<IReferenceUpgrader>();
 
+    private readonly INuGetPackageInfoService _nuget = Substitute.For<INuGetPackageInfoService>();
+
     [Fact]
-    public void WhenUpgradeFails_TheFailureDetailsAreWrittenToTheConsole()
+    public async Task WhenUpgradeFails_TheFailureDetailsAreWrittenToTheConsole()
     {
         // Arrange
         // A representative case: the version is declared in an imported Directory.Build.props that dotnet add can't edit.
@@ -31,7 +34,7 @@ public class UpgradePackagesTests
         UpgradeReturns(UpgradeOutcome.Failed, failureDetails);
 
         // Act
-        (bool success, string written) = RunUpgrade();
+        (bool success, string written) = await RunUpgrade();
 
         // Assert
         Assert.False(success);
@@ -39,13 +42,13 @@ public class UpgradePackagesTests
     }
 
     [Fact]
-    public void WhenUpgradeFails_TheFailureDetailsFollowTheHeader_WithoutBlankLines()
+    public async Task WhenUpgradeFails_TheFailureDetailsFollowTheHeader_WithoutBlankLines()
     {
         // Arrange
         UpgradeReturns(UpgradeOutcome.Failed, "info : Restoring packages...\nerror: it went wrong");
 
         // Act
-        (_, string written) = RunUpgrade();
+        (_, string written) = await RunUpgrade();
 
         // Assert
         string[] lines = Lines(written);
@@ -62,13 +65,13 @@ public class UpgradePackagesTests
     }
 
     [Fact]
-    public void WhenUpgradeFailsWithNoDetails_OnlyTheHeaderIsWritten()
+    public async Task WhenUpgradeFailsWithNoDetails_OnlyTheHeaderIsWritten()
     {
         // Arrange
         UpgradeReturns(UpgradeOutcome.Failed);
 
         // Act
-        (_, string written) = RunUpgrade();
+        (_, string written) = await RunUpgrade();
 
         // Assert
         string[] expected =
@@ -84,13 +87,13 @@ public class UpgradePackagesTests
     [Theory]
     [InlineData(UpgradeOutcome.Upgraded, "Project MyProject upgraded successfully")]
     [InlineData(UpgradeOutcome.AlreadyCurrent, "Project MyProject already has Contoso.Widgets 2.0.0")]
-    public void WhenUpgradeSucceeds_ItsWarningsAndOutcomeAreWritten(UpgradeOutcome outcome, string expectedLine)
+    public async Task WhenUpgradeSucceeds_ItsWarningsAndOutcomeAreWritten(UpgradeOutcome outcome, string expectedLine)
     {
         // Arrange
         UpgradeReturns(outcome, warnings: ["the version expression was replaced"]);
 
         // Act
-        (bool success, string written) = RunUpgrade();
+        (bool success, string written) = await RunUpgrade();
 
         // Assert
         Assert.True(success);
@@ -106,7 +109,7 @@ public class UpgradePackagesTests
     }
 
     [Fact]
-    public void EveryTargetFrameworkOfAPackage_IsUpgradedInOneCall()
+    public async Task EveryTargetFrameworkOfAPackage_IsUpgradedInOneCall()
     {
         // Arrange
         UpgradeReturns(UpgradeOutcome.Upgraded);
@@ -116,7 +119,7 @@ public class UpgradePackagesTests
             .ToList();
 
         // Act
-        (bool success, string written) = RunUpgradeOf([new("MyProject", ProjectPath, targetFrameworks)]);
+        (bool success, string written) = await RunUpgradeOf([new("MyProject", ProjectPath, targetFrameworks)]);
 
         // Assert
         Assert.True(success);
@@ -127,7 +130,7 @@ public class UpgradePackagesTests
     }
 
     [Fact]
-    public void SdkAndPackageWithTheSameId_AreUpgradedSeparatelyByKind()
+    public async Task SdkAndPackageWithTheSameId_AreUpgradedSeparatelyByKind()
     {
         // Arrange
         UpgradeReturns(UpgradeOutcome.Upgraded);
@@ -135,7 +138,7 @@ public class UpgradePackagesTests
         var sdk = new Dependency { Name = "Cake.Sdk", VersionRange = VersionRange.Parse("1.0.0"), ResolvedVersion = new NuGetVersion("1.0.0"), Kind = ReferenceKind.Sdk };
 
         // Act
-        (bool success, string written) = RunUpgrade(package, sdk);
+        (bool success, string written) = await RunUpgrade(package, sdk);
 
         // Assert
         Assert.True(success);
@@ -149,7 +152,7 @@ public class UpgradePackagesTests
     }
 
     [Fact]
-    public void Prompt_NamesWhetherTheUpgradeIsAnSdkOrAPackage()
+    public async Task Prompt_NamesWhetherTheUpgradeIsAnSdkOrAPackage()
     {
         // Arrange
         UpgradeReturns(UpgradeOutcome.Upgraded);
@@ -157,7 +160,7 @@ public class UpgradePackagesTests
         var sdk = new Dependency { Name = "Cake.Sdk", VersionRange = VersionRange.Parse("1.0.0"), ResolvedVersion = new NuGetVersion("1.0.0"), Kind = ReferenceKind.Sdk };
 
         // Act
-        (_, string written) = RunUpgrade(UpgradeType.Prompt, "n\nn\n", package, sdk);
+        (_, string written) = await RunUpgrade(UpgradeType.Prompt, "n\nn\n", package, sdk);
 
         // Assert
         string[] lines = Lines(written);
@@ -169,13 +172,13 @@ public class UpgradePackagesTests
     }
 
     [Fact]
-    public void Prompt_WhenThereIsNoInput_NothingIsUpgradedAndTheUserIsTold()
+    public async Task Prompt_WhenThereIsNoInput_NothingIsUpgradedAndTheUserIsTold()
     {
         // Arrange: stdin closed or redirected from /dev/null (#831)
         UpgradeReturns(UpgradeOutcome.Upgraded);
 
         // Act
-        (bool success, string written) = RunUpgrade(UpgradeType.Prompt, string.Empty, Package("Contoso.A"), Package("Contoso.B"));
+        (bool success, string written) = await RunUpgrade(UpgradeType.Prompt, string.Empty, Package("Contoso.A"), Package("Contoso.B"));
 
         // Assert
         Assert.True(success);
@@ -187,13 +190,13 @@ public class UpgradePackagesTests
     }
 
     [Fact]
-    public void Prompt_WhenTheInputEndsPartWay_OnlyTheAnsweredUpgradesAreMade()
+    public async Task Prompt_WhenTheInputEndsPartWay_OnlyTheAnsweredUpgradesAreMade()
     {
         // Arrange
         UpgradeReturns(UpgradeOutcome.Upgraded);
 
         // Act
-        (bool success, string written) = RunUpgrade(UpgradeType.Prompt, "y\n", Package("Contoso.A"), Package("Contoso.B"), Package("Contoso.C"));
+        (bool success, string written) = await RunUpgrade(UpgradeType.Prompt, "y\n", Package("Contoso.A"), Package("Contoso.B"), Package("Contoso.C"));
 
         // Assert
         Assert.True(success);
@@ -207,18 +210,111 @@ public class UpgradePackagesTests
     }
 
     [Fact]
-    public void Prompt_AnEmptyAnswerStillUpgrades()
+    public async Task Prompt_AnEmptyAnswerStillUpgrades()
     {
         // Arrange
         UpgradeReturns(UpgradeOutcome.Upgraded);
 
         // Act
-        (_, string written) = RunUpgrade(UpgradeType.Prompt, "\n\n", Package("Contoso.A"), Package("Contoso.B"));
+        (_, string written) = await RunUpgrade(UpgradeType.Prompt, "\n\n", Package("Contoso.A"), Package("Contoso.B"));
 
         // Assert
         Assert.DoesNotContain(SkippedMessage, written);
         _upgrader.Received(2).Upgrade(Arg.Any<ReferenceUpgrade>());
     }
+
+    [Fact]
+    public async Task ATargetFrameworkTheNewVersionDoesNotSupport_KeepsItsVersion_WhileTheOthersAreUpgraded()
+    {
+        // Arrange: a project that still targets net8.0 alongside net10.0, and a version that dropped net8.0.
+        UpgradeReturns(UpgradeOutcome.Upgraded);
+        UnsupportedOn("net8.0");
+
+        // Act
+        (bool success, string written) = await RunUpgradeOf([MultiTargeted("net8.0", "net10.0")]);
+
+        // Assert
+        Assert.True(success);
+        _upgrader.Received(1).Upgrade(Arg.Is<ReferenceUpgrade>(upgrade =>
+            upgrade.Projects.SequenceEqual(new[] { new UpgradeProject(ProjectPath, "net10.0") }) &&
+            upgrade.HeldBack.SequenceEqual(new[] { new UpgradeProject(ProjectPath, "net8.0") })));
+        Assert.Contains(HeldBackMessage, Lines(written));
+        Assert.Contains("Project MyProject upgraded successfully", Lines(written));
+    }
+
+    [Theory]
+    [InlineData(UpgradeType.Auto)]
+    [InlineData(UpgradeType.Prompt)]
+    public async Task WhenTheNewVersionSupportsNoTargetFramework_NothingIsUpgradedOrAsked(UpgradeType upgradeType)
+    {
+        // Arrange
+        UpgradeReturns(UpgradeOutcome.Upgraded);
+        UnsupportedOn("net8.0");
+
+        // Act
+        (bool success, string written) = await RunUpgrade(upgradeType, string.Empty, Package(PackageName));
+
+        // Assert
+        Assert.True(success);
+        _upgrader.DidNotReceiveWithAnyArgs().Upgrade(default!);
+        Assert.Contains(HeldBackMessage, Lines(written));
+        Assert.DoesNotContain("Do you wish", written);
+    }
+
+    [Fact]
+    public async Task Prompt_ListsTheTargetFrameworksThatKeepTheirVersion()
+    {
+        // Arrange
+        UpgradeReturns(UpgradeOutcome.Upgraded);
+        UnsupportedOn("net8.0");
+
+        // Act
+        (_, string written) = await RunUpgradeOf([MultiTargeted("net8.0", "net10.0")], UpgradeType.Prompt, "n\n");
+
+        // Assert
+        string[] lines = Lines(written);
+        Assert.Contains("The package Contoso.Widgets can be upgraded from 1.0.0 to 2.0.0. The following project(s) will be affected:", lines);
+        Assert.Contains("» MyProject [net10.0]", lines);
+        Assert.DoesNotContain("» MyProject [net8.0]", lines);
+        Assert.Contains(HeldBackMessage, lines);
+        _upgrader.DidNotReceiveWithAnyArgs().Upgrade(default!);
+    }
+
+    [Fact]
+    public async Task AHeldBackTargetFrameworkThatSharesItsVersion_IsReportedAsUpgradedToo()
+    {
+        // Arrange: net8.0 shares its version with net10.0 (an unconditional reference, say), so the upgrader writes both.
+        _upgrader.Upgrade(Arg.Any<ReferenceUpgrade>()).Returns(call =>
+        [
+            new ProjectUpgradeResult { ProjectPath = ProjectPath, Outcome = UpgradeOutcome.Upgraded, HeldBackUpgraded = call.Arg<ReferenceUpgrade>().HeldBack },
+        ]);
+        UnsupportedOn("net8.0");
+
+        // Act
+        (bool success, string written) = await RunUpgradeOf([MultiTargeted("net8.0", "net10.0")]);
+
+        // Assert
+        Assert.True(success);
+        string[] lines = Lines(written);
+        Assert.Contains(
+            "Contoso.Widgets 2.0.0 doesn't support net8.0, but MyProject [net8.0] shares its version with a target framework that was upgraded, so it was upgraded too. " +
+            "Declare the reference separately for each target framework to keep net8.0 on 1.0.0.",
+            lines);
+        Assert.DoesNotContain(HeldBackMessage, lines);
+    }
+
+    private const string HeldBackMessage =
+        "Contoso.Widgets 2.0.0 doesn't support net8.0, so MyProject [net8.0] keeps 1.0.0. Move to a supported target framework to upgrade it.";
+
+    private void UnsupportedOn(string targetFramework) =>
+        _nuget.DeclaresTargetFrameworkUnsupportedAsync(Arg.Is<TargetFrameworkSupportQuery>(query =>
+                query.TargetFramework == NuGetFramework.Parse(targetFramework)), Arg.Any<System.Threading.CancellationToken>())
+            .Returns(true);
+
+    private static AnalyzedProject MultiTargeted(params string[] targetFrameworks) =>
+        new("MyProject", ProjectPath, targetFrameworks
+            .Select(framework => new AnalyzedTargetFramework(NuGetFramework.Parse(framework), [new AnalyzedDependency(Package(PackageName), new NuGetVersion("2.0.0"))]))
+            .ToList());
 
     private const string SkippedMessage = "No input is available to answer the prompt, so the remaining upgrades were skipped.";
 
@@ -238,13 +334,13 @@ public class UpgradePackagesTests
             })
             .ToList());
 
-    private (bool Success, string Written) RunUpgrade() =>
+    private Task<(bool Success, string Written)> RunUpgrade() =>
         RunUpgrade(new Dependency { Name = PackageName, VersionRange = VersionRange.Parse("1.0.0"), ResolvedVersion = new NuGetVersion("1.0.0") });
 
-    private (bool Success, string Written) RunUpgrade(params Dependency[] dependencies) =>
+    private Task<(bool Success, string Written)> RunUpgrade(params Dependency[] dependencies) =>
         RunUpgrade(UpgradeType.Auto, input: null, dependencies);
 
-    private (bool Success, string Written) RunUpgrade(UpgradeType upgradeType, string input, params Dependency[] dependencies)
+    private Task<(bool Success, string Written)> RunUpgrade(UpgradeType upgradeType, string input, params Dependency[] dependencies)
     {
         var targetFramework = new AnalyzedTargetFramework(
             NuGetFramework.Parse("net8.0"),
@@ -252,7 +348,7 @@ public class UpgradePackagesTests
         return RunUpgradeOf([new AnalyzedProject("MyProject", ProjectPath, [targetFramework])], upgradeType, input);
     }
 
-    private (bool Success, string Written) RunUpgradeOf(List<AnalyzedProject> projects, UpgradeType upgradeType = UpgradeType.Auto, string input = null)
+    private async Task<(bool Success, string Written)> RunUpgradeOf(List<AnalyzedProject> projects, UpgradeType upgradeType = UpgradeType.Auto, string input = null)
     {
         var program = new Program(
             Substitute.For<System.IO.Abstractions.IFileSystem>(),
@@ -261,13 +357,14 @@ public class UpgradePackagesTests
             Substitute.For<IProjectAnalysisService>(),
             Substitute.For<IProjectDiscoveryService>(),
             _upgrader,
+            _nuget,
             new DotNetRunnerOptions())
         {
             Upgrade = (true, upgradeType)
         };
 
         using var console = new MockConsole(input);
-        bool success = program.UpgradePackages(projects, console);
+        bool success = await program.UpgradePackagesAsync(projects, console);
         return (success, console.WrittenOut);
     }
 

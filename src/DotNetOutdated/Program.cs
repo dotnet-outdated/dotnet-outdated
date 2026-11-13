@@ -30,6 +30,7 @@ namespace DotNetOutdated
         IProjectAnalysisService projectAnalysisService,
         IProjectDiscoveryService projectDiscoveryService,
         IReferenceUpgrader referenceUpgrader,
+        INuGetPackageInfoService nuGetPackageInfoService,
         DotNetRunnerOptions dotNetRunnerOptions)
    {
       private readonly IFileSystem _fileSystem = fileSystem;
@@ -38,6 +39,7 @@ namespace DotNetOutdated
       private readonly IProjectAnalysisService _projectAnalysisService = projectAnalysisService;
       private readonly IProjectDiscoveryService _projectDiscoveryService = projectDiscoveryService;
       private readonly IReferenceUpgrader _referenceUpgrader = referenceUpgrader;
+      private readonly INuGetPackageInfoService _nuGetPackageInfoService = nuGetPackageInfoService;
       private readonly DotNetRunnerOptions _dotNetRunnerOptions = dotNetRunnerOptions;
 
       public bool IncludeAutoReferences { get; set; } = false;
@@ -166,7 +168,7 @@ namespace DotNetOutdated
                ReportOutdatedDependencies(outdatedProjects, console);
 
                // Upgrade the packages
-               var success = UpgradePackages(outdatedProjects, console);
+               var success = await UpgradePackagesAsync(outdatedProjects, console).ConfigureAwait(false);
 
                if (!Upgrade.HasValue)
                {
@@ -200,7 +202,7 @@ namespace DotNetOutdated
          }
       }
 
-      internal bool UpgradePackages(List<AnalyzedProject> projects, IConsole console)
+      internal async Task<bool> UpgradePackagesAsync(List<AnalyzedProject> projects, IConsole console)
       {
          bool success = true;
 
@@ -215,6 +217,17 @@ namespace DotNetOutdated
             bool upgrade = true;
             string referenceNoun = package.Kind == ReferenceKind.Sdk ? "SDK" : "package";
 
+            // A target framework the new version declares unsupported (with a build warning) keeps its version; the
+            // others are upgraded.
+            var heldBack = await FindUnsupportedTargetFrameworksAsync(package).ConfigureAwait(false);
+            var upgradedProjects = package.Projects.Except(heldBack).ToList();
+            if (upgradedProjects.Count == 0)
+            {
+               WriteHeldBack(package, heldBack, [], console);
+               console.WriteLine();
+               continue;
+            }
+
             if (Upgrade.UpgradeType == UpgradeType.Prompt)
             {
                string resolvedVersion = package.ResolvedVersion?.ToString() ?? "";
@@ -225,10 +238,12 @@ namespace DotNetOutdated
                console.Write($" can be upgraded from {resolvedVersion} to ");
                console.Write(latestVersion, GetUpgradeSeverityColor(package.UpgradeSeverity));
                console.WriteLine(". The following project(s) will be affected:");
-               foreach (var project in package.Projects)
+               foreach (var project in upgradedProjects)
                {
                   WriteProjectName(project.Description, console);
                }
+
+               WriteHeldBack(package, heldBack, [], console);
 
                bool? answer = Prompt.GetYesNo(console, $"Do you wish to upgrade this {referenceNoun}?", true);
                if (answer is null)
@@ -254,11 +269,8 @@ namespace DotNetOutdated
                   Name = package.Name,
                   Kind = package.Kind,
                   Version = package.LatestVersion,
-                  Projects = package.Projects
-                     .Select(project => new UpgradeProject(
-                        project.ProjectFilePath,
-                        string.IsNullOrEmpty(project.TargetAlias) ? project.Framework.GetShortFolderName() : project.TargetAlias))
-                     .ToList(),
+                  Projects = upgradedProjects.Select(ToUpgradeProject).ToList(),
+                  HeldBack = heldBack.Select(ToUpgradeProject).ToList(),
                   NoRestore = NoRestore,
                   IgnoreFailedSources = IgnoreFailedSources,
                });
@@ -292,12 +304,62 @@ namespace DotNetOutdated
                      }
                   }
                }
+
+               // The prompt has listed the projects that keep their version already.
+               var upgradedToo = results.SelectMany(result => result.HeldBackUpgraded).ToHashSet();
+               WriteHeldBack(
+                  package,
+                  Upgrade.UpgradeType == UpgradeType.Prompt ? heldBack.Where(project => upgradedToo.Contains(ToUpgradeProject(project))).ToList() : heldBack,
+                  upgradedToo,
+                  console);
             }
 
             console.WriteLine();
          }
 
          return success;
+      }
+
+      private static UpgradeProject ToUpgradeProject(PackageProjectReference project) =>
+         new(project.ProjectFilePath, string.IsNullOrEmpty(project.TargetAlias) ? project.Framework.GetShortFolderName() : project.TargetAlias);
+
+      // The projects (target frameworks) the package's new version declares unsupported.
+      private async Task<List<PackageProjectReference>> FindUnsupportedTargetFrameworksAsync(ConsolidatedPackage package)
+      {
+         if (package.Kind != ReferenceKind.Package)
+         {
+            return [];
+         }
+
+         var checks = await Task.WhenAll(package.Projects.Select(async project => (
+            Project: project,
+            Unsupported: await _nuGetPackageInfoService.DeclaresTargetFrameworkUnsupportedAsync(new TargetFrameworkSupportQuery
+            {
+               PackageId = package.Name,
+               Version = package.LatestVersion,
+               TargetFramework = project.Framework,
+               Sources = project.Sources,
+               ProjectFilePath = project.ProjectFilePath,
+            }).ConfigureAwait(false)))).ConfigureAwait(false);
+
+         return checks.Where(check => check.Unsupported).Select(check => check.Project).ToList();
+      }
+
+      // Says why each held-back project wasn't upgraded, or, for one that shares its version with an upgraded project
+      // (in upgradedToo), that it was upgraded anyway.
+      private static void WriteHeldBack(ConsolidatedPackage package, List<PackageProjectReference> heldBack, HashSet<UpgradeProject> upgradedToo, IConsole console)
+      {
+         foreach (var project in heldBack)
+         {
+            string framework = project.Framework.GetShortFolderName();
+            console.WriteLine(
+               upgradedToo.Contains(ToUpgradeProject(project))
+                  ? $"{package.Name} {package.LatestVersion} doesn't support {framework}, but {project.Description} shares its version with a target framework that was upgraded, " +
+                    $"so it was upgraded too. Declare the reference separately for each target framework to keep {framework} on {package.ResolvedVersion}."
+                  : $"{package.Name} {package.LatestVersion} doesn't support {framework}, so {project.Description} keeps {package.ResolvedVersion}. " +
+                    "Move to a supported target framework to upgrade it.",
+               ConsoleColor.Yellow);
+         }
       }
 
       /// <summary>
@@ -474,7 +536,17 @@ namespace DotNetOutdated
 
          var outdatedProjects = await _outdatedDependencyService.FindOutdatedAsync(projects, options).ConfigureAwait(false);
 
-         return outdatedProjects.Select(AnalyzedProject.From).ToList();
+         var sources = projects
+            .GroupBy(project => project.FilePath, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First().Sources, StringComparer.OrdinalIgnoreCase);
+         return outdatedProjects
+            .Select(project =>
+            {
+               var analyzed = AnalyzedProject.From(project);
+               analyzed.Sources = sources.GetValueOrDefault(project.FilePath) ?? [];
+               return analyzed;
+            })
+            .ToList();
       }
 
       private NuGetVersion ParseMaximumVersion()

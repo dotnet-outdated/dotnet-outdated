@@ -19,6 +19,7 @@ namespace DotNetOutdated
                            {
                                Project = p.Name,
                                ProjectFilePath = p.FilePath,
+                               Sources = p.Sources,
                                TargetFramework = f.Name,
                                TargetAlias = f.TargetAlias,
                                Dependency = d.Name,
@@ -54,6 +55,7 @@ namespace DotNetOutdated
                     {
                         Project = v.Project,
                         ProjectFilePath = v.ProjectFilePath,
+                        Sources = v.Sources,
                         Framework = v.TargetFramework,
                         TargetAlias = v.TargetAlias,
                     }).ToList()

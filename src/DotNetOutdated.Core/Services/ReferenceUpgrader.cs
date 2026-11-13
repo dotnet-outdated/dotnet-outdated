@@ -53,15 +53,49 @@ namespace DotNetOutdated.Core.Services
 
             lock (_gate)
             {
+                var heldBack = HeldBackLocations(upgrade);
+
                 // A project listed once per target framework is upgraded once, for all of those target frameworks.
                 return upgrade.Projects
                     .GroupBy(project => _fileSystem.Path.GetFullPath(project.Path), StringComparer.OrdinalIgnoreCase)
                     .Select(projects => UpgradeProject(
                         upgrade,
                         projects.First().Path,
-                        [.. projects.Select(p => p.TargetFramework).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase)]))
+                        [.. projects.Select(p => p.TargetFramework).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase)],
+                        heldBack))
                     .ToList();
             }
+        }
+
+        // The held-back projects by where their package version is written, read before anything is written.
+        private ILookup<string, UpgradeProject> HeldBackLocations(ReferenceUpgrade upgrade)
+        {
+            var directives = new FileBasedAppDirectives(_fileSystem, _evaluator, _ => { });
+            var locator = new VersionLocator(_fileSystem, _evaluator, directives);
+            return upgrade.HeldBack
+                .Where(project => locator.ResolveKind(project.Path, upgrade.Name, upgrade.Kind) == ReferenceKind.Package)
+                .ToLookup(project => PackageVersionLocation(project.Path, upgrade.Name, project.TargetFramework), StringComparer.OrdinalIgnoreCase);
+        }
+
+        // Identifies where a package's version is written for a target framework of a project, so that target
+        // frameworks and projects that share it can be told apart from those that don't. A package the project gives
+        // no version is added for that target framework alone.
+        private string PackageVersionLocation(string projectPath, string name, string? targetFramework)
+        {
+            var fullPath = _fileSystem.Path.GetFullPath(projectPath);
+            if (projectPath.IsCSharpFile())
+            {
+                return fullPath;
+            }
+
+            if (!_evaluator.GetPackageVersions(projectPath, targetFramework).TryGetValue(name, out var declaration))
+            {
+                return $"{fullPath}|{targetFramework}";
+            }
+
+            return declaration.Variable is { UnsupportedReason: null } variable
+                ? VariableLocation(variable)
+                : $"{_fileSystem.Path.GetFullPath(declaration.FilePath)}|{declaration.ElementType}|{declaration.ElementIndex}";
         }
 
         /// <summary>
@@ -82,6 +116,8 @@ namespace DotNetOutdated.Core.Services
             MSBuildVariableWriter VariableWriter)
         {
             public string Name => Upgrade.Name;
+
+            public List<UpgradeProject> HeldBackUpgraded { get; } = [];
         }
 
         // What writing a project's version location did.
@@ -97,13 +133,23 @@ namespace DotNetOutdated.Core.Services
         // `dotnet add package` changed the version, and restored the project unless --no-restore was set.
         private sealed record AddedWithDotNet(RunStatus Status) : Write;
 
-        private ProjectUpgradeResult UpgradeProject(ReferenceUpgrade upgrade, string projectPath, IReadOnlyList<string> targetFrameworks)
+        private ProjectUpgradeResult UpgradeProject(ReferenceUpgrade upgrade, string projectPath, IReadOnlyList<string> targetFrameworks, ILookup<string, UpgradeProject> heldBack)
         {
             var warnings = new List<string>();
             var directives = new FileBasedAppDirectives(_fileSystem, _evaluator, warnings.Add);
             var context = new Context(upgrade, projectPath, warnings, directives, new MSBuildVariableWriter(_fileSystem, warnings.Add));
             var locator = new VersionLocator(_fileSystem, _evaluator, directives);
             var kind = locator.ResolveKind(projectPath, upgrade.Name, upgrade.Kind);
+
+            // A held-back project whose version is written where one of these target frameworks' is gets the new
+            // version too. Leaving both behind instead could leave a package upgraded for this target framework
+            // depending on a newer version than the one kept, which restore rejects as a downgrade (NU1605).
+            if (kind == ReferenceKind.Package && heldBack.Count > 0)
+            {
+                context.HeldBackUpgraded.AddRange((targetFrameworks.Count == 0 ? [null] : targetFrameworks.Cast<string?>())
+                    .SelectMany(targetFramework => heldBack[PackageVersionLocation(projectPath, upgrade.Name, targetFramework)])
+                    .Distinct());
+            }
 
             VersionRange? removedRange = null;
             if (kind == ReferenceKind.Package && !IsSdkStyleProject(projectPath))
@@ -238,6 +284,7 @@ namespace DotNetOutdated.Core.Services
             Outcome = outcome,
             FailureDetails = outcome == UpgradeOutcome.Failed ? failureDetails : string.Empty,
             Warnings = context.Warnings,
+            HeldBackUpgraded = outcome == UpgradeOutcome.Upgraded ? context.HeldBackUpgraded : [],
         };
 
         private Write UpdateFileBasedVariable(Context context, PackageVariableInfo variableInfo)

@@ -1912,6 +1912,137 @@ Information(""Outdated Sdk"");")
         }
 
         [Fact]
+        public void AHeldBackTargetFramework_WithItsOwnReference_LeavesTheOthersToBeUpgraded()
+        {
+            var projectPath = XFS.Path(@"c:\repo\MyProject.csproj");
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                [projectPath] = new(
+                    """
+                    <Project Sdk="Microsoft.NET.Sdk">
+                      <PropertyGroup><TargetFrameworks>net8.0;net10.0</TargetFrameworks></PropertyGroup>
+                      <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'"><PackageReference Include="Foo" Version="1.0.0" /></ItemGroup>
+                      <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'"><PackageReference Include="Foo" Version="1.0.0" /></ItemGroup>
+                    </Project>
+                    """),
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
+
+            var result = Assert.Single(service.Upgrade(new ReferenceUpgrade
+            {
+                Name = "Foo",
+                Version = new NuGetVersion("2.0.0"),
+                Projects = [new UpgradeProject(projectPath, "net10.0")],
+                HeldBack = [new UpgradeProject(projectPath, "net8.0")],
+            }));
+
+            Assert.Equal(UpgradeOutcome.Upgraded, result.Outcome);
+            Assert.Empty(result.Warnings);
+            Assert.Empty(result.HeldBackUpgraded);
+            dotNetRunner.Received(1).Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[0] == "add" && a[7] == "net10.0"));
+            dotNetRunner.DidNotReceive().Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[0] == "add" && a[7] == "net8.0"));
+        }
+
+        // Leaving the shared reference behind could leave another package, upgraded for net10.0, depending on a newer
+        // version than it, which restore rejects as a downgrade (NU1605).
+        [Fact]
+        public void AReferenceSharedWithAHeldBackTargetFramework_IsUpgradedForBoth_AndSaysSo()
+        {
+            var projectPath = XFS.Path(@"c:\repo\MyProject.csproj");
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                [projectPath] = new(
+                    """
+                    <Project Sdk="Microsoft.NET.Sdk">
+                      <PropertyGroup><TargetFrameworks>net8.0;net10.0</TargetFrameworks></PropertyGroup>
+                      <ItemGroup><PackageReference Include="Foo" Version="1.0.0" /></ItemGroup>
+                    </Project>
+                    """),
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
+
+            var result = Assert.Single(service.Upgrade(new ReferenceUpgrade
+            {
+                Name = "Foo",
+                Version = new NuGetVersion("2.0.0"),
+                Projects = [new UpgradeProject(projectPath, "net10.0")],
+                HeldBack = [new UpgradeProject(projectPath, "net8.0")],
+            }));
+
+            Assert.Equal(UpgradeOutcome.Upgraded, result.Outcome);
+            Assert.Equal([new UpgradeProject(projectPath, "net8.0")], result.HeldBackUpgraded);
+            dotNetRunner.Received(1).Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[0] == "add" && a[7] == "net10.0"));
+        }
+
+        [Fact]
+        public void ACentralVersionSharedWithAHeldBackProject_IsUpgradedForBoth_AndSaysSo()
+        {
+            var propsPath = XFS.Path(@"c:\repo\Directory.Packages.props");
+            var oldProjectPath = XFS.Path(@"c:\repo\Old\Old.csproj");
+            var newProjectPath = XFS.Path(@"c:\repo\New\New.csproj");
+            const string projectContent = """<Project Sdk="Microsoft.NET.Sdk"><ItemGroup><PackageReference Include="Newtonsoft.Json" /></ItemGroup></Project>""";
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                [propsPath] = new(DirectoryPackagesPropsContent),
+                [oldProjectPath] = new(projectContent),
+                [newProjectPath] = new(projectContent),
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
+
+            var result = Assert.Single(service.Upgrade(new ReferenceUpgrade
+            {
+                Name = "Newtonsoft.Json",
+                Version = new NuGetVersion("13.0.1"),
+                Projects = [new UpgradeProject(newProjectPath, "net10.0")],
+                HeldBack = [new UpgradeProject(oldProjectPath, "net8.0")],
+                NoRestore = true,
+            }));
+
+            Assert.Equal(UpgradeOutcome.Upgraded, result.Outcome);
+            Assert.Equal([new UpgradeProject(oldProjectPath, "net8.0")], result.HeldBackUpgraded);
+            Assert.Contains("Version=\"13.0.1\"", fileSystem.File.ReadAllText(propsPath));
+        }
+
+        [Fact]
+        public void OnlyTheHeldBackTargetFrameworksSharingAnUpgradedReference_AreUpgradedWithIt()
+        {
+            var projectPath = XFS.Path(@"c:\repo\MyProject.csproj");
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                [projectPath] = new(
+                    """
+                    <Project Sdk="Microsoft.NET.Sdk">
+                      <PropertyGroup><TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks></PropertyGroup>
+                      <ItemGroup Condition="'$(TargetFramework)' != 'net10.0'"><PackageReference Include="Foo" Version="1.0.0" /></ItemGroup>
+                      <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'"><PackageReference Include="Foo" Version="1.0.0" /></ItemGroup>
+                    </Project>
+                    """),
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
+
+            var result = Assert.Single(service.Upgrade(new ReferenceUpgrade
+            {
+                Name = "Foo",
+                Version = new NuGetVersion("2.0.0"),
+                Projects = [new UpgradeProject(projectPath, "net10.0")],
+                HeldBack = [new UpgradeProject(projectPath, "net8.0"), new UpgradeProject(projectPath, "net9.0")],
+            }));
+
+            // net8.0 and net9.0 share a reference, but not with net10.0.
+            Assert.Equal(UpgradeOutcome.Upgraded, result.Outcome);
+            Assert.Empty(result.HeldBackUpgraded);
+            dotNetRunner.Received(1).Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[0] == "add" && a[7] == "net10.0"));
+            dotNetRunner.ReceivedWithAnyArgs(1).Run(default, default);
+        }
+
+        [Fact]
         public void AProjectListedOncePerTargetFramework_KeepsEachTargetFrameworksUpperBound()
         {
             var projectPath = XFS.Path(@"c:\repo\MyProject.csproj");

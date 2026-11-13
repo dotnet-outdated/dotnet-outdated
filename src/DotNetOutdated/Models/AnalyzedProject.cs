@@ -21,6 +21,10 @@ namespace DotNetOutdated.Models
         [JsonPropertyOrder(1)]
         public string FilePath { get; set; }
 
+        /// <summary>The package sources the project restores from.</summary>
+        [JsonIgnore]
+        public IReadOnlyList<System.Uri> Sources { get; set; } = [];
+
         public static AnalyzedProject From(OutdatedProject project) =>
             new(project.Name, project.FilePath, project.TargetFrameworks.Select(targetFramework =>
                 new AnalyzedTargetFramework(targetFramework.Name, targetFramework.Dependencies.Select(dependency => new AnalyzedDependency(dependency)))
