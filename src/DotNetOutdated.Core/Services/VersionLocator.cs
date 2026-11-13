@@ -77,7 +77,11 @@ internal sealed class VersionLocator(IFileSystem fileSystem, IProjectEvaluator e
             ? FileBasedAppReferenceKind(projectPath, name)
             : ProjectReferenceKind(projectPath, name));
 
-    public VersionLocation Locate(string projectPath, string name, ReferenceKind kind)
+    /// <param name="targetFramework">
+    /// The target framework the reference is upgraded for: a package declared separately for several target frameworks
+    /// is located where this one declares it.
+    /// </param>
+    public VersionLocation Locate(string projectPath, string name, ReferenceKind kind, string? targetFramework = null)
     {
         if (projectPath.IsCSharpFile())
         {
@@ -86,7 +90,7 @@ internal sealed class VersionLocator(IFileSystem fileSystem, IProjectEvaluator e
 
         return kind == ReferenceKind.Sdk
             ? LocateProjectSdk(projectPath, name)
-            : LocatePackage(projectPath, name);
+            : LocatePackage(projectPath, name, targetFramework);
     }
 
     private ReferenceKind ProjectReferenceKind(string projectPath, string name) =>
@@ -164,9 +168,9 @@ internal sealed class VersionLocator(IFileSystem fileSystem, IProjectEvaluator e
                 $"Failed to update the version of SDK '{name}' in '{projectPath}': the project file declares no versioned SDK with that name.");
     }
 
-    private VersionLocation LocatePackage(string projectPath, string name)
+    private VersionLocation LocatePackage(string projectPath, string name, string? targetFramework)
     {
-        if (!_evaluator.GetPackageVersions(projectPath).TryGetValue(name, out var declaration))
+        if (!_evaluator.GetPackageVersions(projectPath, targetFramework).TryGetValue(name, out var declaration))
         {
             return new LiteralVersion();
         }

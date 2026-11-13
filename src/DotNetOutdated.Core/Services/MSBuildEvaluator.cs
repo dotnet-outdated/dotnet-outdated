@@ -87,7 +87,13 @@ internal sealed class MSBuildEvaluator(IFileSystem fileSystem)
     /// <c>VersionOverride</c>) takes precedence over a <c>GlobalPackageReference</c>, which takes precedence over a
     /// <c>PackageVersion</c>.
     /// </summary>
-    public Dictionary<string, PackageVersionDeclaration> PackageVersions(string projectFilePath)
+    /// <param name="targetFramework">
+    /// The target framework (as <c>$(TargetFramework)</c> holds it) to prefer items for, when the project doesn't set
+    /// one itself: a package declared under <c>Condition="'$(TargetFramework)' == '...'"</c> for several target
+    /// frameworks gets this one's item. Without it, or for a package this target framework has no item for, the last
+    /// item whose condition isn't known to be false is used.
+    /// </param>
+    public Dictionary<string, PackageVersionDeclaration> PackageVersions(string projectFilePath, string? targetFramework = null)
     {
         var result = new Dictionary<string, PackageVersionDeclaration>(StringComparer.OrdinalIgnoreCase);
         if (!_fileSystem.File.Exists(projectFilePath))
@@ -96,6 +102,35 @@ internal sealed class MSBuildEvaluator(IFileSystem fileSystem)
         }
 
         var state = Evaluate(projectFilePath, includeProjectFile: true);
+        AddPackageVersions(state, result);
+
+        // A multi-targeted project is built once per target framework, with $(TargetFramework) set from outside the
+        // files evaluated here, so item conditions on it were unknown above. Evaluate the items again as that build
+        // would. Properties are left as evaluated: only items are certain to come after $(TargetFramework) is set.
+        if (!string.IsNullOrEmpty(targetFramework) && !state.Properties.ContainsKey(TargetFrameworkProperty))
+        {
+            state.Properties[TargetFrameworkProperty] = new PropertyDefinition
+            {
+                Name = TargetFrameworkProperty,
+                RawValue = targetFramework,
+                Value = targetFramework,
+                FilePath = state.ProjectPath,
+                ElementIndex = -1,
+            };
+            state.PackageReferences.Clear();
+            state.GlobalPackageReferences.Clear();
+            state.PackageVersions.Clear();
+            EvaluateItems(state);
+            AddPackageVersions(state, result);
+        }
+
+        return result;
+    }
+
+    private const string TargetFrameworkProperty = "TargetFramework";
+
+    private static void AddPackageVersions(EvaluationState state, Dictionary<string, PackageVersionDeclaration> result)
+    {
         var packageNames = state.PackageReferences.Keys
             .Concat(state.GlobalPackageReferences.Keys)
             .Concat(state.PackageVersions.Keys)
@@ -115,8 +150,6 @@ internal sealed class MSBuildEvaluator(IFileSystem fileSystem)
                 item.VersionValue != null && VersionRange.TryParse(item.VersionValue, out var range) ? range : null,
                 CreatePackageVariableInfo(item, state));
         }
-
-        return result;
     }
 
     /// <summary>
@@ -137,7 +170,12 @@ internal sealed class MSBuildEvaluator(IFileSystem fileSystem)
         }
 
         EvaluateFileIfPresent(FindFileAbove(projectDirectory, "Directory.Build.targets"), state);
+        EvaluateItems(state);
+        return state;
+    }
 
+    private void EvaluateItems(EvaluationState state)
+    {
         var groupConditions = new Dictionary<XElement, bool?>();
         foreach (var (item, group, filePath) in state.PendingItems)
         {
@@ -151,8 +189,6 @@ internal sealed class MSBuildEvaluator(IFileSystem fileSystem)
                 EvaluateItem(item, filePath, state);
             }
         }
-
-        return state;
     }
 
     private string? FindFileAbove(string startDirectory, string fileName)

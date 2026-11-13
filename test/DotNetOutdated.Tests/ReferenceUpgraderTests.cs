@@ -1760,6 +1760,64 @@ Information(""Outdated Sdk"");")
         }
 
         [Fact]
+        public void ALocationChangedBackSinceAnUpgrade_RestoresItsProjectsWhenWrittenAgain()
+        {
+            // An upgrader outlives one upgrade (the MCP server keeps one), and the file can change between two:
+            // what was restored at the version before says nothing about the version written now.
+            var packagesPath = XFS.Path(@"c:\repo\Directory.Packages.props");
+            var projectA = XFS.Path(@"c:\repo\A\A.csproj");
+            var projectB = XFS.Path(@"c:\repo\B\B.csproj");
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                [packagesPath] = new(GlobalPackageReferenceContent),
+                [projectA] = new(SdkProjectContent),
+                [projectB] = new(SdkProjectContent),
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
+            var upgrade = new ReferenceUpgrade
+            {
+                Name = "SomeAnalyzer",
+                Version = new NuGetVersion("2.0.0"),
+                Projects = [new UpgradeProject(projectA, "net8.0"), new UpgradeProject(projectB, "net8.0")],
+            };
+
+            service.Upgrade(upgrade);
+            fileSystem.File.WriteAllText(packagesPath, GlobalPackageReferenceContent);
+            var results = service.Upgrade(upgrade);
+
+            Assert.All(results, result => Assert.Equal(UpgradeOutcome.Upgraded, result.Outcome));
+            Assert.Equal(GlobalPackageReferenceContent.Replace("1.0.0", "2.0.0"), fileSystem.File.ReadAllText(packagesPath));
+            dotNetRunner.Received(2).Run(XFS.Path(@"c:\repo\A"), Arg.Is<string[]>(a => a[0] == "restore"));
+            dotNetRunner.Received(2).Run(XFS.Path(@"c:\repo\B"), Arg.Is<string[]>(a => a[0] == "restore"));
+        }
+
+        [Fact]
+        public void ALocationSetBackToAnEarlierVersionByHand_IsAlreadyCurrent()
+        {
+            var packagesPath = XFS.Path(@"c:\repo\Directory.Packages.props");
+            var projectPath = XFS.Path(@"c:\repo\A\A.csproj");
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                [packagesPath] = new(GlobalPackageReferenceContent),
+                [projectPath] = new(SdkProjectContent),
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
+
+            service.Upgrade(projectPath, "SomeAnalyzer", "net8.0", new NuGetVersion("2.0.0"));
+            service.Upgrade(projectPath, "SomeAnalyzer", "net8.0", new NuGetVersion("3.0.0"));
+            fileSystem.File.WriteAllText(packagesPath, GlobalPackageReferenceContent.Replace("1.0.0", "2.0.0"));
+            var result = service.Upgrade(projectPath, "SomeAnalyzer", "net8.0", new NuGetVersion("2.0.0"));
+
+            // This upgrader last wrote 3.0.0 there; 2.0.0 is someone else's, as if it had never written it.
+            Assert.Equal(UpgradeOutcome.AlreadyCurrent, result.Outcome);
+            dotNetRunner.Received(2).Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[0] == "restore"));
+        }
+
+        [Fact]
         public void ALocationAlreadyAtTheVersion_IsAlreadyCurrentAndNotRestored()
         {
             var packagesPath = XFS.Path(@"c:\repo\Directory.Packages.props");
@@ -1809,6 +1867,67 @@ Information(""Outdated Sdk"");")
             dotNetRunner.Received(1).Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[0] == "add" && a[6] == "-f" && a[7] == "net8.0"));
             dotNetRunner.Received(1).Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[0] == "add" && a[6] == "-f" && a[7] == "net9.0"));
             dotNetRunner.ReceivedWithAnyArgs(2).Run(default, default);
+        }
+
+        [Theory]
+        [InlineData("net8.0", "8.0.5", "[8.0.5, 9.0.0)")]
+        [InlineData("net9.0", "9.0.3", "[9.0.3, 10.0.0)")]
+        // Outside this target framework's range, though inside the other's.
+        [InlineData("net8.0", "9.0.3", "9.0.3")]
+        public void AReferenceDeclaredPerTargetFramework_KeepsThatTargetFrameworksUpperBound(string targetFramework, string version, string expectedArgument)
+        {
+            var projectPath = XFS.Path(@"c:\repo\MyProject.csproj");
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                [projectPath] = new(
+                    """
+                    <Project Sdk="Microsoft.NET.Sdk">
+                      <PropertyGroup><TargetFrameworks>net8.0;net9.0</TargetFrameworks></PropertyGroup>
+                      <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'"><PackageReference Include="Foo" Version="[8.0.0, 9.0.0)" /></ItemGroup>
+                      <ItemGroup Condition="'$(TargetFramework)' == 'net9.0'"><PackageReference Include="Foo" Version="[9.0.0, 10.0.0)" /></ItemGroup>
+                    </Project>
+                    """),
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
+
+            var result = service.Upgrade(projectPath, "Foo", targetFramework, NuGetVersion.Parse(version));
+
+            Assert.Equal(UpgradeOutcome.Upgraded, result.Outcome);
+            dotNetRunner.Received(1).Run(
+                Arg.Any<string>(),
+                Arg.Is<string[]>(a => a[0] == "add" && a[5] == expectedArgument && a[7] == targetFramework));
+        }
+
+        [Fact]
+        public void AProjectListedOncePerTargetFramework_KeepsEachTargetFrameworksUpperBound()
+        {
+            var projectPath = XFS.Path(@"c:\repo\MyProject.csproj");
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                [projectPath] = new(
+                    """
+                    <Project Sdk="Microsoft.NET.Sdk">
+                      <PropertyGroup><TargetFrameworks>net8.0;net9.0</TargetFrameworks></PropertyGroup>
+                      <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'"><PackageReference Include="Foo" Version="[1.0.0, 3.0.0)" /></ItemGroup>
+                      <ItemGroup Condition="'$(TargetFramework)' == 'net9.0'"><PackageReference Include="Foo" Version="[1.0.0, 4.0.0)" /></ItemGroup>
+                    </Project>
+                    """),
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
+
+            service.Upgrade(new ReferenceUpgrade
+            {
+                Name = "Foo",
+                Version = new NuGetVersion("2.0.0"),
+                Projects = [new UpgradeProject(projectPath, "net8.0"), new UpgradeProject(projectPath, "net9.0")],
+            });
+
+            dotNetRunner.Received(1).Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[5] == "[2.0.0, 3.0.0)" && a[7] == "net8.0"));
+            dotNetRunner.Received(1).Run(Arg.Any<string>(), Arg.Is<string[]>(a => a[5] == "[2.0.0, 4.0.0)" && a[7] == "net9.0"));
         }
 
         [Fact]

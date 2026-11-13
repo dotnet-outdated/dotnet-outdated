@@ -29,7 +29,7 @@ namespace DotNetOutdated.Tests
             public IReadOnlyList<PackageReferenceItem>? GetPackageReferenceItems(string projectPath, string targetFramework, string? runtime) =>
                 throw new NotSupportedException();
 
-            public IReadOnlyDictionary<string, PackageVersionDeclaration> GetPackageVersions(string projectPath) => PackageVersions;
+            public IReadOnlyDictionary<string, PackageVersionDeclaration> GetPackageVersions(string projectPath, string? targetFramework = null) => PackageVersions;
 
             public IReadOnlyDictionary<string, ImportedProperty> GetImportedProperties(string appPath) =>
                 new Dictionary<string, ImportedProperty>();

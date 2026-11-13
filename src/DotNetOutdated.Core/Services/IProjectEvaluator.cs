@@ -37,7 +37,12 @@ internal interface IProjectEvaluator
     /// precedence over a <c>GlobalPackageReference</c>, which takes precedence over a central <c>PackageVersion</c>.
     /// Packages the project doesn't give a version are left out.
     /// </summary>
-    IReadOnlyDictionary<string, PackageVersionDeclaration> GetPackageVersions(string projectPath);
+    /// <param name="targetFramework">
+    /// A target framework of the project (short folder name or alias). A package whose version is declared separately
+    /// for several target frameworks gets the item declared for this one; when <see langword="null"/>, or the package
+    /// has no item for it, any of them.
+    /// </param>
+    IReadOnlyDictionary<string, PackageVersionDeclaration> GetPackageVersions(string projectPath, string? targetFramework = null);
 
     /// <summary>
     /// The properties that the <c>Directory.*</c> files MSBuild would import define for a file-based app, keyed by

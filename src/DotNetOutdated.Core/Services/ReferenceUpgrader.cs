@@ -23,11 +23,16 @@ namespace DotNetOutdated.Core.Services
         // Files are edited in place, so one upgrade runs at a time.
         private readonly object _gate = new();
 
-        // Each version location (a file, the name it holds and the value written) this upgrader has written, and each
-        // project restored after one reached its value. A location shared by several projects, or written by an
-        // earlier upgrade (another target framework's), is written once and restores each project once.
-        private readonly HashSet<string> _writtenLocations = new(StringComparer.OrdinalIgnoreCase);
-        private readonly HashSet<string> _restoredProjects = new(StringComparer.OrdinalIgnoreCase);
+        // For each version location (a file and the name it holds) this upgrader has written: the value it last wrote
+        // there, and the projects restored since. A location shared by several projects, or written by an earlier
+        // upgrade (another target framework's), is written once and restores each project once. Writing it again
+        // forgets those restores, so a location that was changed back in between restores its projects again.
+        private readonly Dictionary<string, WrittenLocation> _writtenLocations = new(StringComparer.OrdinalIgnoreCase);
+
+        private sealed record WrittenLocation(string Value)
+        {
+            public HashSet<string> RestoredProjects { get; } = new(StringComparer.OrdinalIgnoreCase);
+        }
 
         public ReferenceUpgrader(IDotNetRunner dotNetRunner, IFileSystem fileSystem)
             : this(dotNetRunner, fileSystem, new DotNetProjectEvaluator(dotNetRunner, fileSystem))
@@ -84,8 +89,8 @@ namespace DotNetOutdated.Core.Services
 
         private sealed record WriteFailed(string Message) : Write;
 
-        // The location was written directly; Changed is false when it already held the value.
-        private sealed record Written(bool Changed, string Location) : Write;
+        // The location was written directly with Value; Changed is false when it already held that value.
+        private sealed record Written(bool Changed, string Location, string Value) : Write;
 
         // `dotnet add package` changed the version, and restored the project unless --no-restore was set.
         private sealed record AddedWithDotNet(RunStatus Status) : Write;
@@ -102,7 +107,7 @@ namespace DotNetOutdated.Core.Services
             if (kind == ReferenceKind.Package && !IsSdkStyleProject(projectPath))
             {
                 // Removing the reference takes its declared range with it, so read that first.
-                removedRange = locator.Locate(projectPath, upgrade.Name, kind).DeclaredRange;
+                removedRange = locator.Locate(projectPath, upgrade.Name, kind, targetFrameworks.FirstOrDefault()).DeclaredRange;
                 warnings.Add(
                     $"'{projectPath}' isn't an SDK-style project, so {upgrade.Name} was removed and added back at the new version.");
                 var removal = RemovePackage(projectPath, upgrade.Name);
@@ -132,11 +137,11 @@ namespace DotNetOutdated.Core.Services
         }
 
         // Finds the version location as it is now (an earlier target framework's `dotnet add package` may have changed
-        // it) and writes the new version there.
+        // it), where this target framework declares it, and writes the new version there.
         private Write WriteLocation(Context context, VersionLocator locator, ReferenceKind kind, VersionRange? removedRange, string? targetFramework)
         {
             var upgrade = context.Upgrade;
-            var location = locator.Locate(context.ProjectPath, upgrade.Name, kind);
+            var location = locator.Locate(context.ProjectPath, upgrade.Name, kind, targetFramework);
             var range = RangeFor(location.DeclaredRange ?? removedRange, upgrade.Version);
             return location switch
             {
@@ -167,15 +172,17 @@ namespace DotNetOutdated.Core.Services
                 case Written written:
                     if (written.Changed)
                     {
-                        _writtenLocations.Add(written.Location);
+                        // No project has been restored since this write, whatever was restored at the value before.
+                        _writtenLocations[written.Location] = new WrittenLocation(written.Value);
                     }
-                    else if (!_writtenLocations.Contains(written.Location))
+                    else if (!WroteValue(written.Location, written.Value))
                     {
                         return Result(context, UpgradeOutcome.AlreadyCurrent);
                     }
 
-                    var restoreKey = $"{_fileSystem.Path.GetFullPath(context.ProjectPath)}|{written.Location}";
-                    if (context.Upgrade.NoRestore || _restoredProjects.Contains(restoreKey))
+                    var restoredProjects = _writtenLocations[written.Location].RestoredProjects;
+                    var projectFullPath = _fileSystem.Path.GetFullPath(context.ProjectPath);
+                    if (context.Upgrade.NoRestore || restoredProjects.Contains(projectFullPath))
                     {
                         return Result(context, UpgradeOutcome.Upgraded);
                     }
@@ -186,13 +193,18 @@ namespace DotNetOutdated.Core.Services
                         return Result(context, UpgradeOutcome.Failed, restore.FailureDetails);
                     }
 
-                    _restoredProjects.Add(restoreKey);
+                    restoredProjects.Add(projectFullPath);
                     return Result(context, UpgradeOutcome.Upgraded);
 
                 default:
                     throw new InvalidOperationException($"Unexpected write {write}.");
             }
         }
+
+        // Whether the value at the location is the one this upgrader last wrote there.
+        private bool WroteValue(string location, string value) =>
+            _writtenLocations.TryGetValue(location, out var written) &&
+            string.Equals(written.Value, value, StringComparison.OrdinalIgnoreCase);
 
         private static ProjectUpgradeResult Result(Context context, UpgradeOutcome outcome, string failureDetails = "") => new()
         {
@@ -205,14 +217,14 @@ namespace DotNetOutdated.Core.Services
         private Write UpdateFileBasedVariable(Context context, PackageVariableInfo variableInfo)
         {
             var version = context.Upgrade.Version;
-            var location = $"{variableInfo.FilePath}|$({variableInfo.VariableName})|{version}";
+            var location = VariableLocation(variableInfo);
             if (context.Directives.TryUpdateVariable(variableInfo, version))
             {
-                return new Written(true, location);
+                return new Written(true, location, version.ToString());
             }
 
             return IsFileBasedAppVariableAtRequestedVersion(variableInfo, version)
-                ? new Written(false, location)
+                ? new Written(false, location, version.ToString())
                 : new WriteFailed(
                     $"Failed to update file-based app '{context.ProjectPath}' for '{context.Name}'. " +
                     "Could not update the matching #:property value or #:package/#:sdk directive.");
@@ -221,14 +233,14 @@ namespace DotNetOutdated.Core.Services
         private Write UpdateFileBasedDirective(Context context, FileBasedAppReference reference)
         {
             var version = context.Upgrade.Version;
-            var location = $"{_fileSystem.Path.GetFullPath(context.ProjectPath)}|#:{reference.Kind} {reference.Name}|{version}";
+            var location = $"{_fileSystem.Path.GetFullPath(context.ProjectPath)}|#:{reference.Kind} {reference.Name}";
             if (context.Directives.TryUpdateDirectReference(context.ProjectPath, reference.Name, reference.Kind, version))
             {
-                return new Written(true, location);
+                return new Written(true, location, version.ToString());
             }
 
             return reference.ResolvedVersion == version
-                ? new Written(false, location)
+                ? new Written(false, location, version.ToString())
                 : new WriteFailed(
                     $"Failed to update file-based app '{context.ProjectPath}' for '{context.Name}'. " +
                     $"Expected a literal #:sdk {context.Name}@<version> directive (id match is case-insensitive; trailing comments are preserved).");
@@ -238,7 +250,7 @@ namespace DotNetOutdated.Core.Services
         private Write UpdateProjectSdk(Context context, ProjectSdkReference sdk)
         {
             var version = context.Upgrade.Version;
-            var location = $"{_fileSystem.Path.GetFullPath(context.ProjectPath)}|Sdk {context.Name}|{version}";
+            var location = $"{_fileSystem.Path.GetFullPath(context.ProjectPath)}|Sdk {context.Name}";
             bool updated;
             try
             {
@@ -251,11 +263,11 @@ namespace DotNetOutdated.Core.Services
 
             if (updated)
             {
-                return new Written(true, location);
+                return new Written(true, location, version.ToString());
             }
 
             return sdk.ResolvedVersion == version
-                ? new Written(false, location)
+                ? new Written(false, location, version.ToString())
                 : new WriteFailed($"Failed to update the version of SDK '{context.Name}' in '{context.ProjectPath}'.");
         }
 
@@ -263,21 +275,22 @@ namespace DotNetOutdated.Core.Services
         // can't edit the reference.
         private static Write UpdateVariable(Context context, PackageVariableInfo variableInfo, VersionRange range)
         {
-            var location = VariableLocation(variableInfo, range);
+            var location = VariableLocation(variableInfo);
+            var versionText = range.ToVersionString();
             if (context.VariableWriter.TryUpdate(variableInfo, range))
             {
-                return new Written(true, location);
+                return new Written(true, location, versionText);
             }
 
             return MSBuildVariableWriter.IsAtVersionRange(variableInfo, range)
-                ? new Written(false, location)
+                ? new Written(false, location, versionText)
                 : new WriteFailed(
                     $"Failed to update '{context.Name}': could not write '{range.ToVersionString()}' to the " +
                     $"$({variableInfo.VariableName}) property in '{variableInfo.FilePath}'.");
         }
 
-        private static string VariableLocation(PackageVariableInfo variableInfo, VersionRange range) =>
-            $"{variableInfo.FilePath}|$({variableInfo.VariableName})|{range.ToVersionString()}";
+        private static string VariableLocation(PackageVariableInfo variableInfo) =>
+            $"{variableInfo.FilePath}|$({variableInfo.VariableName})";
 
         // Writes a GlobalPackageReference's literal version directly: `dotnet add package` would add a PackageReference
         // instead, which central package management rejects.
@@ -302,7 +315,7 @@ namespace DotNetOutdated.Core.Services
                 file.Write(_fileSystem, filePath, newContent);
             }
 
-            return new Written(updated, $"{filePath}|{context.Name}|{versionText}");
+            return new Written(updated, $"{filePath}|{context.Name}", versionText);
         }
 
         private Write UpdateLiteral(Context context, LiteralVersion location, VersionRange range, string? targetFramework)
@@ -346,7 +359,7 @@ namespace DotNetOutdated.Core.Services
                 file.Write(_fileSystem, centralPackagesPath, newContent);
             }
 
-            return new Written(updated, $"{centralPackagesPath}|{context.Name}|{versionText}");
+            return new Written(updated, $"{centralPackagesPath}|{context.Name}", versionText);
         }
 
         // Runs `dotnet add package`, then puts back what it loses: the Directory.Packages.props layout and, when the
@@ -390,11 +403,16 @@ namespace DotNetOutdated.Core.Services
 
                 if (variableInfo != null)
                 {
+                    var location = VariableLocation(variableInfo);
+                    var variableChanges = !MSBuildVariableWriter.IsAtVersionRange(variableInfo, range);
                     context.VariableWriter.TryUpdate(variableInfo, range);
 
                     // A project that shares the variable but has it written directly then finds it written by this
                     // upgrader, not already current, and is restored.
-                    _writtenLocations.Add(VariableLocation(variableInfo, range));
+                    if (variableChanges || !WroteValue(location, versionText))
+                    {
+                        _writtenLocations[location] = new WrittenLocation(versionText);
+                    }
                 }
             }
 
