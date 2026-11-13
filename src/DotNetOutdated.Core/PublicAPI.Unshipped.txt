@@ -32,8 +32,21 @@ DotNetOutdated.Core.Models.OutdatedProject.FilePath.init -> void
 DotNetOutdated.Core.Models.OutdatedProject.Name.get -> string!
 DotNetOutdated.Core.Models.OutdatedProject.Name.init -> void
 DotNetOutdated.Core.Models.OutdatedProject.OutdatedProject() -> void
+DotNetOutdated.Core.Models.OutdatedProject.Sources.get -> System.Collections.Generic.IReadOnlyList<System.Uri!>!
+DotNetOutdated.Core.Models.OutdatedProject.Sources.init -> void
 DotNetOutdated.Core.Models.OutdatedProject.TargetFrameworks.get -> System.Collections.Generic.IReadOnlyList<DotNetOutdated.Core.Models.OutdatedTargetFramework!>!
 DotNetOutdated.Core.Models.OutdatedProject.TargetFrameworks.init -> void
+DotNetOutdated.Core.Models.OutdatedReport
+DotNetOutdated.Core.Models.OutdatedReport.<Clone>$() -> DotNetOutdated.Core.Models.OutdatedReport!
+DotNetOutdated.Core.Models.OutdatedReport.Equals(DotNetOutdated.Core.Models.OutdatedReport? other) -> bool
+override DotNetOutdated.Core.Models.OutdatedReport.Equals(object? obj) -> bool
+override DotNetOutdated.Core.Models.OutdatedReport.GetHashCode() -> int
+static DotNetOutdated.Core.Models.OutdatedReport.operator !=(DotNetOutdated.Core.Models.OutdatedReport? left, DotNetOutdated.Core.Models.OutdatedReport? right) -> bool
+static DotNetOutdated.Core.Models.OutdatedReport.operator ==(DotNetOutdated.Core.Models.OutdatedReport? left, DotNetOutdated.Core.Models.OutdatedReport? right) -> bool
+DotNetOutdated.Core.Models.OutdatedReport.OutdatedReport() -> void
+DotNetOutdated.Core.Models.OutdatedReport.Projects.get -> System.Collections.Generic.IReadOnlyList<DotNetOutdated.Core.Models.OutdatedProject!>!
+DotNetOutdated.Core.Models.OutdatedReport.Projects.init -> void
+override DotNetOutdated.Core.Models.OutdatedReport.ToString() -> string!
 DotNetOutdated.Core.Models.OutdatedTargetFramework
 DotNetOutdated.Core.Models.OutdatedTargetFramework.<Clone>$() -> DotNetOutdated.Core.Models.OutdatedTargetFramework!
 DotNetOutdated.Core.Models.OutdatedTargetFramework.Dependencies.get -> System.Collections.Generic.IReadOnlyList<DotNetOutdated.Core.Models.OutdatedDependency!>!
@@ -65,6 +78,7 @@ DotNetOutdated.Core.Models.TargetFramework.TargetFramework() -> void
 DotNetOutdated.Core.Services.INuGetPackageInfoService.GetAllVersionsAsync(DotNetOutdated.Core.Services.PackageVersionsQuery! query, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<NuGet.Versioning.NuGetVersion!>!>!
 DotNetOutdated.Core.Services.INuGetPackageResolutionService.ResolveLatestVersionAsync(DotNetOutdated.Core.Services.LatestVersionQuery! query, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<NuGet.Versioning.NuGetVersion!>!
 DotNetOutdated.Core.Services.IOutdatedDependencyService
+DotNetOutdated.Core.Services.IOutdatedDependencyService.FindOutdatedAsync(string! path, DotNetOutdated.Core.Services.OutdatedOptions? options = null, System.IProgress<DotNetOutdated.Core.Services.OutdatedReportStage>? progress = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<DotNetOutdated.Core.Models.OutdatedReport!>!
 DotNetOutdated.Core.Services.IOutdatedDependencyService.FindOutdatedAsync(System.Collections.Generic.IEnumerable<DotNetOutdated.Core.Models.Project!>! projects, DotNetOutdated.Core.Services.OutdatedOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<DotNetOutdated.Core.Models.OutdatedProject!>!>!
 DotNetOutdated.Core.Services.IProjectAnalysisService.AnalyzeProjectAsync(string! projectPath, DotNetOutdated.Core.Services.ProjectAnalysisOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<DotNetOutdated.Core.Models.Project!>!>!
 DotNetOutdated.Core.Services.LatestVersionQuery
@@ -104,8 +118,12 @@ DotNetOutdated.Core.Services.OutdatedOptions.IgnoreFailedSources.get -> bool
 DotNetOutdated.Core.Services.OutdatedOptions.IgnoreFailedSources.init -> void
 DotNetOutdated.Core.Services.OutdatedOptions.IncludeAutoReferences.get -> bool
 DotNetOutdated.Core.Services.OutdatedOptions.IncludeAutoReferences.init -> void
+DotNetOutdated.Core.Services.OutdatedOptions.IncludeFileBasedApps.get -> bool
+DotNetOutdated.Core.Services.OutdatedOptions.IncludeFileBasedApps.init -> void
 DotNetOutdated.Core.Services.OutdatedOptions.IncludeFilters.get -> System.Collections.Generic.IReadOnlyList<string!>!
 DotNetOutdated.Core.Services.OutdatedOptions.IncludeFilters.init -> void
+DotNetOutdated.Core.Services.OutdatedOptions.IncludeTransitiveDependencies.get -> bool
+DotNetOutdated.Core.Services.OutdatedOptions.IncludeTransitiveDependencies.init -> void
 DotNetOutdated.Core.Services.OutdatedOptions.IncludeUpToDate.get -> bool
 DotNetOutdated.Core.Services.OutdatedOptions.IncludeUpToDate.init -> void
 DotNetOutdated.Core.Services.OutdatedOptions.MaximumVersion.get -> NuGet.Versioning.NuGetVersion?
@@ -117,8 +135,18 @@ DotNetOutdated.Core.Services.OutdatedOptions.Prerelease.get -> DotNetOutdated.Co
 DotNetOutdated.Core.Services.OutdatedOptions.Prerelease.init -> void
 DotNetOutdated.Core.Services.OutdatedOptions.PrereleaseLabel.get -> string?
 DotNetOutdated.Core.Services.OutdatedOptions.PrereleaseLabel.init -> void
+DotNetOutdated.Core.Services.OutdatedOptions.Recursive.get -> bool
+DotNetOutdated.Core.Services.OutdatedOptions.Recursive.init -> void
+DotNetOutdated.Core.Services.OutdatedOptions.Runtime.get -> string?
+DotNetOutdated.Core.Services.OutdatedOptions.Runtime.init -> void
+DotNetOutdated.Core.Services.OutdatedOptions.TransitiveDepth.get -> int
+DotNetOutdated.Core.Services.OutdatedOptions.TransitiveDepth.init -> void
 DotNetOutdated.Core.Services.OutdatedOptions.VersionLock.get -> DotNetOutdated.Core.VersionLock
 DotNetOutdated.Core.Services.OutdatedOptions.VersionLock.init -> void
+DotNetOutdated.Core.Services.OutdatedReportStage
+DotNetOutdated.Core.Services.OutdatedReportStage.AnalyzingProjects = 1 -> DotNetOutdated.Core.Services.OutdatedReportStage
+DotNetOutdated.Core.Services.OutdatedReportStage.DiscoveringProjects = 0 -> DotNetOutdated.Core.Services.OutdatedReportStage
+DotNetOutdated.Core.Services.OutdatedReportStage.FindingLatestVersions = 2 -> DotNetOutdated.Core.Services.OutdatedReportStage
 DotNetOutdated.Core.Services.PackageVersionsQuery
 DotNetOutdated.Core.Services.PackageVersionsQuery.<Clone>$() -> DotNetOutdated.Core.Services.PackageVersionsQuery!
 DotNetOutdated.Core.Services.PackageVersionsQuery.Equals(DotNetOutdated.Core.Services.PackageVersionsQuery? other) -> bool

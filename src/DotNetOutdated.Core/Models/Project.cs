@@ -1,9 +1,9 @@
 ﻿using DotNetOutdated.Core.Services;
-using System.Diagnostics.CodeAnalysis;
 using NuGet.Frameworks;
 using NuGet.Versioning;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 
 namespace DotNetOutdated.Core.Models
 {

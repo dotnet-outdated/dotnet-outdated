@@ -92,7 +92,7 @@ public class TargetFrameworkAliasTests
                     .Select(project => new ProjectUpgradeResult { ProjectPath = project.Path, Outcome = UpgradeOutcome.Upgraded })
                     .ToList());
             var program = new Program(
-                fileSystem, Substitute.For<IReporter>(), new OutdatedDependencyService(resolutionService), analysisService,
+                fileSystem, Substitute.For<IReporter>(), new OutdatedDependencyService(discoveryService, analysisService, resolutionService, fileSystem), analysisService,
                 discoveryService, upgrader, Substitute.For<INuGetPackageInfoService>(), new DotNetRunnerOptions())
             {
                 Path = projectPath,
