@@ -1,40 +1,25 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using System.Text.RegularExpressions;
 using NuGet.Versioning;
 
 namespace DotNetOutdated.Core.Services
 {
     /// <summary>
-    /// Text-level edits to package version attributes and MSBuild properties that keep the rest of the file byte-for-byte.
+    /// Text-level edits to package versions and MSBuild properties that keep the rest of the file byte-for-byte. The
+    /// elements are found with an XML reader (see <see cref="PackageXml"/>), so comments, CDATA and escaped text are
+    /// never mistaken for markup and entity references are decoded. Content that isn't well-formed XML is left
+    /// unchanged.
     /// </summary>
     internal static class PackageVersionMarkup
     {
         internal static readonly string[] CentralPackageElements = ["PackageVersion", "GlobalPackageReference"];
 
-        // One complete attribute: name, '=', and a whole quoted value (which may contain '>' or the other quote).
-        private const string AttributePattern = @"[^\s=/>]+\s*=\s*(?:""[^""]*""|'[^']*')";
-        private const string InactiveMarkupPattern = @"<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>|<\?[\s\S]*?\?>";
-
-        private static readonly Regex Attribute = new(
-            @"(?<name>[^\s=/>]+)\s*=\s*(?<quote>[""'])(?<value>.*?)\k<quote>",
-            RegexOptions.Singleline | RegexOptions.CultureInvariant);
-
-        private static readonly Regex PropertyGroupPattern = new(
-            InactiveMarkupPattern + @"|(?<open><PropertyGroup(?:\s+" + AttributePattern + @")*\s*>)(?<body>[\s\S]*?)(?<close></PropertyGroup\s*>)",
-            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-
-        private static readonly Regex ProjectOpenTagPattern = new(
-            InactiveMarkupPattern + @"|(?<open><Project(?:\s+" + AttributePattern + @")*\s*>)",
-            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-
         /// <summary>
         /// Replaces the version of every <paramref name="elementNames"/> element whose <c>Include</c> or <c>Update</c>
         /// is <paramref name="packageName"/> (case-insensitive): its <c>Version</c> attribute, or else the text of a
-        /// <c>&lt;Version&gt;</c> child element. The elements are found with an XML reader, so comments, CDATA and
-        /// escaped text are never mistaken for markup and entity references are decoded; only the version text is
-        /// replaced, keeping the rest of the file byte-for-byte. Content that isn't well-formed XML is left unchanged.
+        /// <c>&lt;Version&gt;</c> child element. Only the version text is replaced.
         /// </summary>
         public static string ReplaceVersion(string content, string[] elementNames, string packageName, string newValue) =>
             ReplaceVersion(content, elementNames, packageName, newValue, out _);
@@ -45,16 +30,7 @@ namespace DotNetOutdated.Core.Services
         {
             var spans = PackageXml.FindVersionSpans(content, elementNames, packageName);
             matched = spans.Count > 0;
-
-            var escaped = PackageXml.Escape(newValue);
-            var builder = new StringBuilder(content);
-            // Replace from the end so earlier offsets stay valid.
-            foreach (var (start, length) in Enumerable.Reverse(spans))
-            {
-                builder.Remove(start, length).Insert(start, escaped);
-            }
-
-            return builder.ToString();
+            return ReplaceSpans(content, spans.Select(span => (span.Start, span.Length, PackageXml.Escape(newValue))));
         }
 
         /// <summary>
@@ -72,82 +48,196 @@ namespace DotNetOutdated.Core.Services
             string? previousExpression = null,
             VersionRange? expectedLiteral = null)
         {
-            var result = ReplaceVersionAttributes(
-                content, elementNames, packageName, newValue, allowVersionOverride: true, skipExistingVariables: true, out _, previousExpression, expectedLiteral);
+            var elements = PackageXml.Elements(content);
+            if (elements == null)
+            {
+                return content;
+            }
 
-            var elements = string.Join("|", Array.ConvertAll(elementNames, Regex.Escape));
-            var childElementPattern =
-                InactiveMarkupPattern + "|" +
-                $@"(?<open><(?<elem>{elements})(?<attributes>(?:\s+{AttributePattern})*)\s*>)(?<body>[\s\S]*?)(?<close></\k<elem>\s*>)";
-            var childVersionPattern =
-                InactiveMarkupPattern + "|" +
-                $@"(?<vopen><(?<vtag>VersionOverride|Version)(?:\s+{AttributePattern})*\s*>)(?<vval>[\s\S]*?)(?<vclose></\k<vtag>\s*>)";
-
-            return Regex.Replace(
-                result,
-                childElementPattern,
-                m =>
+            var escaped = PackageXml.Escape(newValue);
+            var edits = new List<(int Start, int Length, string Text)>();
+            foreach (var element in elements)
+            {
+                if (!elementNames.Any(element.Is) || !element.IsPackage(packageName))
                 {
-                    if (!m.Groups["open"].Success ||
-                        !MatchesPackage(m.Groups["attributes"].Value, packageName, allowVersionOverride: true, out var versionAttr) ||
-                        versionAttr != null)
+                    continue;
+                }
+
+                // VersionOverride wins over Version, and a version attribute, even one that isn't restored, takes
+                // precedence over child elements.
+                if ((element.Attribute("VersionOverride") ?? element.Attribute("Version")) is { } attribute)
+                {
+                    if (IsRestorable(attribute.Value, previousExpression, expectedLiteral))
                     {
-                        return m.Value;
+                        edits.Add((attribute.ValueStart, attribute.ValueLength, escaped));
                     }
 
-                    var newBody = Regex.Replace(
-                        m.Groups["body"].Value,
-                        childVersionPattern,
-                        vm => !vm.Groups["vopen"].Success || !IsRestorable(vm.Groups["vval"].Value, previousExpression, expectedLiteral)
-                            ? vm.Value
-                            : vm.Groups["vopen"].Value + ReplaceTrimmed(vm.Groups["vval"].Value, newValue) + vm.Groups["vclose"].Value,
-                        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+                    continue;
+                }
 
-                    return m.Groups["open"].Value + newBody + m.Groups["close"].Value;
-                },
-                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+                foreach (var child in elements.Where(e => e.Parent == element && (e.Is("Version") || e.Is("VersionOverride"))))
+                {
+                    if (!child.IsEmpty &&
+                        IsRestorable(child.Text, previousExpression, expectedLiteral) &&
+                        ContentEdit(content, child, escaped) is { } edit)
+                    {
+                        edits.Add(edit);
+                    }
+                }
+            }
+
+            return ReplaceSpans(content, edits);
         }
 
-        private static string ReplaceVersionAttributes(
-            string content,
-            string[] elementNames,
-            string packageName,
-            string newValue,
-            bool allowVersionOverride,
-            bool skipExistingVariables,
-            out bool matched,
-            string? previousExpression = null,
-            VersionRange? expectedLiteral = null)
+        /// <summary>
+        /// Replaces the value of the <paramref name="elementIndex"/>-th (zero-based, document order)
+        /// <paramref name="propertyName"/> element directly inside a <c>&lt;PropertyGroup&gt;</c>, preserving its
+        /// attributes, tag casing and surrounding whitespace. Other definitions of the property are left alone.
+        /// </summary>
+        public static string ReplacePropertyValueAt(string content, string propertyName, int elementIndex, string newValue)
         {
-            var elements = string.Join("|", Array.ConvertAll(elementNames, Regex.Escape));
-            var pattern =
-                InactiveMarkupPattern + "|" +
-                $@"<(?:{elements})(?<attributes>(?:\s+{AttributePattern})*)\s*/?>";
+            if (PropertyAt(content, propertyName, elementIndex) is not { } property)
+            {
+                return content;
+            }
 
-            var found = false;
-            var result = Regex.Replace(
-                content,
-                pattern,
-                m =>
-                {
-                    var attributes = m.Groups["attributes"];
-                    if (!attributes.Success ||
-                        !MatchesPackage(attributes.Value, packageName, allowVersionOverride, out var version) ||
-                        version == null ||
-                        (skipExistingVariables && !IsRestorable(version.Value, previousExpression, expectedLiteral)))
-                    {
-                        return m.Value;
-                    }
+            var escaped = PackageXml.Escape(newValue);
+            if (!property.IsEmpty)
+            {
+                return ContentEdit(content, property, escaped) is { } edit ? ReplaceSpans(content, [edit]) : content;
+            }
 
-                    found = true;
-                    var start = attributes.Index - m.Index + version.Index;
-                    return string.Concat(m.Value.AsSpan(0, start), newValue, m.Value.AsSpan(start + version.Length));
-                },
-                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-
-            matched = found;
-            return result;
+            // <V /> becomes <V>value</V>, keeping the attributes.
+            var openTag = content[property.OpenStart..property.OpenEnd];
+            var expanded = $"{openTag[..^2].TrimEnd()}>{escaped}</{property.Name}>";
+            return ReplaceSpans(content, [(property.OpenStart, property.OpenEnd - property.OpenStart, expanded)]);
         }
+
+        /// <summary>
+        /// Inserts <c>&lt;propertyName&gt;newValue&lt;/propertyName&gt;</c> at the end of the
+        /// <paramref name="propertyGroupIndex"/>-th (zero-based, document order, non-empty) <c>&lt;PropertyGroup&gt;</c>,
+        /// or, when the index is negative or not found, in a new <c>&lt;PropertyGroup&gt;</c> at the start of
+        /// <c>&lt;Project&gt;</c>.
+        /// </summary>
+        public static string InsertProperty(string content, int propertyGroupIndex, string propertyName, string newValue)
+        {
+            var elements = PackageXml.Elements(content);
+            if (elements == null)
+            {
+                return content;
+            }
+
+            var newline = content.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
+            var property = $"<{propertyName}>{PackageXml.Escape(newValue)}</{propertyName}>";
+
+            if (propertyGroupIndex >= 0 &&
+                elements.Where(e => e.Is("PropertyGroup") && !e.IsEmpty).ElementAtOrDefault(propertyGroupIndex) is { } group)
+            {
+                var body = content[group.OpenEnd..group.CloseStart];
+                var lastLf = body.LastIndexOf('\n');
+                if (lastLf < 0)
+                {
+                    // A group on one line stays on one line.
+                    return content.Insert(group.CloseStart, property);
+                }
+
+                // Insert on a new line before the line holding the end tag, indented like the group's last child line
+                // or, without one, one level deeper than the end tag.
+                var prefixEnd = lastLf > 0 && body[lastLf - 1] == '\r' ? lastLf - 1 : lastLf;
+                var prefix = body[..prefixEnd];
+                var closingIndent = body[(lastLf + 1)..];
+                var prevLf = prefix.LastIndexOf('\n');
+                var prevLine = prevLf >= 0 ? prefix[(prevLf + 1)..] : string.Empty;
+                var childIndent = prevLine[..(prevLine.Length - prevLine.AsSpan().TrimStart().Length)];
+                if (childIndent.Length == 0)
+                {
+                    childIndent = closingIndent + (closingIndent.Contains('\t', StringComparison.Ordinal) ? "\t" : "  ");
+                }
+
+                return content.Insert(group.OpenEnd + prefixEnd, $"{newline}{childIndent}{property}");
+            }
+
+            if (elements.FirstOrDefault(e => e.Is("Project")) is not { } project)
+            {
+                return content;
+            }
+
+            var after = project.OpenEnd;
+            return after < content.Length && content[after] is '\r' or '\n'
+                ? content.Insert(after, $"{newline}  <PropertyGroup>{newline}    {property}{newline}  </PropertyGroup>")
+                : content.Insert(after, $"<PropertyGroup>{property}</PropertyGroup>");
+        }
+
+        /// <summary>
+        /// Inserts <c>&lt;propertyName&gt;newValue&lt;/propertyName&gt;</c> immediately before the
+        /// <paramref name="anchorIndex"/>-th <paramref name="anchorName"/> property element (see
+        /// <see cref="ReplacePropertyValueAt"/>), on its own line with the same indentation when the anchor starts a line.
+        /// Returns <paramref name="content"/> unchanged when the anchor isn't found.
+        /// </summary>
+        public static string InsertPropertyBefore(string content, string anchorName, int anchorIndex, string propertyName, string newValue)
+        {
+            if (PropertyAt(content, anchorName, anchorIndex) is not { } anchor)
+            {
+                return content;
+            }
+
+            var newline = content.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
+            var property = $"<{propertyName}>{PackageXml.Escape(newValue)}</{propertyName}>";
+
+            // On its own line when the anchor starts a line inside its group.
+            var lineBreak = anchor.OpenStart > 0 ? content.LastIndexOf('\n', anchor.OpenStart - 1) : -1;
+            var leading = lineBreak >= 0 ? content[(lineBreak + 1)..anchor.OpenStart] : string.Empty;
+            return lineBreak >= anchor.Parent!.OpenEnd && string.IsNullOrWhiteSpace(leading)
+                ? content.Insert(anchor.OpenStart, $"{property}{newline}{leading}")
+                : content.Insert(anchor.OpenStart, property);
+        }
+
+        private static PackageXml.XmlElementSpan? PropertyAt(string content, string propertyName, int index) =>
+            index < 0
+                ? null
+                : PackageXml.Elements(content)?.Where(e => e.IsProperty(propertyName)).ElementAtOrDefault(index);
+
+        // Replaces an element's value, keeping the whitespace around it: blank content is replaced whole, and with
+        // comments or other markup in the content only its one text node is replaced. Null when there is more than
+        // one text node, so it isn't clear which part is the value.
+        private static (int Start, int Length, string Text)? ContentEdit(string content, PackageXml.XmlElementSpan element, string text)
+        {
+            if (element.TextNodes.Count > 1 || (element.HasMarkup && element.TextNodes.Count == 0))
+            {
+                return null;
+            }
+
+            var (start, length) = element.TextNodes.Count == 1
+                ? element.TextNodes[0]
+                : (element.OpenEnd, element.CloseStart - element.OpenEnd);
+            var end = start + length;
+            while (start < end && char.IsWhiteSpace(content[start]))
+            {
+                start++;
+            }
+
+            while (end > start && char.IsWhiteSpace(content[end - 1]))
+            {
+                end--;
+            }
+
+            return start == end && element.TextNodes.Count == 0
+                ? (element.OpenEnd, element.CloseStart - element.OpenEnd, text)
+                : (start, end - start, text);
+        }
+
+        private static string ReplaceSpans(string content, IEnumerable<(int Start, int Length, string Text)> edits)
+        {
+            var builder = new StringBuilder(content);
+            // Replace from the end so earlier offsets stay valid.
+            foreach (var (start, length, text) in edits.OrderByDescending(edit => edit.Start))
+            {
+                builder.Remove(start, length).Insert(start, text);
+            }
+
+            return builder.ToString();
+        }
+
 
         private static bool IsRestorable(string value, string? previousExpression, VersionRange? expectedLiteral)
         {
@@ -164,202 +254,6 @@ namespace DotNetOutdated.Core.Services
 
             return expectedLiteral == null ||
                    (VersionRange.TryParse(trimmed, out var literal) && literal.Equals(expectedLiteral));
-        }
-
-        private static bool MatchesPackage(string attributesText, string packageName, bool allowVersionOverride, out Group? version)
-        {
-            Group? versionAttr = null;
-            Group? overrideAttr = null;
-            var isPackage = false;
-
-            foreach (Match attribute in Attribute.Matches(attributesText))
-            {
-                var name = attribute.Groups["name"].Value;
-                var value = attribute.Groups["value"];
-                if (name.Equals("Include", StringComparison.OrdinalIgnoreCase) ||
-                    name.Equals("Update", StringComparison.OrdinalIgnoreCase))
-                {
-                    isPackage |= string.Equals(value.Value.Trim(), packageName, StringComparison.OrdinalIgnoreCase);
-                }
-                else if (name.Equals("Version", StringComparison.OrdinalIgnoreCase) && versionAttr == null)
-                {
-                    versionAttr = value;
-                }
-                else if (allowVersionOverride && name.Equals("VersionOverride", StringComparison.OrdinalIgnoreCase) && overrideAttr == null)
-                {
-                    overrideAttr = value;
-                }
-            }
-
-            version = overrideAttr ?? versionAttr;
-            return isPackage;
-        }
-
-        private static Regex PropertyElementPattern(string propertyName) => new(
-            InactiveMarkupPattern +
-            @"|(?<open><(?<tag>" + Regex.Escape(propertyName) + @")(?<attributes>(?:\s+" + AttributePattern + @")*)\s*>)(?<value>[\s\S]*?)(?<close></\k<tag>\s*>)" +
-            @"|(?<empty><(?<etag>" + Regex.Escape(propertyName) + @")(?<eattributes>(?:\s+" + AttributePattern + @")*)\s*/>)",
-            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-
-        /// <summary>
-        /// Replaces the value of the <paramref name="elementIndex"/>-th (zero-based, document order)
-        /// <paramref name="propertyName"/> element directly inside a <c>&lt;PropertyGroup&gt;</c>, preserving its
-        /// attributes, tag casing and surrounding whitespace. Other definitions of the property are left alone.
-        /// </summary>
-        public static string ReplacePropertyValueAt(string content, string propertyName, int elementIndex, string newValue)
-        {
-            var propertyPattern = PropertyElementPattern(propertyName);
-            var index = 0;
-
-            return PropertyGroupPattern.Replace(
-                content,
-                groupMatch =>
-                {
-                    if (!groupMatch.Groups["open"].Success)
-                    {
-                        return groupMatch.Value;
-                    }
-
-                    var newBody = propertyPattern.Replace(
-                        groupMatch.Groups["body"].Value,
-                        propMatch =>
-                        {
-                            if (!propMatch.Groups["open"].Success && !propMatch.Groups["empty"].Success)
-                            {
-                                return propMatch.Value;
-                            }
-
-                            if (index++ != elementIndex)
-                            {
-                                return propMatch.Value;
-                            }
-
-                            return propMatch.Groups["open"].Success
-                                ? propMatch.Groups["open"].Value + ReplaceTrimmed(propMatch.Groups["value"].Value, newValue) + propMatch.Groups["close"].Value
-                                : $"<{propMatch.Groups["etag"].Value}{propMatch.Groups["eattributes"].Value}>{newValue}</{propMatch.Groups["etag"].Value}>";
-                        });
-
-                    return groupMatch.Groups["open"].Value + newBody + groupMatch.Groups["close"].Value;
-                });
-        }
-
-        /// <summary>
-        /// Inserts <c>&lt;propertyName&gt;newValue&lt;/propertyName&gt;</c> at the end of the
-        /// <paramref name="propertyGroupIndex"/>-th (zero-based, document order, non-empty) <c>&lt;PropertyGroup&gt;</c>,
-        /// or, when the index is negative, in a new <c>&lt;PropertyGroup&gt;</c> at the start of <c>&lt;Project&gt;</c>.
-        /// </summary>
-        public static string InsertProperty(string content, int propertyGroupIndex, string propertyName, string newValue)
-        {
-            var newline = content.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
-            var inserted = false;
-
-            if (propertyGroupIndex >= 0)
-            {
-                var index = 0;
-                var withPropertyGroup = PropertyGroupPattern.Replace(
-                    content,
-                    m =>
-                    {
-                        if (!m.Groups["open"].Success || index++ != propertyGroupIndex)
-                        {
-                            return m.Value;
-                        }
-
-                        inserted = true;
-                        var body = m.Groups["body"].Value;
-                        var lastLf = body.LastIndexOf('\n');
-                        if (lastLf < 0)
-                        {
-                            return $"{m.Groups["open"].Value}{body}<{propertyName}>{newValue}</{propertyName}>{m.Groups["close"].Value}";
-                        }
-
-                        var prefix = body[..(lastLf > 0 && body[lastLf - 1] == '\r' ? lastLf - 1 : lastLf)];
-                        var closingIndent = body[(lastLf + 1)..];
-                        var prevLf = prefix.LastIndexOf('\n');
-                        var prevLine = prevLf >= 0 ? prefix[(prevLf + 1)..] : string.Empty;
-                        var childIndent = prevLine[..(prevLine.Length - prevLine.AsSpan().TrimStart().Length)];
-                        if (childIndent.Length == 0)
-                        {
-                            childIndent = closingIndent + (closingIndent.Contains('\t', StringComparison.Ordinal) ? "\t" : "  ");
-                        }
-
-                        return $"{m.Groups["open"].Value}{prefix}{newline}{childIndent}<{propertyName}>{newValue}</{propertyName}>{newline}{closingIndent}{m.Groups["close"].Value}";
-                    });
-
-                if (inserted)
-                {
-                    return withPropertyGroup;
-                }
-            }
-
-            return ProjectOpenTagPattern.Replace(
-                content,
-                m =>
-                {
-                    if (inserted || !m.Groups["open"].Success)
-                    {
-                        return m.Value;
-                    }
-
-                    inserted = true;
-                    var after = m.Index + m.Length;
-                    return after < content.Length && content[after] is '\r' or '\n'
-                        ? $"{m.Value}{newline}  <PropertyGroup>{newline}    <{propertyName}>{newValue}</{propertyName}>{newline}  </PropertyGroup>"
-                        : $"{m.Value}<PropertyGroup><{propertyName}>{newValue}</{propertyName}></PropertyGroup>";
-                });
-        }
-
-        /// <summary>
-        /// Inserts <c>&lt;propertyName&gt;newValue&lt;/propertyName&gt;</c> immediately before the
-        /// <paramref name="anchorIndex"/>-th <paramref name="anchorName"/> property element (see
-        /// <see cref="ReplacePropertyValueAt"/>), on its own line with the same indentation when the anchor starts a line.
-        /// Returns <paramref name="content"/> unchanged when the anchor isn't found.
-        /// </summary>
-        public static string InsertPropertyBefore(string content, string anchorName, int anchorIndex, string propertyName, string newValue)
-        {
-            var newline = content.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
-            var anchorPattern = PropertyElementPattern(anchorName);
-            var index = 0;
-
-            return PropertyGroupPattern.Replace(
-                content,
-                groupMatch =>
-                {
-                    if (!groupMatch.Groups["open"].Success)
-                    {
-                        return groupMatch.Value;
-                    }
-
-                    var body = groupMatch.Groups["body"].Value;
-                    var newBody = anchorPattern.Replace(
-                        body,
-                        propMatch =>
-                        {
-                            if ((!propMatch.Groups["open"].Success && !propMatch.Groups["empty"].Success) || index++ != anchorIndex)
-                            {
-                                return propMatch.Value;
-                            }
-
-                            var lineStart = body.LastIndexOf('\n', Math.Max(propMatch.Index - 1, 0)) + 1;
-                            var leading = body[lineStart..propMatch.Index];
-                            var element = $"<{propertyName}>{newValue}</{propertyName}>";
-                            return lineStart > 0 && string.IsNullOrWhiteSpace(leading)
-                                ? $"{element}{newline}{leading}{propMatch.Value}"
-                                : $"{element}{propMatch.Value}";
-                        });
-
-                    return groupMatch.Groups["open"].Value + newBody + groupMatch.Groups["close"].Value;
-                });
-        }
-
-        private static string ReplaceTrimmed(string value, string newValue)
-        {
-            var span = value.AsSpan();
-            var lead = span.Length - span.TrimStart().Length;
-            var trail = span.Length - span.TrimEnd().Length;
-            return lead + trail >= span.Length
-                ? newValue
-                : string.Concat(span[..lead], newValue, span[(span.Length - trail)..]);
         }
     }
 }
