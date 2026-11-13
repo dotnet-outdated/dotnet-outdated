@@ -2309,6 +2309,79 @@ Information(""Outdated Sdk"");")
                 mockFileSystem.File.ReadAllText(propsPath));
         }
 
+        // A shared file can pin a package separately for each target framework; only the pin the upgraded target
+        // framework uses is written.
+        [Theory]
+        [InlineData("net6.0", "6.0.5", "8.0.0")]
+        [InlineData("net8.0", "6.0.0", "8.0.5")]
+        public void ImportedPackageReference_PinnedPerTargetFramework_UpdatesOnlyThatTargetFrameworksPin(
+            string targetFramework, string expectedNet6, string expectedNet8)
+        {
+            var propsPath = XFS.Path(@"c:\repo\Directory.Build.props");
+            var projectPath = XFS.Path(@"c:\repo\src\MyProject\MyProject.csproj");
+            const string propsContent = """
+                <Project>
+                  <ItemGroup Condition="'$(TargetFramework)' == 'net6.0'">
+                    <PackageReference Include="Foo" Version="6.0.0" />
+                  </ItemGroup>
+                  <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">
+                    <PackageReference Include="Foo" Version="8.0.0" />
+                  </ItemGroup>
+                </Project>
+                """;
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { propsPath, new MockFileData(propsContent) },
+                { projectPath, new MockFileData("<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFrameworks>net6.0;net8.0</TargetFrameworks></PropertyGroup></Project>") }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            var service = new ReferenceUpgrader(dotNetRunner, mockFileSystem);
+
+            var version = targetFramework == "net6.0" ? "6.0.5" : "8.0.5";
+            var result = service.Upgrade(projectPath, "Foo", targetFramework, new NuGetVersion(version), noRestore: true);
+
+            Assert.Equal(UpgradeOutcome.Upgraded, result.Outcome);
+            dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
+            Assert.Equal(
+                propsContent
+                    .Replace("Version=\"6.0.0\"", $"Version=\"{expectedNet6}\"", StringComparison.Ordinal)
+                    .Replace("Version=\"8.0.0\"", $"Version=\"{expectedNet8}\"", StringComparison.Ordinal),
+                mockFileSystem.File.ReadAllText(propsPath));
+        }
+
+        // Upgrading every target framework writes each one's own pin, and restores the project once per pin written.
+        [Fact]
+        public void ImportedPackageReference_PinnedPerTargetFramework_UpgradingEveryTargetFramework_UpdatesEachPin()
+        {
+            var propsPath = XFS.Path(@"c:\repo\Directory.Build.props");
+            var projectPath = XFS.Path(@"c:\repo\src\MyProject\MyProject.csproj");
+            const string propsContent = """
+                <Project>
+                  <ItemGroup Condition="'$(TargetFramework)' == 'net6.0'"><PackageReference Include="Foo" Version="1.0.0" /></ItemGroup>
+                  <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'"><PackageReference Include="Foo" Version="1.0.0" /></ItemGroup>
+                </Project>
+                """;
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { propsPath, new MockFileData(propsContent) },
+                { projectPath, new MockFileData("<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFrameworks>net6.0;net8.0</TargetFrameworks></PropertyGroup></Project>") }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            var service = new ReferenceUpgrader(dotNetRunner, mockFileSystem);
+
+            var results = service.Upgrade(new ReferenceUpgrade
+            {
+                Name = "Foo",
+                Version = new NuGetVersion("2.0.0"),
+                Projects = [new UpgradeProject(projectPath, "net6.0"), new UpgradeProject(projectPath, "net8.0")],
+                NoRestore = true,
+            });
+
+            Assert.Equal(UpgradeOutcome.Upgraded, Assert.Single(results).Outcome);
+            dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
+            Assert.Equal(propsContent.Replace("Version=\"1.0.0\"", "Version=\"2.0.0\"", StringComparison.Ordinal), mockFileSystem.File.ReadAllText(propsPath));
+        }
+
         // dotnet add package targets the imported item, not a project's Update override of it, and fails.
         [Fact]
         public void ImportedPackageReference_WhenProjectOverridesVersion_UpdatesCsproj_NotImportedProps()
