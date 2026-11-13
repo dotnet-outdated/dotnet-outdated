@@ -5,7 +5,6 @@ using System.IO;
 using System.IO.Abstractions;
 using System.Linq;
 using System.Text;
-using System.Text.RegularExpressions;
 using System.Xml;
 using System.Xml.Linq;
 
@@ -61,22 +60,10 @@ internal sealed record ProjectSdkDeclaration(string Name, string? Version, Proje
 /// Discovers and updates versioned MSBuild project SDK references in project files.
 /// Only literal versions in the project file itself are supported; SDK versions pinned via
 /// <c>global.json</c> <c>msbuild-sdks</c>, MSBuild properties or imported files are ignored.
-/// Discovery parses the file as XML. Updates edit the text in place so the rest of the file keeps its formatting.
+/// Both discovery and updates read the file as XML. Updates edit the text in place so the rest of the file keeps its formatting.
 /// </summary>
-internal static partial class ProjectSdkReferenceHelper
+internal static class ProjectSdkReferenceHelper
 {
-    // A <Project>, <Sdk> or <Import> start tag. Quoted attribute values are consumed whole, so a '>' inside a
-    // value such as Condition="'$(A)' > '0'" does not end the tag.
-    [GeneratedRegex(@"<(Project|Sdk|Import)\b((?:[^>""']|""[^""]*""|'[^']*')*)>")]
-    private static partial Regex SdkDeclarationTagRegex();
-
-    [GeneratedRegex(@"([\w:.-]+)\s*=\s*(""[^""]*""|'[^']*')")]
-    private static partial Regex AttributeRegex();
-
-    // Text that cannot hold an SDK declaration: comments, CDATA and the free-form <ProjectExtensions> section.
-    [GeneratedRegex(@"<!--.*?-->|<!\[CDATA\[.*?\]\]>|<ProjectExtensions\b(?:[^>""']|""[^""]*""|'[^']*')*?/>|<ProjectExtensions\b.*?</ProjectExtensions\s*>", RegexOptions.Singleline)]
-    private static partial Regex NonDeclarationTextRegex();
-
     /// <summary>
     /// Reads every MSBuild project SDK declared in a project file: the <c>Sdk</c> attribute of the root
     /// <c>&lt;Project&gt;</c>, <c>&lt;Sdk&gt;</c> elements and <c>&lt;Import Sdk="..."&gt;</c> elements, versioned or not.
@@ -163,54 +150,63 @@ internal static partial class ProjectSdkReferenceHelper
     }
 
     /// <summary>
-    /// Updates the version of every declaration of the named SDK in a project file. Text inside XML comments, CDATA
-    /// sections and <c>&lt;ProjectExtensions&gt;</c> is left alone, matching what <see cref="GetDeclarations"/> reads.
+    /// Updates the version of every declaration of the named SDK in a project file, finding the declarations by the
+    /// same rules as <see cref="GetDeclarations"/>: the root <c>&lt;Project&gt;</c>'s <c>Sdk</c> attribute,
+    /// <c>&lt;Sdk&gt;</c> elements directly under it and <c>&lt;Import Sdk="..."&gt;</c> elements, none of them inside
+    /// <c>&lt;ProjectExtensions&gt;</c>. Only the version text is replaced, keeping the rest of the file byte-for-byte.
     /// </summary>
     /// <returns><see langword="true"/> when the project file was changed; otherwise <see langword="false"/>.</returns>
     public static bool TryUpdate(IFileSystem fileSystem, string projectFilePath, string name, NuGetVersion newVersion)
     {
         var content = ReadAllText(fileSystem, projectFilePath, out var encoding);
+        var elements = PackageXml.Elements(content);
+        var root = elements?.FirstOrDefault(element => element.Parent == null);
+        if (elements == null || root == null || root.LocalName != "Project")
+        {
+            return false;
+        }
 
-        // Match against a copy where comments, CDATA and <ProjectExtensions> are blanked out with spaces. The copy has
-        // the same length as the original, so every match index is also an index into the original content.
-        var searchable = NonDeclarationTextRegex().Replace(content, match => new string(' ', match.Length));
         var edits = new List<(int Index, int Length, string Value)>();
 
-        var seenProject = false;
-        foreach (Match tag in SdkDeclarationTagRegex().Matches(searchable))
+        // Each Sdk="Id/Version" entry is checked on the decoded value, and the attribute is rewritten from it when one
+        // of them changes.
+        if (root.Attributes.FirstOrDefault(attribute => attribute.Name == "Sdk") is { } projectSdk)
         {
-            var attributes = GetAttributes(tag.Groups[2]);
-            switch (tag.Groups[1].Value)
+            var changed = false;
+            var sdks = projectSdk.Value.Split(';').Select(sdk =>
             {
-                // Only the root <Project> declares SDKs; skip any later tag with the same name.
-                case "Project" when !seenProject:
-                    seenProject = true;
-                    if (attributes.TryGetValue("Sdk", out var quotedValue))
-                    {
-                        var sdks = Unquote(quotedValue.Value).Split(';').Select(sdk =>
-                        {
-                            var separatorIndex = sdk.IndexOf('/');
-                            return separatorIndex > 0 && IsLiteralMatch(sdk[..separatorIndex], sdk[(separatorIndex + 1)..], name)
-                                ? $"{sdk[..(separatorIndex + 1)]}{newVersion}"
-                                : sdk;
-                        });
+                var separatorIndex = sdk.IndexOf('/');
+                if (separatorIndex > 0 && IsLiteralMatch(sdk[..separatorIndex], sdk[(separatorIndex + 1)..], name))
+                {
+                    changed = true;
+                    return $"{sdk[..(separatorIndex + 1)]}{newVersion}";
+                }
 
-                        edits.Add((quotedValue.Index, quotedValue.Length, $"{quotedValue.Value[0]}{string.Join(';', sdks)}{quotedValue.Value[0]}"));
-                    }
+                return sdk;
+            }).ToList();
 
-                    break;
+            if (changed)
+            {
+                edits.Add((projectSdk.ValueStart, projectSdk.ValueLength, PackageXml.Escape(string.Join(';', sdks))));
+            }
+        }
 
-                // <Sdk Name="Id" Version="..." /> and <Import Project="Sdk.props" Sdk="Id" Version="..." />
-                case "Sdk" or "Import":
-                    var nameAttribute = tag.Groups[1].Value == "Sdk" ? "Name" : "Sdk";
-                    if (attributes.TryGetValue(nameAttribute, out var quotedName) &&
-                        attributes.TryGetValue("Version", out var quotedVersion) &&
-                        IsLiteralMatch(Unquote(quotedName.Value), Unquote(quotedVersion.Value), name))
-                    {
-                        edits.Add((quotedVersion.Index, quotedVersion.Length, $"{quotedVersion.Value[0]}{newVersion}{quotedVersion.Value[0]}"));
-                    }
+        foreach (var element in elements.Where(element => !IsInProjectExtensions(element)))
+        {
+            // <Sdk Name="Id" Version="..." /> and <Import Project="Sdk.props" Sdk="Id" Version="..." />
+            var nameAttribute = element.LocalName switch
+            {
+                "Sdk" when element.Parent == root => "Name",
+                "Import" => "Sdk",
+                _ => null
+            };
 
-                    break;
+            if (nameAttribute != null &&
+                element.Attributes.FirstOrDefault(attribute => attribute.Name == nameAttribute) is { } sdkName &&
+                element.Attributes.FirstOrDefault(attribute => attribute.Name == "Version") is { } version &&
+                IsLiteralMatch(sdkName.Value, version.Value, name))
+            {
+                edits.Add((version.ValueStart, version.ValueLength, newVersion.ToString()));
             }
         }
 
@@ -229,20 +225,18 @@ internal static partial class ProjectSdkReferenceHelper
         return true;
     }
 
-    /// <summary>
-    /// Gets the quoted values of the attributes in a start tag, keyed by attribute name. Each value's index is an index
-    /// into the text the tag was matched in.
-    /// </summary>
-    private static Dictionary<string, (int Index, int Length, string Value)> GetAttributes(Group attributesText)
+    // <ProjectExtensions> holds arbitrary XML that MSBuild ignores.
+    private static bool IsInProjectExtensions(PackageXml.XmlElementSpan element)
     {
-        var attributes = new Dictionary<string, (int Index, int Length, string Value)>(StringComparer.Ordinal);
-        foreach (Match attribute in AttributeRegex().Matches(attributesText.Value))
+        for (var current = element; current != null; current = current.Parent)
         {
-            var value = attribute.Groups[2];
-            attributes.TryAdd(attribute.Groups[1].Value, (attributesText.Index + value.Index, value.Length, value.Value));
+            if (current.LocalName == "ProjectExtensions")
+            {
+                return true;
+            }
         }
 
-        return attributes;
+        return false;
     }
 
     /// <summary>
@@ -286,5 +280,4 @@ internal static partial class ProjectSdkReferenceHelper
         string.Equals(name.Trim(), expectedName, StringComparison.OrdinalIgnoreCase) &&
         NuGetVersion.TryParse(version.Trim(), out _);
 
-    private static string Unquote(string quotedValue) => quotedValue[1..^1];
 }

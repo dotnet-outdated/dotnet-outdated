@@ -385,15 +385,14 @@ namespace DotNetOutdated.Tests
             Assert.Equal("13.0.2", ProjectSdkReferenceHelper.Discover(fileSystem, ProjectPath).Single().ResolvedVersion.ToString());
         }
 
-        // Discovery reads the file as XML and decodes entity references, but the update compares the raw text, so an
-        // SDK it reports can't be upgraded.
+        // Entity references are decoded, as discovery decodes them, so an SDK it reports is updated.
         [Theory]
-        [InlineData(@"<Project Sdk=""X&#46;Sdk/1.0.0""></Project>")]
-        [InlineData(@"<Project Sdk=""X.Sdk/1&#46;0&#46;0""></Project>")]
-        [InlineData(@"<Project><Sdk Name=""X&#46;Sdk"" Version=""1.0.0"" /></Project>")]
-        [InlineData(@"<Project><Sdk Name=""X.Sdk"" Version=""1&#46;0&#46;0"" /></Project>")]
-        [InlineData(@"<Project><Import Project=""Sdk.props"" Sdk=""X&#46;Sdk"" Version=""1.0.0"" /></Project>")]
-        public void Discover_And_TryUpdate_EntityReference_IsDiscoveredButNotUpdated(string content)
+        [InlineData(@"<Project Sdk=""X&#46;Sdk/1.0.0""></Project>", @"<Project Sdk=""X.Sdk/2.0.0""></Project>")]
+        [InlineData(@"<Project Sdk=""X.Sdk/1&#46;0&#46;0""></Project>", @"<Project Sdk=""X.Sdk/2.0.0""></Project>")]
+        [InlineData(@"<Project><Sdk Name=""X&#46;Sdk"" Version=""1.0.0"" /></Project>", @"<Project><Sdk Name=""X&#46;Sdk"" Version=""2.0.0"" /></Project>")]
+        [InlineData(@"<Project><Sdk Name=""X.Sdk"" Version=""1&#46;0&#46;0"" /></Project>", @"<Project><Sdk Name=""X.Sdk"" Version=""2.0.0"" /></Project>")]
+        [InlineData(@"<Project><Import Project=""Sdk.props"" Sdk=""X&#46;Sdk"" Version=""1.0.0"" /></Project>", @"<Project><Import Project=""Sdk.props"" Sdk=""X&#46;Sdk"" Version=""2.0.0"" /></Project>")]
+        public void Discover_And_TryUpdate_EntityReference_IsDiscoveredAndUpdated(string content, string expected)
         {
             var fileSystem = CreateFileSystem(content);
 
@@ -401,14 +400,24 @@ namespace DotNetOutdated.Tests
             Assert.Equal("X.Sdk", reference.Name);
             Assert.Equal(new NuGetVersion("1.0.0"), reference.ResolvedVersion);
 
-            Assert.False(ProjectSdkReferenceHelper.TryUpdate(fileSystem, ProjectPath, "X.Sdk", new NuGetVersion("2.0.0")));
-            Assert.Equal(content, fileSystem.File.ReadAllText(ProjectPath));
+            Assert.True(ProjectSdkReferenceHelper.TryUpdate(fileSystem, ProjectPath, "X.Sdk", new NuGetVersion("2.0.0")));
+            Assert.Equal(expected, fileSystem.File.ReadAllText(ProjectPath));
         }
 
-        // Only an <Sdk> element directly under <Project> declares an SDK. Discovery ignores an Sdk item in an
-        // ItemGroup, but the update rewrites its Version anyway.
+        // The root's Sdk attribute is rewritten from its decoded value, so the other entries are escaped again.
         [Fact]
-        public void Discover_And_TryUpdate_SdkItemInItemGroup_IsNotDiscoveredButIsUpdated()
+        public void TryUpdate_ProjectSdkAttributeWithEscapedEntry_KeepsItEscaped()
+        {
+            var fileSystem = CreateFileSystem(@"<Project Sdk=""A&amp;B.Sdk;X.Sdk/1.0.0""></Project>");
+
+            Assert.True(ProjectSdkReferenceHelper.TryUpdate(fileSystem, ProjectPath, "X.Sdk", new NuGetVersion("2.0.0")));
+            Assert.Equal(@"<Project Sdk=""A&amp;B.Sdk;X.Sdk/2.0.0""></Project>", fileSystem.File.ReadAllText(ProjectPath));
+        }
+
+        // Only an <Sdk> element directly under <Project> declares an SDK, so an Sdk item in an ItemGroup is neither
+        // discovered nor updated.
+        [Fact]
+        public void Discover_And_TryUpdate_SdkItemInItemGroup_IsNotDiscoveredOrUpdated()
         {
             const string content = @"<Project Sdk=""X.Sdk/1.0.0"">
   <ItemGroup>
@@ -422,7 +431,7 @@ namespace DotNetOutdated.Tests
             Assert.True(ProjectSdkReferenceHelper.TryUpdate(fileSystem, ProjectPath, "X.Sdk", new NuGetVersion("2.0.0")));
             Assert.Equal(@"<Project Sdk=""X.Sdk/2.0.0"">
   <ItemGroup>
-    <Sdk Include=""a"" Name=""X.Sdk"" Version=""2.0.0"" />
+    <Sdk Include=""a"" Name=""X.Sdk"" Version=""1.0.0"" />
   </ItemGroup>
 </Project>", fileSystem.File.ReadAllText(ProjectPath));
         }
