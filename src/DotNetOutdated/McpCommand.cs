@@ -22,7 +22,6 @@ namespace DotNetOutdated
             var server = new McpServer(
                 services,
                 services.GetRequiredService<IProjectDiscoveryService>(),
-                services.GetRequiredService<IProjectAnalysisService>(),
                 services.GetRequiredService<IReferenceUpgrader>(),
                 services.GetRequiredService<IOutdatedDependencyService>(),
                 Console.OpenStandardInput(),

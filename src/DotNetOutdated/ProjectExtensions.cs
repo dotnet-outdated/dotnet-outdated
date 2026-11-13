@@ -1,20 +1,19 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using DotNetOutdated.Core;
-using DotNetOutdated.Models;
+using DotNetOutdated.Core.Models;
 
 namespace DotNetOutdated
 {
     internal static class ProjectExtensions
     {
-        public static List<ConsolidatedPackage> ConsolidatePackages(this List<AnalyzedProject> projects)
+        public static List<ConsolidatedPackage> ConsolidatePackages(this IReadOnlyList<OutdatedProject> projects)
         {
             // Get a flattened view of all the outdated packages
             var outdated = from p in projects
                            from f in p.TargetFrameworks
                            from d in f.Dependencies
-                           where d.LatestVersion > d.ResolvedVersion
+                           where d.LatestVersion > d.Dependency.ResolvedVersion
                            select new
                            {
                                Project = p.Name,
@@ -22,12 +21,12 @@ namespace DotNetOutdated
                                Sources = p.Sources,
                                TargetFramework = f.Name,
                                TargetAlias = f.TargetAlias,
-                               Dependency = d.Name,
-                               Kind = d.Kind,
-                               ResolvedVersion = d.ResolvedVersion,
+                               Dependency = d.Dependency.Name,
+                               Kind = d.Dependency.Kind,
+                               ResolvedVersion = d.Dependency.ResolvedVersion,
                                LatestVersion = d.LatestVersion,
-                               IsAutoReferenced = d.IsAutoReferenced,
-                               IsTransitive = d.IsTransitive,
+                               IsAutoReferenced = d.Dependency.IsAutoReferenced,
+                               IsTransitive = d.Dependency.IsTransitive,
                                UpgradeSeverity = d.UpgradeSeverity,
                            };
 

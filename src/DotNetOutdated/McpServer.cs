@@ -30,7 +30,6 @@ namespace DotNetOutdated
 
         private readonly IServiceProvider _serviceProvider;
         private readonly IProjectDiscoveryService _projectDiscoveryService;
-        private readonly IProjectAnalysisService _projectAnalysisService;
         private readonly IReferenceUpgrader _referenceUpgrader;
         private readonly IOutdatedDependencyService _outdatedDependencyService;
         private readonly Stream _inputStream;
@@ -39,7 +38,6 @@ namespace DotNetOutdated
         public McpServer(
             IServiceProvider serviceProvider,
             IProjectDiscoveryService projectDiscoveryService,
-            IProjectAnalysisService projectAnalysisService,
             IReferenceUpgrader referenceUpgrader,
             IOutdatedDependencyService outdatedDependencyService,
             Stream inputStream,
@@ -47,7 +45,6 @@ namespace DotNetOutdated
         {
             _serviceProvider = serviceProvider;
             _projectDiscoveryService = projectDiscoveryService;
-            _projectAnalysisService = projectAnalysisService;
             _referenceUpgrader = referenceUpgrader;
             _outdatedDependencyService = outdatedDependencyService;
             _inputStream = inputStream;
@@ -343,38 +340,25 @@ namespace DotNetOutdated
                 includeTransitive = includeTransitiveProp.GetBoolean();
             }
 
-            int transitiveDepth = 1;
-            string? runtime = null;
-
-            var projects = await _projectAnalysisService.AnalyzeProjectAsync(projectPath, new ProjectAnalysisOptions
+            // Every dependency is reported, with its latest version, so the client can decide what to upgrade. A project or
+            // target framework with nothing referenced is reported too, so a client can tell "analyzed, nothing
+            // referenced" apart from "nothing found".
+            var report = await _outdatedDependencyService.FindOutdatedAsync(projectPath, new OutdatedOptions
             {
                 IncludeTransitiveDependencies = includeTransitive,
-                TransitiveDepth = transitiveDepth,
-                Runtime = runtime,
-            });
-            
-            // Every dependency is reported, with its latest version, so the client can decide what to upgrade.
-            var outdatedProjects = await _outdatedDependencyService.FindOutdatedAsync(projects, new OutdatedOptions
-            {
                 IncludeAutoReferences = true,
                 IncludeUpToDate = true,
             });
 
-            // FindOutdatedAsync leaves out projects and target frameworks with no dependencies, but every analyzed one is
-            // reported here so a client can tell "analyzed, nothing referenced" apart from "nothing found".
-            var outdatedDependencies = outdatedProjects
-                .SelectMany(project => project.TargetFrameworks.Select(tf => (project.FilePath, tf.Name, tf.TargetAlias, tf.Dependencies)))
-                .ToDictionary(entry => (entry.FilePath, entry.Name, entry.TargetAlias), entry => entry.Dependencies);
-
-            var result = projects.Select(project => new
+            var result = report.Projects.Select(project => new
             {
                 name = project.Name,
                 filePath = project.FilePath,
                 targetFrameworks = project.TargetFrameworks.Select(tf => new
                 {
                     // The string update_package takes as its framework, as the CLI passes to dotnet add package.
-                    name = string.IsNullOrEmpty(tf.TargetAlias) ? tf.Name.GetShortFolderName() : tf.TargetAlias,
-                    dependencies = outdatedDependencies.GetValueOrDefault((project.FilePath, tf.Name, tf.TargetAlias), []).Select(outdated => new
+                    name = tf.TargetAlias,
+                    dependencies = tf.Dependencies.Select(outdated => new
                     {
                         name = outdated.Dependency.Name,
                         version = outdated.Dependency.ResolvedVersion?.ToString(),

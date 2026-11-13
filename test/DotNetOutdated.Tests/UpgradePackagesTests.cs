@@ -4,7 +4,6 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using DotNetOutdated.Core.Models;
 using DotNetOutdated.Core.Services;
-using DotNetOutdated.Models;
 using NSubstitute;
 using NuGet.Frameworks;
 using NuGet.Versioning;
@@ -113,13 +112,9 @@ public class UpgradePackagesTests
     {
         // Arrange
         UpgradeReturns(UpgradeOutcome.Upgraded);
-        var dependency = new Dependency { Name = PackageName, VersionRange = VersionRange.Parse("1.0.0"), ResolvedVersion = new NuGetVersion("1.0.0") };
-        var targetFrameworks = new[] { "net8.0", "net9.0" }
-            .Select(framework => new AnalyzedTargetFramework(NuGetFramework.Parse(framework), [new AnalyzedDependency(dependency, new NuGetVersion("2.0.0"))]))
-            .ToList();
 
         // Act
-        (bool success, string written) = await RunUpgradeOf([new("MyProject", ProjectPath, targetFrameworks)]);
+        (bool success, string written) = await RunUpgradeOf([MultiTargeted("net8.0", "net9.0")]);
 
         // Assert
         Assert.True(success);
@@ -127,6 +122,22 @@ public class UpgradePackagesTests
             upgrade.Name == PackageName && upgrade.Version == new NuGetVersion("2.0.0") &&
             upgrade.Projects.SequenceEqual(new[] { new UpgradeProject(ProjectPath, "net8.0"), new UpgradeProject(ProjectPath, "net9.0") })));
         Assert.Single(Lines(written), line => line == "Project MyProject upgraded successfully");
+    }
+
+    [Theory]
+    [InlineData("desktop", "net10.0-windows10.0.19041", "desktop")]
+    [InlineData(null, "net10.0-windows10.0.19041", "net10.0-windows10.0.19041")]
+    public async Task AnUpgrade_NamesEachTargetFrameworkByItsTargetAlias(string targetAlias, string framework, string expected)
+    {
+        // Arrange
+        UpgradeReturns(UpgradeOutcome.Upgraded);
+        var targetFramework = TargetFramework(framework, Outdated(Package(PackageName))) with { TargetAlias = targetAlias };
+
+        // Act
+        await RunUpgradeOf([Project(targetFramework)]);
+
+        // Assert
+        _upgrader.Received(1).Upgrade(Arg.Is<ReferenceUpgrade>(upgrade => upgrade.Projects.Single() == new UpgradeProject(ProjectPath, expected)));
     }
 
     [Fact]
@@ -362,10 +373,16 @@ public class UpgradePackagesTests
                 query.TargetFramework == NuGetFramework.Parse(targetFramework)), Arg.Any<System.Threading.CancellationToken>())
             .Returns(true);
 
-    private static AnalyzedProject MultiTargeted(params string[] targetFrameworks) =>
-        new("MyProject", ProjectPath, targetFrameworks
-            .Select(framework => new AnalyzedTargetFramework(NuGetFramework.Parse(framework), [new AnalyzedDependency(Package(PackageName), new NuGetVersion("2.0.0"))]))
-            .ToList());
+    private static OutdatedProject MultiTargeted(params string[] targetFrameworks) =>
+        Project(targetFrameworks.Select(framework => TargetFramework(framework, Outdated(Package(PackageName)))).ToArray());
+
+    private static OutdatedProject Project(params OutdatedTargetFramework[] targetFrameworks) =>
+        new() { Name = "MyProject", FilePath = ProjectPath, TargetFrameworks = targetFrameworks };
+
+    private static OutdatedTargetFramework TargetFramework(string framework, params OutdatedDependency[] dependencies) =>
+        new() { Name = NuGetFramework.Parse(framework), Dependencies = dependencies };
+
+    private static OutdatedDependency Outdated(Dependency dependency) => new() { Dependency = dependency, LatestVersion = new NuGetVersion("2.0.0") };
 
     private const string SkippedMessage = "No input is available to answer the prompt, so the remaining upgrades were skipped.";
 
@@ -393,20 +410,15 @@ public class UpgradePackagesTests
 
     private Task<(bool Success, string Written)> RunUpgrade(UpgradeType upgradeType, string input, params Dependency[] dependencies)
     {
-        var targetFramework = new AnalyzedTargetFramework(
-            NuGetFramework.Parse("net8.0"),
-            dependencies.Select(dependency => new AnalyzedDependency(dependency, new NuGetVersion("2.0.0"))));
-        return RunUpgradeOf([new AnalyzedProject("MyProject", ProjectPath, [targetFramework])], upgradeType, input);
+        return RunUpgradeOf([Project(TargetFramework("net8.0", dependencies.Select(Outdated).ToArray()))], upgradeType, input);
     }
 
-    private async Task<(bool Success, string Written)> RunUpgradeOf(List<AnalyzedProject> projects, UpgradeType upgradeType = UpgradeType.Auto, string input = null)
+    private async Task<(bool Success, string Written)> RunUpgradeOf(List<OutdatedProject> projects, UpgradeType upgradeType = UpgradeType.Auto, string input = null)
     {
         var program = new Program(
             Substitute.For<System.IO.Abstractions.IFileSystem>(),
             Substitute.For<IReporter>(),
             Substitute.For<IOutdatedDependencyService>(),
-            Substitute.For<IProjectAnalysisService>(),
-            Substitute.For<IProjectDiscoveryService>(),
             _upgrader,
             _nuget,
             new DotNetRunnerOptions())

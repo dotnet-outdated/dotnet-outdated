@@ -1,5 +1,4 @@
 using DotNetOutdated.Core.Models;
-using DotNetOutdated.Models;
 using NuGet.Versioning;
 using Xunit;
 
@@ -20,7 +19,7 @@ namespace DotNetOutdated.Tests
             var resolvedVersion = new NuGetVersion(resolved);
             var latestVersion = new NuGetVersion(latest);
 
-            var dependency = DependencyUpgradeSeverityTests.CreateAnalyzedDependency(resolvedVersion, latestVersion);
+            var dependency = CreateOutdatedDependency(resolvedVersion, latestVersion);
 
             Assert.Equal(DependencyUpgradeSeverity.Major, dependency.UpgradeSeverity);
         }
@@ -34,7 +33,7 @@ namespace DotNetOutdated.Tests
             var resolvedVersion = new NuGetVersion(resolved);
             var latestVersion = new NuGetVersion(latest);
 
-            var dependency = DependencyUpgradeSeverityTests.CreateAnalyzedDependency(resolvedVersion, latestVersion);
+            var dependency = CreateOutdatedDependency(resolvedVersion, latestVersion);
 
             Assert.Equal(DependencyUpgradeSeverity.Minor, dependency.UpgradeSeverity);
         }
@@ -48,7 +47,7 @@ namespace DotNetOutdated.Tests
             var resolvedVersion = new NuGetVersion(resolved);
             var latestVersion = new NuGetVersion(latest);
 
-            var dependency = DependencyUpgradeSeverityTests.CreateAnalyzedDependency(resolvedVersion, latestVersion);
+            var dependency = CreateOutdatedDependency(resolvedVersion, latestVersion);
 
             Assert.Equal(DependencyUpgradeSeverity.None, dependency.UpgradeSeverity);
         }
@@ -62,7 +61,7 @@ namespace DotNetOutdated.Tests
             var resolvedVersion = new NuGetVersion(resolved);
             var latestVersion = new NuGetVersion(latest);
 
-            var dependency = DependencyUpgradeSeverityTests.CreateAnalyzedDependency(resolvedVersion, latestVersion);
+            var dependency = CreateOutdatedDependency(resolvedVersion, latestVersion);
 
             Assert.Equal(DependencyUpgradeSeverity.Patch, dependency.UpgradeSeverity);
         }
@@ -75,14 +74,14 @@ namespace DotNetOutdated.Tests
             var resolvedVersion = new NuGetVersion(resolved);
             var latestVersion = new NuGetVersion(latest);
 
-            var dependency = DependencyUpgradeSeverityTests.CreateAnalyzedDependency(resolvedVersion, latestVersion);
+            var dependency = CreateOutdatedDependency(resolvedVersion, latestVersion);
 
             Assert.Equal(DependencyUpgradeSeverity.Major, dependency.UpgradeSeverity);
         }
 
-        private static AnalyzedDependency CreateAnalyzedDependency(NuGetVersion resolvedVersion, NuGetVersion latestVersion)
+        private static OutdatedDependency CreateOutdatedDependency(NuGetVersion resolvedVersion, NuGetVersion latestVersion)
         {
-            return new AnalyzedDependency(new Dependency { Name = "Does not matter", VersionRange = VersionRange.All, ResolvedVersion = resolvedVersion }, latestVersion);
+            return new OutdatedDependency { Dependency = new Dependency { Name = "Does not matter", VersionRange = VersionRange.All, ResolvedVersion = resolvedVersion }, LatestVersion = latestVersion };
         }
     }
 }

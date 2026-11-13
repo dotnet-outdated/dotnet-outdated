@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using NuGet.Frameworks;
 using NuGet.Versioning;
 
@@ -34,20 +36,40 @@ namespace DotNetOutdated.Core.Models
         NotProvided
     }
 
-    /// <summary>A project with the dependencies of each target framework that have a newer version.</summary>
+    /// <summary>
+    /// Every project found at a path, each of its target frameworks, and the latest version each reported dependency
+    /// may move to. A project or target framework with nothing to report is still in it.
+    /// </summary>
+    public sealed record OutdatedReport
+    {
+        /// <summary>The projects, each once, ordered by name and then path.</summary>
+        public required IReadOnlyList<OutdatedProject> Projects
+        {
+            get => _projects;
+            init => _projects = ReadOnlySnapshot.Of(value);
+        }
+
+        private readonly IReadOnlyList<OutdatedProject> _projects = [];
+    }
+
+    /// <summary>A project in an <see cref="OutdatedReport"/>, with the reported dependencies of each target framework.</summary>
     public sealed record OutdatedProject
     {
         public required string Name { get; init; }
 
         public required string FilePath { get; init; }
 
-        /// <summary>The target frameworks with at least one reported dependency, ordered by framework.</summary>
+        /// <summary>The package sources the project restores from.</summary>
+        public IReadOnlyList<Uri> Sources { get => _sources; init => _sources = ReadOnlySnapshot.Of(value); }
+
+        /// <summary>Every target framework of the project, ordered by framework.</summary>
         public required IReadOnlyList<OutdatedTargetFramework> TargetFrameworks
         {
             get => _targetFrameworks;
             init => _targetFrameworks = ReadOnlySnapshot.Of(value);
         }
 
+        private readonly IReadOnlyList<Uri> _sources = [];
         private readonly IReadOnlyList<OutdatedTargetFramework> _targetFrameworks = [];
     }
 
@@ -56,8 +78,18 @@ namespace DotNetOutdated.Core.Models
     {
         public required NuGetFramework Name { get; init; }
 
-        /// <summary>The alias the project uses for the framework in <c>TargetFrameworks</c>, if any.</summary>
-        public string? TargetAlias { get; init; }
+        /// <summary>
+        /// The name the project gives the framework in <c>TargetFrameworks</c>, or the framework's short folder name
+        /// (such as <c>net8.0</c>) when it gives none. Upgrades name a target framework by it.
+        /// </summary>
+        [AllowNull]
+        public string TargetAlias
+        {
+            get => string.IsNullOrEmpty(_targetAlias) ? Name.GetShortFolderName() : _targetAlias;
+            init => _targetAlias = value;
+        }
+
+        private readonly string? _targetAlias;
 
         /// <summary>The reported dependencies, ordered by name.</summary>
         public required IReadOnlyList<OutdatedDependency> Dependencies

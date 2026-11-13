@@ -23,7 +23,6 @@ namespace DotNetOutdated.Tests
     {
         private readonly IServiceProvider _serviceProvider;
         private readonly IProjectDiscoveryService _projectDiscoveryService;
-        private readonly IProjectAnalysisService _projectAnalysisService;
         private IReferenceUpgrader _referenceUpgrader;
         private readonly IOutdatedDependencyService _outdatedDependencyService;
 
@@ -31,7 +30,6 @@ namespace DotNetOutdated.Tests
         {
             _serviceProvider = Substitute.For<IServiceProvider>();
             _projectDiscoveryService = Substitute.For<IProjectDiscoveryService>();
-            _projectAnalysisService = Substitute.For<IProjectAnalysisService>();
             _referenceUpgrader = Substitute.For<IReferenceUpgrader>();
             _outdatedDependencyService = Substitute.For<IOutdatedDependencyService>();
         }
@@ -44,7 +42,6 @@ namespace DotNetOutdated.Tests
             var server = new McpServer(
                 _serviceProvider,
                 _projectDiscoveryService,
-                _projectAnalysisService,
                 _referenceUpgrader,
                 _outdatedDependencyService,
                 inputStream,
@@ -167,153 +164,72 @@ namespace DotNetOutdated.Tests
             Assert.Contains("\"resultType\":\"complete\"", output);
         }
 
-        [Fact]
-        public async Task AnalyzeProject_ReportsEveryDependencyWithItsLatestVersion()
+        [Theory]
+        [InlineData("", false)]
+        [InlineData(", \"includeTransitive\": true", true)]
+        public async Task AnalyzeProject_AsksForEveryDependencyOfThePath(string arguments, bool includeTransitive)
         {
-            // Arrange
+            var input = "{\"jsonrpc\": \"2.0\", \"method\": \"tools/call\", \"params\": { \"name\": \"analyze_project\", \"arguments\": { \"projectPath\": \"/test/p.csproj\"" + arguments + " } }, \"id\": 3}\n";
+            ReportReturns();
+
+            await RunServerAsync(input);
+
+            // Every dependency is reported, with its latest version, so the client can decide what to upgrade.
+            await _outdatedDependencyService.Received(1).FindOutdatedAsync(
+                "/test/p.csproj",
+                Arg.Is<OutdatedOptions>(o => o.IncludeUpToDate && o.IncludeAutoReferences && !o.Recursive && o.IncludeTransitiveDependencies == includeTransitive),
+                Arg.Any<IProgress<OutdatedReportStage>>(),
+                Arg.Any<CancellationToken>());
+        }
+
+        [Fact]
+        public async Task AnalyzeProject_ReportsEveryProjectTargetFrameworkAndDependency()
+        {
             var input = "{\"jsonrpc\": \"2.0\", \"method\": \"tools/call\", \"params\": { \"name\": \"analyze_project\", \"arguments\": { \"projectPath\": \"/test/p.csproj\" } }, \"id\": 3}\n";
-            var dependency = new Dependency { Name = "Contoso.Widgets", VersionRange = VersionRange.Parse("1.0.0"), ResolvedVersion = new NuGetVersion("1.0.0") };
-            var projects = new List<Project>
+            ReportReturns(new OutdatedProject
             {
-                new()
-                {
-                    Name = "p",
-                    FilePath = "/test/p.csproj",
-                    Version = new NuGetVersion("1.0.0"),
-                    TargetFrameworks = [new TargetFramework { Name = NuGetFramework.Parse("net9.0"), Dependencies = [dependency] }],
-                },
-            };
-            _projectAnalysisService.AnalyzeProjectAsync("/test/p.csproj", Arg.Any<ProjectAnalysisOptions>(), Arg.Any<CancellationToken>()).Returns(projects);
-            _outdatedDependencyService
-                .FindOutdatedAsync(projects, Arg.Is<OutdatedOptions>(o => o.IncludeUpToDate && o.IncludeAutoReferences), Arg.Any<CancellationToken>())
-                .Returns([new OutdatedProject
-                {
-                    Name = "p",
-                    FilePath = "/test/p.csproj",
-                    TargetFrameworks = [new OutdatedTargetFramework
+                Name = "p",
+                FilePath = "/test/p.csproj",
+                TargetFrameworks =
+                [
+                    new OutdatedTargetFramework { Name = NuGetFramework.Parse("net9.0"), Dependencies = [] },
+                    new OutdatedTargetFramework
                     {
-                        Name = NuGetFramework.Parse("net9.0"),
-                        Dependencies = [new OutdatedDependency { Dependency = dependency, LatestVersion = new NuGetVersion("1.2.0") }],
-                    }],
-                }]);
+                        Name = NuGetFramework.Parse("net8.0-windows7.0"),
+                        TargetAlias = "net8.0-windows",
+                        Dependencies =
+                        [
+                            new OutdatedDependency
+                            {
+                                Dependency = new Dependency { Name = "Contoso.Widgets", VersionRange = VersionRange.Parse("1.0.0"), ResolvedVersion = new NuGetVersion("1.0.0"), IsTransitive = true },
+                                LatestVersion = new NuGetVersion("1.2.0"),
+                            },
+                            new OutdatedDependency
+                            {
+                                Dependency = new Dependency { Name = "Contoso.Sdk", VersionRange = VersionRange.Parse("2.0.0"), ResolvedVersion = new NuGetVersion("2.0.0"), IsAutoReferenced = true, Kind = ReferenceKind.Sdk },
+                                LatestVersion = new NuGetVersion("2.0.0"),
+                            },
+                        ],
+                    },
+                ],
+            });
 
-            // Act
-            var output = await RunServerAsync(input);
+            var analyzed = ToolResultText(await RunServerAsync(input));
 
-            // Assert
-            Assert.Contains("Contoso.Widgets", output);
-            Assert.Contains("1.2.0", output);
-            Assert.Contains("Minor", output);
+            // Each framework is named by the string update_package takes as its framework.
+            Assert.Equal(
+                "[{\"name\":\"p\",\"filePath\":\"/test/p.csproj\",\"targetFrameworks\":[" +
+                "{\"name\":\"net9.0\",\"dependencies\":[]}," +
+                "{\"name\":\"net8.0-windows\",\"dependencies\":[" +
+                "{\"name\":\"Contoso.Widgets\",\"version\":\"1.0.0\",\"latestVersion\":\"1.2.0\",\"isAutoReferenced\":false,\"isTransitive\":true,\"kind\":\"package\",\"upgradeSeverity\":\"Minor\"}," +
+                "{\"name\":\"Contoso.Sdk\",\"version\":\"2.0.0\",\"latestVersion\":\"2.0.0\",\"isAutoReferenced\":true,\"isTransitive\":false,\"kind\":\"sdk\",\"upgradeSeverity\":\"None\"}]}]}]",
+                analyzed);
         }
 
-        [Fact]
-        public async Task AnalyzeProject_ReportsAProjectWithNoDependencies()
-        {
-            var input = "{\"jsonrpc\": \"2.0\", \"method\": \"tools/call\", \"params\": { \"name\": \"analyze_project\", \"arguments\": { \"projectPath\": \"/test/App.csproj\" } }, \"id\": 3}\n";
-            var projects = new List<Project>
-            {
-                new()
-                {
-                    Name = "App",
-                    FilePath = "/test/App.csproj",
-                    Version = new NuGetVersion("1.0.0"),
-                    TargetFrameworks = [new TargetFramework { Name = NuGetFramework.Parse("net8.0") }],
-                },
-            };
-            _projectAnalysisService.AnalyzeProjectAsync("/test/App.csproj", Arg.Any<ProjectAnalysisOptions>(), Arg.Any<CancellationToken>()).Returns(projects);
+        private void ReportReturns(params OutdatedProject[] projects) =>
             _outdatedDependencyService
-                .FindOutdatedAsync(projects, Arg.Any<OutdatedOptions>(), Arg.Any<CancellationToken>())
-                .Returns(Array.Empty<OutdatedProject>());
-
-            var analyzed = ParseAnalyzeProjectResult(await RunServerAsync(input));
-
-            var project = Assert.Single(analyzed.EnumerateArray());
-            Assert.Equal("App", project.GetProperty("name").GetString());
-            Assert.Equal("/test/App.csproj", project.GetProperty("filePath").GetString());
-            var targetFramework = Assert.Single(project.GetProperty("targetFrameworks").EnumerateArray());
-            Assert.Equal("net8.0", targetFramework.GetProperty("name").GetString());
-            Assert.Empty(targetFramework.GetProperty("dependencies").EnumerateArray());
-        }
-
-        [Fact]
-        public async Task AnalyzeProject_ReportsATargetFrameworkWithNoDependencies()
-        {
-            var input = "{\"jsonrpc\": \"2.0\", \"method\": \"tools/call\", \"params\": { \"name\": \"analyze_project\", \"arguments\": { \"projectPath\": \"/test/p.csproj\" } }, \"id\": 3}\n";
-            var dependency = new Dependency { Name = "Contoso.Widgets", VersionRange = VersionRange.Parse("1.0.0"), ResolvedVersion = new NuGetVersion("1.0.0") };
-            var net8 = NuGetFramework.Parse("net8.0");
-            var net9 = NuGetFramework.Parse("net9.0");
-            var projects = new List<Project>
-            {
-                new()
-                {
-                    Name = "p",
-                    FilePath = "/test/p.csproj",
-                    Version = new NuGetVersion("1.0.0"),
-                    TargetFrameworks =
-                    [
-                        new TargetFramework { Name = net8 },
-                        new TargetFramework { Name = net9, Dependencies = [dependency] },
-                    ],
-                },
-            };
-            _projectAnalysisService.AnalyzeProjectAsync("/test/p.csproj", Arg.Any<ProjectAnalysisOptions>(), Arg.Any<CancellationToken>()).Returns(projects);
-            _outdatedDependencyService
-                .FindOutdatedAsync(projects, Arg.Any<OutdatedOptions>(), Arg.Any<CancellationToken>())
-                .Returns([new OutdatedProject
-                {
-                    Name = "p",
-                    FilePath = "/test/p.csproj",
-                    TargetFrameworks = [new OutdatedTargetFramework
-                    {
-                        Name = net9,
-                        Dependencies = [new OutdatedDependency { Dependency = dependency, LatestVersion = new NuGetVersion("1.2.0") }],
-                    }],
-                }]);
-
-            var analyzed = ParseAnalyzeProjectResult(await RunServerAsync(input));
-
-            var project = Assert.Single(analyzed.EnumerateArray());
-            var targetFrameworks = project.GetProperty("targetFrameworks").EnumerateArray().ToList();
-            Assert.Equal(2, targetFrameworks.Count);
-            Assert.Equal("net8.0", targetFrameworks[0].GetProperty("name").GetString());
-            Assert.Empty(targetFrameworks[0].GetProperty("dependencies").EnumerateArray());
-            Assert.Equal("net9.0", targetFrameworks[1].GetProperty("name").GetString());
-            var reported = Assert.Single(targetFrameworks[1].GetProperty("dependencies").EnumerateArray());
-            Assert.Equal("Contoso.Widgets", reported.GetProperty("name").GetString());
-            Assert.Equal("1.2.0", reported.GetProperty("latestVersion").GetString());
-        }
-
-        [Fact]
-        public async Task AnalyzeProject_NamesEachFrameworkByTheStringUpdatePackageAccepts()
-        {
-            var input = "{\"jsonrpc\": \"2.0\", \"method\": \"tools/call\", \"params\": { \"name\": \"analyze_project\", \"arguments\": { \"projectPath\": \"/test/p.csproj\" } }, \"id\": 3}\n";
-            var projects = new List<Project>
-            {
-                new()
-                {
-                    Name = "p",
-                    FilePath = "/test/p.csproj",
-                    Version = new NuGetVersion("1.0.0"),
-                    TargetFrameworks =
-                    [
-                        new TargetFramework { Name = NuGetFramework.Parse("net9.0") },
-                        new TargetFramework { Name = NuGetFramework.Parse("net8.0-windows7.0"), TargetAlias = "net8.0-windows" },
-                    ],
-                },
-            };
-            _projectAnalysisService.AnalyzeProjectAsync("/test/p.csproj", Arg.Any<ProjectAnalysisOptions>(), Arg.Any<CancellationToken>()).Returns(projects);
-            _outdatedDependencyService
-                .FindOutdatedAsync(projects, Arg.Any<OutdatedOptions>(), Arg.Any<CancellationToken>())
-                .Returns(Array.Empty<OutdatedProject>());
-
-            var analyzed = ParseAnalyzeProjectResult(await RunServerAsync(input));
-
-            var names = analyzed[0].GetProperty("targetFrameworks").EnumerateArray()
-                .Select(tf => tf.GetProperty("name"))
-                .ToList();
-            Assert.All(names, name => Assert.Equal(JsonValueKind.String, name.ValueKind));
-            Assert.Equal(["net9.0", "net8.0-windows"], names.Select(name => name.GetString()));
-        }
+                .FindOutdatedAsync(Arg.Any<string>(), Arg.Any<OutdatedOptions>(), Arg.Any<IProgress<OutdatedReportStage>>(), Arg.Any<CancellationToken>())
+                .Returns(new OutdatedReport { Projects = projects });
 
         private static JsonElement ParseAnalyzeProjectResult(string output) =>
             JsonDocument.Parse(ToolResultText(output)).RootElement.Clone();

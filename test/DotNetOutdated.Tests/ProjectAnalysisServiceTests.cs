@@ -130,6 +130,23 @@ namespace DotNetOutdated.Tests
             Assert.Equal(new NuGetVersion("2.1.0"), child.ResolvedVersion);
         }
 
+        [Theory]
+        [InlineData("net10.0-windows10.0.19041.0", "net10.0-windows10.0.19041", "net10.0-windows10.0.19041.0")]
+        [InlineData("net10.0-android", "net10.0-android36.0", "net10.0-android")]
+        [InlineData("desktop", "net10.0-windows10.0.19041", "desktop")]
+        [InlineData(null, "net8.0", "net8.0")]
+        [InlineData("", "net8.0", "net8.0")]
+        [InlineData(null, "net10.0-windows10.0.19041", "net10.0-windows10.0.19041")]
+        public async Task ATargetFramework_IsNamedByTheProjectsAlias_OrItsShortNameWhenItHasNone(string? targetAlias, string framework, string expected)
+        {
+            using var project = new TemporaryProject("<Project Sdk=\"Microsoft.NET.Sdk\" />", framework, targetAlias);
+            project.Write(directDependencies: []);
+
+            var analyzed = await project.AnalyzeAsync(ProjectAnalysisOptions.Default);
+
+            Assert.Equal(expected, Assert.Single(analyzed.TargetFrameworks).TargetAlias);
+        }
+
         [Fact]
         public async Task ASolution_ReportsEachProjectWithItsOwnNameAndPath()
         {
@@ -240,10 +257,14 @@ namespace DotNetOutdated.Tests
         /// <summary>A project file and its lock file in a temporary directory, analyzed with a substitute evaluator.</summary>
         private sealed class TemporaryProject : IDisposable
         {
-            private static readonly NuGetFramework Framework = NuGetFramework.Parse("net9.0");
+            private readonly NuGetFramework _framework;
+            private readonly string? _targetAlias;
 
-            public TemporaryProject(string projectContent)
+            public TemporaryProject(string projectContent, string framework = "net9.0", string? targetAlias = "net9.0")
             {
+                _framework = NuGetFramework.Parse(framework);
+                _targetAlias = targetAlias;
+                Target = new() { TargetFramework = _framework };
                 Directory = Path.Combine(Path.GetTempPath(), "dotnet-outdated-analysis-" + Guid.NewGuid().ToString("N"));
                 System.IO.Directory.CreateDirectory(Directory);
                 ProjectPath = Path.Combine(Directory, "App.csproj");
@@ -254,7 +275,7 @@ namespace DotNetOutdated.Tests
 
             public string ProjectPath { get; }
 
-            public LockFileTarget Target { get; } = new() { TargetFramework = Framework };
+            public LockFileTarget Target { get; }
 
             public IProjectEvaluator Evaluator { get; } = Substitute.For<IProjectEvaluator>();
 
@@ -266,8 +287,8 @@ namespace DotNetOutdated.Tests
                 [
                     new TargetFrameworkInformation
                     {
-                        FrameworkName = Framework,
-                        TargetAlias = "net9.0",
+                        FrameworkName = _framework,
+                        TargetAlias = _targetAlias,
                         Dependencies =
                         [
                             .. directDependencies.Select(name => new LibraryDependency

@@ -4,7 +4,6 @@ using System.IO;
 using System.Threading.Tasks;
 using DotNetOutdated.Core.Models;
 using DotNetOutdated.Formatters;
-using DotNetOutdated.Models;
 using NuGet.Frameworks;
 using NuGet.Versioning;
 using Xunit;
@@ -13,20 +12,29 @@ namespace DotNetOutdated.Tests;
 
 public class CsvFormatterTests
 {
-    private static List<AnalyzedProject> CreateProjects()
+    private static List<OutdatedProject> CreateProjects()
     {
         var resolved = new NuGetVersion("1.0.0");
 
         return
         [
-            new AnalyzedProject("My, Project", "/src/MyProject.csproj", new List<AnalyzedTargetFramework>
+            new OutdatedProject
             {
-                new AnalyzedTargetFramework(NuGetFramework.Parse("net9.0"), new List<AnalyzedDependency>
-                {
-                    new AnalyzedDependency(new Dependency { Name = "Alpha", VersionRange = new VersionRange(resolved), ResolvedVersion = resolved }, new NuGetVersion("2.0.0")),
-                    new AnalyzedDependency(new Dependency { Name = "Beta", VersionRange = new VersionRange(resolved), ResolvedVersion = resolved }),
-                })
-            })
+                Name = "My, Project",
+                FilePath = "/src/MyProject.csproj",
+                TargetFrameworks =
+                [
+                    new OutdatedTargetFramework
+                    {
+                        Name = NuGetFramework.Parse("net9.0"),
+                        Dependencies =
+                        [
+                            new OutdatedDependency { Dependency = new Dependency { Name = "Alpha", VersionRange = new VersionRange(resolved), ResolvedVersion = resolved }, LatestVersion = new NuGetVersion("2.0.0") },
+                            new OutdatedDependency { Dependency = new Dependency { Name = "Beta", VersionRange = new VersionRange(resolved), ResolvedVersion = resolved } },
+                        ],
+                    },
+                ],
+            },
         ];
     }
 

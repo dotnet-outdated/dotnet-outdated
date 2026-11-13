@@ -27,3 +27,11 @@ A single `.cs` file run with `dotnet run`, whose references are declared with `#
 
 **Upgrade**:
 Changing a reference's version at its version location to a newer version, keeping version variables, the file's formatting, and a declared upper bound the new version still satisfies.
+
+**Target alias**:
+The name a project gives a target framework in `TargetFrameworks`, or the framework's short name when the project gives none. Upgrades name a target framework by it.
+_Avoid_: Framework identifier, TFM string
+
+**Outdated report**:
+Every project found at a path, each of its target frameworks, and for each reported dependency the latest version it may move to. A project or target framework with nothing to report is still in it.
+_Avoid_: Analysis result

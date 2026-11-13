@@ -2,6 +2,7 @@
 using NuGet.Common;
 using NuGet.Configuration;
 using NuGet.ContentModel;
+using NuGet.Credentials;
 using NuGet.Frameworks;
 using NuGet.Packaging;
 using NuGet.Packaging.Core;
@@ -34,12 +35,43 @@ namespace DotNetOutdated.Core.Services
         // The result of checking a package version against a target framework, null when the source doesn't have it.
         private readonly ConcurrentDictionary<(string Source, string Id, NuGetVersion Version, NuGetFramework Framework, bool IsDependency), Task<bool?>> _supportChecks = [];
 
-        public NuGetPackageInfoService()
+        private readonly ILogger _logger;
+
+        public NuGetPackageInfoService() : this(NullLogger.Instance)
         {
+        }
+
+        /// <param name="logger">Where NuGet's credential providers log.</param>
+        public NuGetPackageInfoService(ILogger logger)
+        {
+            _logger = logger;
             _context = new SourceCacheContext()
             {
                 NoCache = true
             };
+        }
+
+        private static readonly object CredentialServiceLock = new();
+
+        /// <summary>
+        /// Sets up NuGet's credential service (credential providers, such as for Azure Artifacts) once for the process,
+        /// non-interactively, so authenticated feeds can be read whichever host runs the lookups. A credential service
+        /// the host set up itself is kept.
+        /// </summary>
+        private void EnsureCredentialService()
+        {
+            if (HttpHandlerResourceV3.CredentialService != null)
+            {
+                return;
+            }
+
+            lock (CredentialServiceLock)
+            {
+                if (HttpHandlerResourceV3.CredentialService == null)
+                {
+                    DefaultCredentialServiceUtility.SetupDefaultCredentialService(_logger, nonInteractive: true);
+                }
+            }
         }
 
         private sealed record SourceSettings(IEnumerable<PackageSource> EnabledSources, PackageSourceMapping PackageSourceMapping);
@@ -63,6 +95,8 @@ namespace DotNetOutdated.Core.Services
         /// </summary>
         private SourceRepository? GetSourceRepository(Uri source, string? projectFilePath, string packageId)
         {
+            EnsureCredentialService();
+
             var sourceSettings = GetSourceSettings(projectFilePath);
             var enabledSource = sourceSettings.EnabledSources.FirstOrDefault(s => s.SourceUri == source);
 

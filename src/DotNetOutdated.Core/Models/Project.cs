@@ -3,6 +3,7 @@ using NuGet.Frameworks;
 using NuGet.Versioning;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 
 namespace DotNetOutdated.Core.Models
 {
@@ -34,8 +35,18 @@ namespace DotNetOutdated.Core.Models
     {
         public required NuGetFramework Name { get; init; }
 
-        /// <summary>The alias the project uses for the framework in <c>TargetFrameworks</c>, if any.</summary>
-        public string? TargetAlias { get; init; }
+        /// <summary>
+        /// The name the project gives the framework in <c>TargetFrameworks</c>, or the framework's short folder name
+        /// (such as <c>net8.0</c>) when it gives none. Upgrades name a target framework by it.
+        /// </summary>
+        [AllowNull]
+        public string TargetAlias
+        {
+            get => string.IsNullOrEmpty(_targetAlias) ? Name.GetShortFolderName() : _targetAlias;
+            init => _targetAlias = value;
+        }
+
+        private readonly string? _targetAlias;
 
         /// <summary>
         /// The references and transitive packages of the framework. A package and an SDK can have the same

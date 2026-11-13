@@ -2,13 +2,10 @@ using DotNetOutdated.Core;
 using DotNetOutdated.Core.Exceptions;
 using DotNetOutdated.Core.Models;
 using DotNetOutdated.Core.Services;
-using DotNetOutdated.Models;
 using Microsoft.Extensions.DependencyInjection;
 using NuGet.Common;
-using NuGet.Credentials;
 using NuGet.Versioning;
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO.Abstractions;
@@ -27,8 +24,6 @@ namespace DotNetOutdated
         IFileSystem fileSystem,
         IReporter reporter,
         IOutdatedDependencyService outdatedDependencyService,
-        IProjectAnalysisService projectAnalysisService,
-        IProjectDiscoveryService projectDiscoveryService,
         IReferenceUpgrader referenceUpgrader,
         INuGetPackageInfoService nuGetPackageInfoService,
         DotNetRunnerOptions dotNetRunnerOptions)
@@ -36,8 +31,6 @@ namespace DotNetOutdated
       private readonly IFileSystem _fileSystem = fileSystem;
       private readonly IReporter _reporter = reporter;
       private readonly IOutdatedDependencyService _outdatedDependencyService = outdatedDependencyService;
-      private readonly IProjectAnalysisService _projectAnalysisService = projectAnalysisService;
-      private readonly IProjectDiscoveryService _projectDiscoveryService = projectDiscoveryService;
       private readonly IReferenceUpgrader _referenceUpgrader = referenceUpgrader;
       private readonly INuGetPackageInfoService _nuGetPackageInfoService = nuGetPackageInfoService;
       private readonly DotNetRunnerOptions _dotNetRunnerOptions = dotNetRunnerOptions;
@@ -90,20 +83,21 @@ namespace DotNetOutdated
       
       public static int Main(string[] args)
       {
-         using var services = new ServiceCollection()
-                 .AddSingleton(PhysicalConsole.Singleton)
-                 .AddSingleton<IReporter>(provider => new ConsoleReporter(provider.GetService<IConsole>()))
-                 .AddSingleton<ILogger>(provider => new ConsoleLogger(provider.GetService<IConsole>(), LogLevel.Warning))
-                 .AddDotNetOutdated()
-                 .BuildServiceProvider();
-
          ProgramCommandLine commandLine = null;
          commandLine = new ProgramCommandLine(
-            run: (parseResult, _) =>
+            run: async (parseResult, _) =>
             {
+               // NuGet logs at the level --nuget-cred-log-level asks for, credential providers included.
+               await using var services = new ServiceCollection()
+                       .AddSingleton(PhysicalConsole.Singleton)
+                       .AddSingleton<IReporter>(provider => new ConsoleReporter(provider.GetService<IConsole>()))
+                       .AddSingleton<ILogger>(provider => new ConsoleLogger(provider.GetService<IConsole>(), parseResult.GetValue(commandLine.NuGetCredLogLevel)))
+                       .AddDotNetOutdated()
+                       .BuildServiceProvider();
+
                var program = ActivatorUtilities.CreateInstance<Program>(services);
                commandLine.Bind(parseResult, program);
-               return program.OnExecute(services.GetRequiredService<IConsole>());
+               return await program.OnExecute(services.GetRequiredService<IConsole>());
             },
             runMcp: _ => new McpCommand().OnExecuteAsync());
 
@@ -129,38 +123,13 @@ namespace DotNetOutdated
             if (string.IsNullOrEmpty(Path))
                Path = _fileSystem.Directory.GetCurrentDirectory();
 
-            // Get all the projects
-            console.WriteLine("Discovering projects...");
+            var report = await _outdatedDependencyService.FindOutdatedAsync(Path, CreateOutdatedOptions(), new ConsoleProgress(console)).ConfigureAwait(false);
 
-            DefaultCredentialServiceUtility.SetupDefaultCredentialService(new ConsoleLogger(console, NuGetCredLogLevel), true);
-
-            var projectPaths = _projectDiscoveryService.DiscoverProjects(Path, Recursive, IncludeFileBasedApps);
-
-            // Analyze the projects
-            console.WriteLine("Analyzing project(s)...");
-
-            var projectLists = new ConcurrentBag<IReadOnlyList<Project>>();
-            await Parallel.ForEachAsync(projectPaths, async (path, _) =>
-            {
-                projectLists.Add(await _projectAnalysisService.AnalyzeProjectAsync(path, new ProjectAnalysisOptions
-                {
-                    IncludeTransitiveDependencies = Transitive,
-                    TransitiveDepth = TransitiveDepth,
-                    Runtime = Runtime,
-                }));
-            });
-
-            // The restore graph of a project holds the projects it references too, so with --recursive a referenced
-            // project is analyzed both on its own and as part of each project that references it (issue #830).
-            // Report and upgrade each project file once. The paths are compared with symbolic links resolved, because MSBuild
-            // reports a referenced project by its real path (on macOS the temp folder /var is a link to /private/var).
-            var projects = projectLists
-               .SelectMany(p => p)
-               .DistinctBy(p => CanonicalPath(p.FilePath), OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+            // Show only the target frameworks, and the projects, with something to report.
+            var outdatedProjects = report.Projects
+               .Select(project => project with { TargetFrameworks = [.. project.TargetFrameworks.Where(targetFramework => targetFramework.Dependencies.Count != 0)] })
+               .Where(project => project.TargetFrameworks.Count != 0)
                .ToList();
-
-            // Analyze the dependencies
-            var outdatedProjects = await AnalyzeDependencies(projects, console).ConfigureAwait(false);
 
             if (outdatedProjects.Count != 0)
             {
@@ -202,7 +171,7 @@ namespace DotNetOutdated
          }
       }
 
-      internal async Task<bool> UpgradePackagesAsync(List<AnalyzedProject> projects, IConsole console)
+      internal async Task<bool> UpgradePackagesAsync(IReadOnlyList<OutdatedProject> projects, IConsole console)
       {
          bool success = true;
 
@@ -331,7 +300,7 @@ namespace DotNetOutdated
       }
 
       private static UpgradeProject ToUpgradeProject(PackageProjectReference project) =>
-         new(project.ProjectFilePath, string.IsNullOrEmpty(project.TargetAlias) ? project.Framework.GetShortFolderName() : project.TargetAlias);
+         new(project.ProjectFilePath, project.TargetAlias);
 
       // The projects (target frameworks) the package's new version declares unsupported.
       private async Task<List<PackageProjectReference>> FindUnsupportedTargetFrameworksAsync(ConsolidatedPackage package)
@@ -371,45 +340,6 @@ namespace DotNetOutdated
                     "Move to a supported target framework to upgrade it.",
                ConsoleColor.Yellow);
          }
-      }
-
-      /// <summary>
-      /// The full path of <paramref name="path"/> with every symbolic link along it resolved, so two paths to the same
-      /// file compare equal. A part that can't be resolved is kept as it is.
-      /// </summary>
-      private string CanonicalPath(string path) => CanonicalPath(path, linksFollowed: 0);
-
-      private string CanonicalPath(string path, int linksFollowed)
-      {
-         // As many links as the OS follows before it gives up (MAXSYMLINKS on Linux), so a loop of links ends.
-         const int MaxLinksFollowed = 40;
-
-         var fullPath = _fileSystem.Path.GetFullPath(path);
-         var root = _fileSystem.Path.GetPathRoot(fullPath) ?? string.Empty;
-         var current = root;
-
-         foreach (var segment in fullPath[root.Length..].Split(
-            [_fileSystem.Path.DirectorySeparatorChar, _fileSystem.Path.AltDirectorySeparatorChar],
-            StringSplitOptions.RemoveEmptyEntries))
-         {
-            current = _fileSystem.Path.Combine(current, segment);
-
-            try
-            {
-               if (linksFollowed < MaxLinksFollowed &&
-                   _fileSystem.FileInfo.New(current).ResolveLinkTarget(returnFinalTarget: true) is { } target)
-               {
-                  // The target can itself be under a link (on macOS a link to /var/folders/... is under /private/var).
-                  current = CanonicalPath(target.FullName, linksFollowed + 1);
-               }
-            }
-            catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException)
-            {
-               // Not resolvable (e.g. a broken link or no permission): compare this part as written.
-            }
-         }
-
-         return current;
       }
 
       private static void PrintColorLegend(IConsole console)
@@ -460,7 +390,7 @@ namespace DotNetOutdated
          console.Write(rest, GetUpgradeSeverityColor(upgradeSeverity));
       }
 
-      private static void ReportOutdatedDependencies(List<AnalyzedProject> projects, IConsole console)
+      private static void ReportOutdatedDependencies(List<OutdatedProject> projects, IConsole console)
       {
          foreach (var project in projects)
          {
@@ -478,9 +408,9 @@ namespace DotNetOutdated
                foreach (var dependency in dependencies)
                {
                   console.WriteIndent();
-                  console.Write(dependency.Description?.PadRight(columnWidths[0] + 2));
+                  console.Write(dependency.Description().PadRight(columnWidths[0] + 2));
 
-                  WriteColoredUpgrade(dependency.UpgradeSeverity, dependency.ResolvedVersion, dependency.LatestVersion, columnWidths[1], columnWidths[2], console);
+                  WriteColoredUpgrade(dependency.UpgradeSeverity, dependency.Dependency.ResolvedVersion, dependency.LatestVersion, columnWidths[1], columnWidths[2], console);
 
                   console.WriteLine();
                }
@@ -494,12 +424,13 @@ namespace DotNetOutdated
          // A range without a lower bound is never looked up, so it says nothing about the NuGet sources.
          var unboundedDependencies = allDependencies
             .Where(d => d.LatestVersionUnknownReason == LatestVersionUnknownReason.NoLowerBound)
-            .DistinctBy(d => (d.Name, d.OriginalVersionRange))
+            .Select(d => d.Dependency)
+            .DistinctBy(d => (d.Name, d.VersionRange))
             .OrderBy(d => d.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
          foreach (var dependency in unboundedDependencies)
          {
-            console.WriteLine($"The latest version of {dependency.Name} can't be determined because its version range {dependency.OriginalVersionRange} has no lower bound.", ConsoleColor.Yellow);
+            console.WriteLine($"The latest version of {dependency.Name} can't be determined because its version range {dependency.VersionRange} has no lower bound.", ConsoleColor.Yellow);
          }
 
          if (unboundedDependencies.Count != 0)
@@ -527,37 +458,34 @@ namespace DotNetOutdated
          PrintColorLegend(console);
       }
 
-      private async Task<List<AnalyzedProject>> AnalyzeDependencies(List<Project> projects, IConsole console)
+      private OutdatedOptions CreateOutdatedOptions() => new()
       {
-         console.WriteLine("Analyzing dependencies...");
+         Recursive = Recursive,
+         IncludeFileBasedApps = IncludeFileBasedApps,
+         IncludeTransitiveDependencies = Transitive,
+         TransitiveDepth = TransitiveDepth,
+         Runtime = Runtime,
+         VersionLock = VersionLock,
+         Prerelease = Prerelease,
+         PrereleaseLabel = PrereleaseLabel,
+         OlderThanDays = OlderThanDays,
+         MaximumVersion = ParseMaximumVersion(),
+         IgnoreFailedSources = IgnoreFailedSources,
+         IncludeAutoReferences = IncludeAutoReferences,
+         IncludeUpToDate = IncludeUpToDate,
+         IncludeFilters = FilterInclude,
+         ExcludeFilters = FilterExclude,
+      };
 
-         var options = new OutdatedOptions
+      /// <summary>Says which stage of finding outdated dependencies has started, as it starts.</summary>
+      private sealed class ConsoleProgress(IConsole console) : IProgress<OutdatedReportStage>
+      {
+         public void Report(OutdatedReportStage value) => console.WriteLine(value switch
          {
-            VersionLock = VersionLock,
-            Prerelease = Prerelease,
-            PrereleaseLabel = PrereleaseLabel,
-            OlderThanDays = OlderThanDays,
-            MaximumVersion = ParseMaximumVersion(),
-            IgnoreFailedSources = IgnoreFailedSources,
-            IncludeAutoReferences = IncludeAutoReferences,
-            IncludeUpToDate = IncludeUpToDate,
-            IncludeFilters = FilterInclude,
-            ExcludeFilters = FilterExclude,
-         };
-
-         var outdatedProjects = await _outdatedDependencyService.FindOutdatedAsync(projects, options).ConfigureAwait(false);
-
-         var sources = projects
-            .GroupBy(project => project.FilePath, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(group => group.Key, group => group.First().Sources, StringComparer.OrdinalIgnoreCase);
-         return outdatedProjects
-            .Select(project =>
-            {
-               var analyzed = AnalyzedProject.From(project);
-               analyzed.Sources = sources.GetValueOrDefault(project.FilePath) ?? [];
-               return analyzed;
-            })
-            .ToList();
+            OutdatedReportStage.DiscoveringProjects => "Discovering projects...",
+            OutdatedReportStage.AnalyzingProjects => "Analyzing project(s)...",
+            _ => "Analyzing dependencies...",
+         });
       }
 
       private NuGetVersion ParseMaximumVersion()
@@ -595,7 +523,7 @@ namespace DotNetOutdated
          };
       }
 
-      private async Task GenerateOutputFile(List<AnalyzedProject> projects)
+      private async Task GenerateOutputFile(List<OutdatedProject> projects)
       {
          if (OutputFilename != null)
          {
@@ -623,7 +551,7 @@ namespace DotNetOutdated
          console.WriteLine();
       }
 
-      private static void WriteTargetFramework(AnalyzedTargetFramework targetFramework, IConsole console)
+      private static void WriteTargetFramework(OutdatedTargetFramework targetFramework, IConsole console)
       {
          console.WriteIndent();
          console.Write($"[{targetFramework.Name}]", Constants.ReportingColors.TargetFrameworkName);
