@@ -234,13 +234,13 @@ namespace DotNetOutdated.Core.Services
 
         /// <summary>
         /// Whether the package declares <paramref name="targetFramework"/> unsupported, or <see langword="null"/> when
-        /// the source doesn't have it. A dependency (<paramref name="isDependency"/>) is checked on its own MSBuild
+        /// the source doesn't have it or fails, so that the next source is asked. A dependency (<paramref name="isDependency"/>) is checked on its own MSBuild
         /// files only, which it imports through <c>buildTransitive</c>; the package itself also through <c>build</c>,
         /// and through the dependencies it brings in for the framework (at their minimum versions, one level deep):
         /// packages such as Microsoft.Extensions.Diagnostics.HealthChecks have no targets of their own but depend on
         /// ones that warn.
         /// </summary>
-        [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A package that can't be inspected is treated as supported")]
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A source that fails is skipped, like one that doesn't have the package")]
         private async Task<bool?> ReadDeclaresUnsupportedAsync(SourceRepository repository, PackageIdentity identity, NuGetFramework targetFramework, bool isDependency)
         {
             try
@@ -267,7 +267,7 @@ namespace DotNetOutdated.Core.Services
                 using var package = new MemoryStream();
                 if (!await resource.CopyNupkgToStreamAsync(identity.Id, identity.Version, package, _context, NullLogger.Instance, CancellationToken.None).ConfigureAwait(false))
                 {
-                    return false;
+                    return null;
                 }
 
                 package.Position = 0;
@@ -290,7 +290,7 @@ namespace DotNetOutdated.Core.Services
             }
             catch (Exception)
             {
-                return false;
+                return null;
             }
         }
 

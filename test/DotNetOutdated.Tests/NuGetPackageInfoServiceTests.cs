@@ -228,6 +228,22 @@ namespace DotNetOutdated.Tests
             Assert.Equal(expected, unsupported);
         }
 
+        [Fact]
+        public async Task DeclaresTargetFrameworkUnsupportedAsync_AsksTheNextSourceWhenOneFails()
+        {
+            using var broken = new LocalFeed();
+            File.WriteAllText(System.IO.Path.Combine(broken.Path, "contoso.widgets.2.0.0.nupkg"), "not a zip file");
+            using var working = new LocalFeed();
+            working.Add("Contoso.Widgets", "2.0.0", published: DateTime.UtcNow, dependencyFrameworks: ["net10.0", "netstandard2.0"],
+                files: [("buildTransitive/netcoreapp2.0/Contoso.Widgets.targets", CompatError)]);
+            using var service = new NuGetPackageInfoService();
+
+            var unsupported = await service.DeclaresTargetFrameworkUnsupportedAsync(
+                SupportQuery(working, "Contoso.Widgets", "2.0.0", "net8.0") with { Sources = [broken.Uri, working.Uri] });
+
+            Assert.True(unsupported);
+        }
+
         private static TargetFrameworkSupportQuery SupportQuery(LocalFeed feed, string packageId, string version, string targetFramework) => new()
         {
             PackageId = packageId,

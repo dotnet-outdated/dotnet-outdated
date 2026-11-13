@@ -132,7 +132,7 @@ Project MyProject upgraded successfully
 Microsoft.Extensions.Options 11.0.0 doesn't support net8.0, so MyProject [net8.0] keeps 10.0.0. Move to a supported target framework to upgrade it.
 ```
 
-To find out, **dotnet-outdated** downloads a new version that reaches the target framework only through netstandard, and looks in the MSBuild files restore would use for that framework, and in those of the dependencies it brings in for it, for the warning. A version that can't be downloaded or read is treated as supported. A reference whose version is shared with a target framework being upgraded (an unconditional `PackageReference`, a central `PackageVersion`, or a shared MSBuild property) is still upgraded, and you are told so; declare it separately for each target framework to keep the unsupported ones on their version.
+To find out, **dotnet-outdated** downloads a new version that reaches the target framework only through netstandard, and looks in the MSBuild files restore would use for that framework, and in those of the dependencies it brings in for it, for the warning. A version that can't be downloaded or read is treated as supported. A reference whose version is shared with a target framework being upgraded (an unconditional `PackageReference`, a central `PackageVersion`, or a shared MSBuild property) is still upgraded and restored, and you are told so (before you're asked, with `-u:prompt`); declare it separately for each target framework to keep the unsupported ones on their version.
 
 ## Working with secure feeds
 

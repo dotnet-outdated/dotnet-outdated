@@ -350,6 +350,7 @@ DotNetOutdated.Core.Models.OutdatedDependency.LatestVersionUnknownReason.get -> 
 static DotNetOutdated.Core.Models.OutdatedDependency.GetLatestVersionUnknownReason(DotNetOutdated.Core.Models.Dependency! dependency, NuGet.Versioning.NuGetVersion? latestVersion) -> DotNetOutdated.Core.Models.LatestVersionUnknownReason
 DotNetOutdated.Core.Services.IReferenceUpgrader
 DotNetOutdated.Core.Services.IReferenceUpgrader.Upgrade(DotNetOutdated.Core.Services.ReferenceUpgrade! upgrade) -> System.Collections.Generic.IReadOnlyList<DotNetOutdated.Core.Services.ProjectUpgradeResult!>!
+DotNetOutdated.Core.Services.IReferenceUpgrader.FindHeldBackSharingVersion(DotNetOutdated.Core.Services.ReferenceUpgrade! upgrade) -> System.Collections.Generic.IReadOnlyList<DotNetOutdated.Core.Services.UpgradeProject!>!
 DotNetOutdated.Core.Services.ProjectUpgradeResult
 DotNetOutdated.Core.Services.ProjectUpgradeResult.<Clone>$() -> DotNetOutdated.Core.Services.ProjectUpgradeResult!
 DotNetOutdated.Core.Services.ProjectUpgradeResult.Equals(DotNetOutdated.Core.Services.ProjectUpgradeResult? other) -> bool

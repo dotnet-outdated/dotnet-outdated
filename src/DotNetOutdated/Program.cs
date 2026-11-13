@@ -223,10 +223,24 @@ namespace DotNetOutdated
             var upgradedProjects = package.Projects.Except(heldBack).ToList();
             if (upgradedProjects.Count == 0)
             {
-               WriteHeldBack(package, heldBack, [], console);
+               WriteHeldBack(package, heldBack, [], upgraded: false, console);
                console.WriteLine();
                continue;
             }
+
+            var request = new ReferenceUpgrade
+            {
+               Name = package.Name,
+               Kind = package.Kind,
+               Version = package.LatestVersion,
+               Projects = upgradedProjects.Select(ToUpgradeProject).ToList(),
+               HeldBack = heldBack.Select(ToUpgradeProject).ToList(),
+               NoRestore = NoRestore,
+               IgnoreFailedSources = IgnoreFailedSources,
+            };
+
+            // A held-back project that shares its version with an upgraded one is upgraded too.
+            var upgradedToo = heldBack.Count == 0 ? [] : _referenceUpgrader.FindHeldBackSharingVersion(request).ToHashSet();
 
             if (Upgrade.UpgradeType == UpgradeType.Prompt)
             {
@@ -238,12 +252,12 @@ namespace DotNetOutdated
                console.Write($" can be upgraded from {resolvedVersion} to ");
                console.Write(latestVersion, GetUpgradeSeverityColor(package.UpgradeSeverity));
                console.WriteLine(". The following project(s) will be affected:");
-               foreach (var project in upgradedProjects)
+               foreach (var project in upgradedProjects.Concat(heldBack.Where(project => upgradedToo.Contains(ToUpgradeProject(project)))))
                {
                   WriteProjectName(project.Description, console);
                }
 
-               WriteHeldBack(package, heldBack, [], console);
+               WriteHeldBack(package, heldBack, upgradedToo, upgraded: false, console);
 
                bool? answer = Prompt.GetYesNo(console, $"Do you wish to upgrade this {referenceNoun}?", true);
                if (answer is null)
@@ -264,16 +278,7 @@ namespace DotNetOutdated
                console.Write("...");
                console.WriteLine();
 
-               var results = _referenceUpgrader.Upgrade(new ReferenceUpgrade
-               {
-                  Name = package.Name,
-                  Kind = package.Kind,
-                  Version = package.LatestVersion,
-                  Projects = upgradedProjects.Select(ToUpgradeProject).ToList(),
-                  HeldBack = heldBack.Select(ToUpgradeProject).ToList(),
-                  NoRestore = NoRestore,
-                  IgnoreFailedSources = IgnoreFailedSources,
-               });
+               var results = _referenceUpgrader.Upgrade(request);
 
                foreach (var result in results)
                {
@@ -305,13 +310,18 @@ namespace DotNetOutdated
                   }
                }
 
-               // The prompt has listed the projects that keep their version already.
-               var upgradedToo = results.SelectMany(result => result.HeldBackUpgraded).ToHashSet();
-               WriteHeldBack(
-                  package,
-                  Upgrade.UpgradeType == UpgradeType.Prompt ? heldBack.Where(project => upgradedToo.Contains(ToUpgradeProject(project))).ToList() : heldBack,
-                  upgradedToo,
-                  console);
+               // The prompt has said what happens to the held-back projects already. One that was to be upgraded too
+               // but isn't in a result's HeldBackUpgraded failed, which its result has reported.
+               if (Upgrade.UpgradeType != UpgradeType.Prompt)
+               {
+                  var upgradedWith = results.SelectMany(result => result.HeldBackUpgraded).ToHashSet();
+                  WriteHeldBack(
+                     package,
+                     heldBack.Where(project => !upgradedToo.Contains(ToUpgradeProject(project)) || upgradedWith.Contains(ToUpgradeProject(project))),
+                     upgradedWith,
+                     upgraded: true,
+                     console);
+               }
             }
 
             console.WriteLine();
@@ -345,17 +355,18 @@ namespace DotNetOutdated
          return checks.Where(check => check.Unsupported).Select(check => check.Project).ToList();
       }
 
-      // Says why each held-back project wasn't upgraded, or, for one that shares its version with an upgraded project
-      // (in upgradedToo), that it was upgraded anyway.
-      private static void WriteHeldBack(ConsolidatedPackage package, List<PackageProjectReference> heldBack, HashSet<UpgradeProject> upgradedToo, IConsole console)
+      // Says why each held-back project isn't upgraded, or, for one that shares its version with an upgraded project
+      // (in upgradedToo), that it is upgraded anyway: before the upgrade, or once it has been (upgraded).
+      private static void WriteHeldBack(ConsolidatedPackage package, IEnumerable<PackageProjectReference> heldBack, HashSet<UpgradeProject> upgradedToo, bool upgraded, IConsole console)
       {
          foreach (var project in heldBack)
          {
             string framework = project.Framework.GetShortFolderName();
             console.WriteLine(
                upgradedToo.Contains(ToUpgradeProject(project))
-                  ? $"{package.Name} {package.LatestVersion} doesn't support {framework}, but {project.Description} shares its version with a target framework that was upgraded, " +
-                    $"so it was upgraded too. Declare the reference separately for each target framework to keep {framework} on {package.ResolvedVersion}."
+                  ? $"{package.Name} {package.LatestVersion} doesn't support {framework}, but {project.Description} shares its version with a target framework " +
+                    (upgraded ? "that was upgraded, so it was upgraded too. " : "being upgraded, so it will be upgraded too. ") +
+                    $"Declare the reference separately for each target framework to keep {framework} on {package.ResolvedVersion}."
                   : $"{package.Name} {package.LatestVersion} doesn't support {framework}, so {project.Description} keeps {package.ResolvedVersion}. " +
                     "Move to a supported target framework to upgrade it.",
                ConsoleColor.Yellow);

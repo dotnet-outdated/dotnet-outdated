@@ -283,11 +283,8 @@ public class UpgradePackagesTests
     [Fact]
     public async Task AHeldBackTargetFrameworkThatSharesItsVersion_IsReportedAsUpgradedToo()
     {
-        // Arrange: net8.0 shares its version with net10.0 (an unconditional reference, say), so the upgrader writes both.
-        _upgrader.Upgrade(Arg.Any<ReferenceUpgrade>()).Returns(call =>
-        [
-            new ProjectUpgradeResult { ProjectPath = ProjectPath, Outcome = UpgradeOutcome.Upgraded, HeldBackUpgraded = call.Arg<ReferenceUpgrade>().HeldBack },
-        ]);
+        // Arrange
+        SharesItsVersion(UpgradeOutcome.Upgraded);
         UnsupportedOn("net8.0");
 
         // Act
@@ -301,6 +298,60 @@ public class UpgradePackagesTests
             "Declare the reference separately for each target framework to keep net8.0 on 1.0.0.",
             lines);
         Assert.DoesNotContain(HeldBackMessage, lines);
+    }
+
+    [Fact]
+    public async Task Prompt_SaysAHeldBackTargetFrameworkThatSharesItsVersionWillBeUpgradedToo()
+    {
+        // Arrange
+        SharesItsVersion(UpgradeOutcome.Upgraded);
+        UnsupportedOn("net8.0");
+
+        // Act
+        (_, string written) = await RunUpgradeOf([MultiTargeted("net8.0", "net10.0")], UpgradeType.Prompt, "n\n");
+
+        // Assert
+        string[] lines = Lines(written);
+        Assert.Contains("» MyProject [net10.0]", lines);
+        Assert.Contains("» MyProject [net8.0]", lines);
+        Assert.Contains(
+            "Contoso.Widgets 2.0.0 doesn't support net8.0, but MyProject [net8.0] shares its version with a target framework being upgraded, so it will be upgraded too. " +
+            "Declare the reference separately for each target framework to keep net8.0 on 1.0.0.",
+            lines);
+        Assert.DoesNotContain(HeldBackMessage, lines);
+        _upgrader.DidNotReceiveWithAnyArgs().Upgrade(default!);
+    }
+
+    [Fact]
+    public async Task AHeldBackTargetFrameworkThatSharesItsVersion_IsNotSaidToKeepIt_WhenItsUpgradeFails()
+    {
+        // Arrange
+        SharesItsVersion(UpgradeOutcome.Failed);
+        UnsupportedOn("net8.0");
+
+        // Act
+        (bool success, string written) = await RunUpgradeOf([MultiTargeted("net8.0", "net10.0")]);
+
+        // Assert
+        Assert.False(success);
+        string[] lines = Lines(written);
+        Assert.Contains("An error occurred while upgrading MyProject", lines);
+        Assert.DoesNotContain(lines, line => line.Contains("doesn't support net8.0"));
+    }
+
+    // net8.0 shares its version with net10.0 (an unconditional reference, say), so the upgrader writes both.
+    private void SharesItsVersion(UpgradeOutcome outcome)
+    {
+        _upgrader.FindHeldBackSharingVersion(Arg.Any<ReferenceUpgrade>()).Returns(call => call.Arg<ReferenceUpgrade>().HeldBack);
+        _upgrader.Upgrade(Arg.Any<ReferenceUpgrade>()).Returns(call =>
+        [
+            new ProjectUpgradeResult
+            {
+                ProjectPath = ProjectPath,
+                Outcome = outcome,
+                HeldBackUpgraded = outcome == UpgradeOutcome.Upgraded ? call.Arg<ReferenceUpgrade>().HeldBack : [],
+            },
+        ]);
     }
 
     private const string HeldBackMessage =

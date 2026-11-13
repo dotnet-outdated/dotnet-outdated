@@ -1994,18 +1994,57 @@ Information(""Outdated Sdk"");")
             var dotNetRunner = Substitute.For<IDotNetRunner>();
             var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
 
-            var result = Assert.Single(service.Upgrade(new ReferenceUpgrade
+            var upgrade = new ReferenceUpgrade
             {
                 Name = "Newtonsoft.Json",
                 Version = new NuGetVersion("13.0.1"),
                 Projects = [new UpgradeProject(newProjectPath, "net10.0")],
                 HeldBack = [new UpgradeProject(oldProjectPath, "net8.0")],
                 NoRestore = true,
-            }));
+            };
 
-            Assert.Equal(UpgradeOutcome.Upgraded, result.Outcome);
-            Assert.Equal([new UpgradeProject(oldProjectPath, "net8.0")], result.HeldBackUpgraded);
+            Assert.Equal([new UpgradeProject(oldProjectPath, "net8.0")], service.FindHeldBackSharingVersion(upgrade));
+            var results = service.Upgrade(upgrade);
+
+            // The held-back project gets a result of its own, after the projects asked for.
+            Assert.Equal([newProjectPath, oldProjectPath], results.Select(result => result.ProjectPath));
+            Assert.All(results, result => Assert.Equal(UpgradeOutcome.Upgraded, result.Outcome));
+            Assert.Empty(results[0].HeldBackUpgraded);
+            Assert.Equal([new UpgradeProject(oldProjectPath, "net8.0")], results[1].HeldBackUpgraded);
             Assert.Contains("Version=\"13.0.1\"", fileSystem.File.ReadAllText(propsPath));
+        }
+
+        // The held-back project's version changed, so it is restored like the upgraded ones.
+        [Fact]
+        public void ACentralVersionSharedWithAHeldBackProject_RestoresTheHeldBackProject()
+        {
+            var propsPath = XFS.Path(@"c:\repo\Directory.Packages.props");
+            var oldProjectPath = XFS.Path(@"c:\repo\Old\Old.csproj");
+            var newProjectPath = XFS.Path(@"c:\repo\New\New.csproj");
+            const string projectContent = """<Project Sdk="Microsoft.NET.Sdk"><ItemGroup><PackageReference Include="Newtonsoft.Json" /></ItemGroup></Project>""";
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                [propsPath] = new(DirectoryPackagesPropsContent),
+                [oldProjectPath] = new(projectContent),
+                [newProjectPath] = new(projectContent),
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
+
+            var results = service.Upgrade(new ReferenceUpgrade
+            {
+                Name = "Newtonsoft.Json",
+                Version = new NuGetVersion("13.0.1"),
+                Projects = [new UpgradeProject(newProjectPath, "net10.0")],
+                HeldBack = [new UpgradeProject(oldProjectPath, "net8.0")],
+            });
+
+            Assert.All(results, result => Assert.Equal(UpgradeOutcome.Upgraded, result.Outcome));
+            Assert.Equal([new UpgradeProject(oldProjectPath, "net8.0")], results[1].HeldBackUpgraded);
+            // `dotnet add package` restores the project it changes.
+            dotNetRunner.Received(1).Run(XFS.Path(@"c:\repo\New"), Arg.Is<string[]>(a => a[0] == "add" && a[1] == "New.csproj" && !a.Contains("--no-restore")));
+            dotNetRunner.Received(1).Run(XFS.Path(@"c:\repo\Old"), Arg.Is<string[]>(a => a[0] == "add" && a[1] == "Old.csproj" && !a.Contains("--no-restore")));
         }
 
         [Fact]

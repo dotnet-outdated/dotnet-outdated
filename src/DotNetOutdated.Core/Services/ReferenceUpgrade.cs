@@ -36,7 +36,9 @@ public sealed record ReferenceUpgrade
     /// Projects (or target frameworks of them) whose reference keeps its current version, such as ones that
     /// <see cref="Version"/> doesn't support. One whose version is written in the same place as that of a project in
     /// <see cref="Projects"/> (an unconditional reference, a central <c>PackageVersion</c>, a shared MSBuild property)
-    /// can't keep it, and is upgraded with that project: <see cref="ProjectUpgradeResult.HeldBackUpgraded"/> lists it.
+    /// can't keep it, and is upgraded and restored like those projects:
+    /// <see cref="IReferenceUpgrader.FindHeldBackSharingVersion"/> finds these beforehand, and
+    /// <see cref="ProjectUpgradeResult.HeldBackUpgraded"/> lists them.
     /// </summary>
     public IReadOnlyList<UpgradeProject> HeldBack
     {
@@ -91,8 +93,9 @@ public sealed record ProjectUpgradeResult
     public IReadOnlyList<string> Warnings { get => _warnings; init => _warnings = ReadOnlySnapshot.Of(value); }
 
     /// <summary>
-    /// The projects in <see cref="ReferenceUpgrade.HeldBack"/> whose version is written in the same place as this
-    /// project's, so they were upgraded too; empty unless <see cref="Outcome"/> is <see cref="UpgradeOutcome.Upgraded"/>.
+    /// The target frameworks of this project in <see cref="ReferenceUpgrade.HeldBack"/> that were upgraded too, as their
+    /// version is written where that of a project in <see cref="ReferenceUpgrade.Projects"/> is; empty unless
+    /// <see cref="Outcome"/> is <see cref="UpgradeOutcome.Upgraded"/>.
     /// </summary>
     public IReadOnlyList<UpgradeProject> HeldBackUpgraded { get => _heldBackUpgraded; init => _heldBackUpgraded = ReadOnlySnapshot.Of(value); }
 

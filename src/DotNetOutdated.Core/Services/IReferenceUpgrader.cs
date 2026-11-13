@@ -13,8 +13,16 @@ public interface IReferenceUpgrader
     /// restored once after it changes (unless <see cref="ReferenceUpgrade.NoRestore"/> is set).
     /// </summary>
     /// <returns>
-    /// One result per project, in the order given, with a project listed more than once reported once. A project that
-    /// fails doesn't stop the others.
+    /// One result per project, in the order given, with a project listed more than once reported once, followed by
+    /// one for each project of <see cref="FindHeldBackSharingVersion"/> not listed already. A project that fails
+    /// doesn't stop the others.
     /// </returns>
     IReadOnlyList<ProjectUpgradeResult> Upgrade(ReferenceUpgrade upgrade);
+
+    /// <summary>
+    /// The projects in <see cref="ReferenceUpgrade.HeldBack"/> whose package version is written where that of a
+    /// project in <see cref="ReferenceUpgrade.Projects"/> is (an unconditional reference, a central
+    /// <c>PackageVersion</c>, a shared MSBuild property), so <see cref="Upgrade"/> upgrades and restores them too.
+    /// </summary>
+    IReadOnlyList<UpgradeProject> FindHeldBackSharingVersion(ReferenceUpgrade upgrade);
 }
