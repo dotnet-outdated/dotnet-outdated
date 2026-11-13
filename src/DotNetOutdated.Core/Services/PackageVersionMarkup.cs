@@ -34,6 +34,19 @@ namespace DotNetOutdated.Core.Services
         }
 
         /// <summary>
+        /// Replaces the version of only the <paramref name="elementIndex"/>-th (zero-based, document order)
+        /// <paramref name="elementName"/> element whose <c>Include</c> or <c>Update</c> is <paramref name="packageName"/>,
+        /// leaving the package's other elements, such as ones under another condition, alone.
+        /// </summary>
+        /// <param name="matched">True when that element exists and has a version, even if it already had <paramref name="newValue"/>.</param>
+        public static string ReplaceVersionAt(string content, string elementName, string packageName, int elementIndex, string newValue, out bool matched)
+        {
+            var spans = PackageXml.FindVersionSpans(content, [elementName], packageName, elementIndex);
+            matched = spans.Count > 0;
+            return ReplaceSpans(content, spans.Select(span => (span.Start, span.Length, PackageXml.Escape(newValue))));
+        }
+
+        /// <summary>
         /// Restores a variable reference in <c>Version</c> or <c>VersionOverride</c> attributes or child elements
         /// for <paramref name="packageName"/>. Values that contain a property reference are left untouched unless they
         /// equal <paramref name="previousExpression"/> (the expression being rewritten). When

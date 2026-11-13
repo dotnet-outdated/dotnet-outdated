@@ -48,9 +48,10 @@ internal sealed record GlobalPackageReferenceVersion(string FilePath, VersionRan
 /// <summary>
 /// A literal version on a <c>PackageReference</c> in <paramref name="FilePath"/> that <c>dotnet add package</c> can't
 /// edit ("Cannot edit items in imported files"): one in an imported file such as a shared Directory.Build.props, or an
-/// <c>Update</c> item. The version must be written directly.
+/// <c>Update</c> item. The version must be written directly, and only on that item (<paramref name="ElementIndex"/>):
+/// the file can pin the package again under other conditions, such as another target framework.
 /// </summary>
-internal sealed record PackageReferenceVersionInFile(string FilePath, VersionRange? Declared) : VersionLocation
+internal sealed record PackageReferenceVersionInFile(string FilePath, int ElementIndex, VersionRange? Declared) : VersionLocation
 {
     public override VersionRange? DeclaredRange => Declared;
 }
@@ -196,7 +197,7 @@ internal sealed class VersionLocator(IFileSystem fileSystem, IProjectEvaluator e
             return declaration.ElementType == PackageVersionDeclaration.PackageReference &&
                    !declaration.IsVersionOverride &&
                    (declaration.IsUpdate || !string.Equals(declaration.FilePath, projectPath, StringComparison.OrdinalIgnoreCase))
-                ? new PackageReferenceVersionInFile(declaration.FilePath, declaration.VersionRange)
+                ? new PackageReferenceVersionInFile(declaration.FilePath, declaration.ElementIndex, declaration.VersionRange)
                 : new LiteralVersion(declaration);
         }
 

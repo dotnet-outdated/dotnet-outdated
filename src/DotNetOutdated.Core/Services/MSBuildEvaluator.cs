@@ -57,6 +57,12 @@ internal sealed class MSBuildEvaluator(IFileSystem fileSystem)
 
         /// <summary>Whether the item is an <c>Update</c> rather than an <c>Include</c>.</summary>
         public bool IsUpdate { get; init; }
+
+        /// <summary>
+        /// The item's position among the same-named items for the package in <see cref="FilePath"/>, in document
+        /// order, as <see cref="PackageVersionMarkup.ReplaceVersionAt"/> counts them.
+        /// </summary>
+        public int ElementIndex { get; init; } = -1;
     }
 
     internal sealed class EvaluationState(string projectPath, string projectDirectory)
@@ -152,7 +158,8 @@ internal sealed class MSBuildEvaluator(IFileSystem fileSystem)
                 item.IsVersionOverride,
                 item.VersionValue != null && VersionRange.TryParse(item.VersionValue, out var range) ? range : null,
                 CreatePackageVariableInfo(item, state),
-                item.IsUpdate);
+                item.IsUpdate,
+                item.ElementIndex);
         }
     }
 
@@ -446,8 +453,22 @@ internal sealed class MSBuildEvaluator(IFileSystem fileSystem)
             VersionValue = Expand(versionExpression.Trim(), filePath, state, null),
             IsVersionOverride = isVersionOverride,
             IsUpdate = include == null,
+            ElementIndex = PackageElementIndex(item, packageName),
         };
     }
+
+    // The item's position among the file's same-named items whose Include or Update is the package, matched as
+    // PackageXml.FindVersionSpans matches them, so a write can target this item alone.
+    private static int PackageElementIndex(XElement item, string packageName) =>
+        item.Document?.Descendants()
+            .Where(element =>
+                element.Name.LocalName.Equals(item.Name.LocalName, StringComparison.OrdinalIgnoreCase) &&
+                element.Attributes().Any(attribute =>
+                    (attribute.Name.LocalName.Equals("Include", StringComparison.OrdinalIgnoreCase) ||
+                     attribute.Name.LocalName.Equals("Update", StringComparison.OrdinalIgnoreCase)) &&
+                    string.Equals(attribute.Value.Trim(), packageName, StringComparison.OrdinalIgnoreCase)))
+            .TakeWhile(element => element != item)
+            .Count() ?? -1;
 
     private void EvaluateImport(XElement import, string filePath, EvaluationState state, bool uncertain)
     {

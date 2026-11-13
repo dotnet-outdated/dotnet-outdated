@@ -84,9 +84,10 @@ namespace DotNetOutdated.Core.Services
         /// The spans of <paramref name="content"/> holding the version of each <paramref name="elementNames"/> element
         /// whose <c>Include</c> or <c>Update</c> is <paramref name="packageName"/> (case-insensitive): the value of its
         /// <c>Version</c> attribute or, without one, the trimmed text of its <c>&lt;Version&gt;</c> child element.
-        /// Empty when there are none or the content isn't well-formed XML. Spans are in document order.
+        /// Empty when there are none or the content isn't well-formed XML. Spans are in document order. With
+        /// <paramref name="elementIndex"/>, only the element at that position among the matching elements is considered.
         /// </summary>
-        public static IReadOnlyList<(int Start, int Length)> FindVersionSpans(string content, string[] elementNames, string packageName)
+        public static IReadOnlyList<(int Start, int Length)> FindVersionSpans(string content, string[] elementNames, string packageName, int? elementIndex = null)
         {
             var elements = Elements(content);
             if (elements == null)
@@ -94,14 +95,15 @@ namespace DotNetOutdated.Core.Services
                 return [];
             }
 
-            var spans = new List<(int Start, int Length)>();
-            foreach (var element in elements)
+            var matching = elements.Where(element => elementNames.Any(element.Is) && element.IsPackage(packageName));
+            if (elementIndex is { } index)
             {
-                if (!elementNames.Any(element.Is) || !element.IsPackage(packageName))
-                {
-                    continue;
-                }
+                matching = matching.Skip(index).Take(1);
+            }
 
+            var spans = new List<(int Start, int Length)>();
+            foreach (var element in matching)
+            {
                 if (element.Attribute("Version") is { } version)
                 {
                     spans.Add((version.ValueStart, version.ValueLength));
