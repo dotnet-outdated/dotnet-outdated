@@ -177,7 +177,7 @@ namespace DotNetOutdated.Core.Services
             {
                 return Failure(
                     $"Could not update '{options.PackageName}' in '{filePath}': no <{elementName}> element was found " +
-                    "with an Include or Update attribute and a literal Version attribute. Update the version manually.");
+                    "with an Include or Update attribute and a literal version (a Version attribute or <Version> child element). Update the version manually.");
             }
 
             var updated = newContent != file.Content;
@@ -236,7 +236,7 @@ namespace DotNetOutdated.Core.Services
                         // version into the project file (NuGet/Home#12552).
                         return Failure(
                             $"Could not update '{options.PackageName}' in '{centralPackagesPath}': no <PackageVersion> or <GlobalPackageReference> " +
-                            "element was found with an Include or Update attribute and a Version attribute. Update the version manually.");
+                            "element was found with an Include or Update attribute and a version (a Version attribute or <Version> child element). Update the version manually.");
                 }
             }
 

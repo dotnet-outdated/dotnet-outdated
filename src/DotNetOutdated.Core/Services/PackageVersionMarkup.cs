@@ -1,4 +1,6 @@
 using System;
+using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
 using NuGet.Versioning;
 
@@ -28,18 +30,32 @@ namespace DotNetOutdated.Core.Services
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
         /// <summary>
-        /// Replaces the <c>Version</c> attribute value of every <paramref name="elementNames"/> element whose
-        /// <c>Include</c> or <c>Update</c> is <paramref name="packageName"/> (case-insensitive). Attributes may be
-        /// in any order, use either quote style, have spaces around <c>=</c> and span several lines.
-        /// Markup inside comments, CDATA sections and processing instructions is left untouched.
+        /// Replaces the version of every <paramref name="elementNames"/> element whose <c>Include</c> or <c>Update</c>
+        /// is <paramref name="packageName"/> (case-insensitive): its <c>Version</c> attribute, or else the text of a
+        /// <c>&lt;Version&gt;</c> child element. The elements are found with an XML reader, so comments, CDATA and
+        /// escaped text are never mistaken for markup and entity references are decoded; only the version text is
+        /// replaced, keeping the rest of the file byte-for-byte. Content that isn't well-formed XML is left unchanged.
         /// </summary>
         public static string ReplaceVersion(string content, string[] elementNames, string packageName, string newValue) =>
             ReplaceVersion(content, elementNames, packageName, newValue, out _);
 
         /// <inheritdoc cref="ReplaceVersion(string, string[], string, string)"/>
         /// <param name="matched">True when at least one element matched, even if it already had <paramref name="newValue"/>.</param>
-        public static string ReplaceVersion(string content, string[] elementNames, string packageName, string newValue, out bool matched) =>
-            ReplaceVersionAttributes(content, elementNames, packageName, newValue, allowVersionOverride: false, skipExistingVariables: false, out matched);
+        public static string ReplaceVersion(string content, string[] elementNames, string packageName, string newValue, out bool matched)
+        {
+            var spans = PackageXml.FindVersionSpans(content, elementNames, packageName);
+            matched = spans.Count > 0;
+
+            var escaped = PackageXml.Escape(newValue);
+            var builder = new StringBuilder(content);
+            // Replace from the end so earlier offsets stay valid.
+            foreach (var (start, length) in Enumerable.Reverse(spans))
+            {
+                builder.Remove(start, length).Insert(start, escaped);
+            }
+
+            return builder.ToString();
+        }
 
         /// <summary>
         /// Restores a variable reference in <c>Version</c> or <c>VersionOverride</c> attributes or child elements

@@ -157,12 +157,10 @@ namespace DotNetOutdated.Tests
         [Fact]
         public void CpmProjectWithNoRestore_UnmatchedEntry_ReportsFailureAndLeavesFileUnchanged()
         {
-            // Version as child metadata is valid MSBuild, but it can't be updated in place.
+            // The package is mentioned, but no entry has a version to update.
             const string propsContent = @"<Project>
   <ItemGroup>
-    <PackageVersion Include=""SomePackage"">
-      <Version>1.0.0</Version>
-    </PackageVersion>
+    <PackageVersion Include=""SomePackage"" />
   </ItemGroup>
 </Project>";
             var propsPath = XFS.Path(@"c:\repo\Directory.Packages.props");
@@ -182,7 +180,7 @@ namespace DotNetOutdated.Tests
             Assert.Contains("SomePackage", result.Errors);
             Assert.Equal(
                 $"Could not update 'SomePackage' in '{propsPath}': no <PackageVersion> or <GlobalPackageReference> element was found " +
-                "with an Include or Update attribute and a Version attribute. Update the version manually.",
+                "with an Include or Update attribute and a version (a Version attribute or <Version> child element). Update the version manually.",
                 result.Errors);
             // Must not fall back to `dotnet add package --no-restore`, which writes the version into the project file.
             dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
@@ -1988,9 +1986,9 @@ Information(""Outdated Sdk"");")
             Assert.Equal(DirectoryBuildPropsContent, mockFileSystem.File.ReadAllText(propsPath));
         }
 
-        // A version written as a <Version> child element is valid MSBuild, but isn't found, so the upgrade fails.
+        // A version written as a <Version> child element is valid MSBuild, and is updated in place.
         [Fact]
-        public void ImportedPackageReference_WithVersionChildElement_FailsAndLeavesDirectoryBuildPropsUnchanged()
+        public void ImportedPackageReference_WithVersionChildElement_UpdatesDirectoryBuildProps()
         {
             var propsPath = XFS.Path(@"c:\repo\src\Directory.Build.props");
             var projectPath = XFS.Path(@"c:\repo\src\MyProject\MyProject.csproj");
@@ -2012,13 +2010,44 @@ Information(""Outdated Sdk"");")
 
             var result = service.Upgrade(projectPath, "Contoso.Widgets", "net8.0", new VersionRange(new NuGetVersion("1.5.0")), noRestore: true);
 
-            Assert.False(result.IsSuccess);
-            Assert.Equal(
-                $"Could not update 'Contoso.Widgets' in '{propsPath}': no <PackageReference> element was found " +
-                "with an Include or Update attribute and a literal Version attribute. Update the version manually.",
-                result.Errors);
+            Assert.True(result.IsSuccess, result.Errors);
             dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
-            Assert.Equal(propsContent, mockFileSystem.File.ReadAllText(propsPath));
+            Assert.Equal(
+                propsContent.Replace("<Version>1.0.0</Version>", "<Version>1.5.0</Version>", StringComparison.Ordinal),
+                mockFileSystem.File.ReadAllText(propsPath));
+        }
+
+        // A version written as a <Version> child element is valid MSBuild and must be updated too.
+        [Fact]
+        public void CpmProjectWithNoRestore_UpdatesPackageVersionWithVersionChildElement()
+        {
+            var propsPath = XFS.Path(@"c:\repo\Directory.Packages.props");
+            var projectPath = XFS.Path(@"c:\repo\MyProject.csproj");
+            const string propsContent = @"<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageVersion Include=""Newtonsoft.Json"">
+      <Version>12.0.3</Version>
+    </PackageVersion>
+  </ItemGroup>
+</Project>";
+            var mockFileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                { propsPath, new MockFileData(propsContent) },
+                { projectPath, new MockFileData(@"<Project><ItemGroup><PackageReference Include=""Newtonsoft.Json"" /></ItemGroup></Project>") }
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            var service = new DotNetPackageService(dotNetRunner, mockFileSystem);
+
+            var result = service.Upgrade(projectPath, "Newtonsoft.Json", "net8.0", new VersionRange(new NuGetVersion("13.0.1")), noRestore: true);
+
+            Assert.True(result.IsSuccess, result.Errors);
+            dotNetRunner.DidNotReceiveWithAnyArgs().Run(default, default);
+            Assert.Equal(
+                propsContent.Replace("<Version>12.0.3</Version>", "<Version>13.0.1</Version>", StringComparison.Ordinal),
+                mockFileSystem.File.ReadAllText(propsPath));
         }
     }
 }
