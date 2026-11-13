@@ -33,6 +33,11 @@ namespace DotNetOutdated.Core.Services
 
         private readonly ConcurrentDictionary<(string Id, NuGetVersion Version, NuGetFramework Framework, bool CheckDependencies), Task<bool>> _unsupportedFrameworkChecks = [];
 
+        // Limits the packages downloaded (and held in memory) at once for the unsupported framework check.
+        private readonly SemaphoreSlim _packageDownloads = new(MaxConcurrentPackageDownloads);
+
+        private const int MaxConcurrentPackageDownloads = 8;
+
         public NuGetPackageInfoService()
         {
             _context = new SourceCacheContext()
@@ -140,16 +145,26 @@ namespace DotNetOutdated.Core.Services
                                                reducer.GetNearest(targetFramework, meta.DependencySets.Select(ds => ds.TargetFramework)) != null);
 
                             // A version that only reaches a .NET target through a netstandard fallback, while it has assets
-                            // for newer .NET versions, may declare that target unsupported with a build warning.
+                            // for newer .NET versions, may declare that target unsupported with a build warning. Finding
+                            // out means downloading it, so only the newest version of each set of dependency-group
+                            // frameworks is checked, and the others with the same frameworks share its result: the
+                            // runtime packages generate the warning from those frameworks, so the versions of a release
+                            // line (9.0.x, 10.0.x) agree.
                             if (!query.AllowUnsupportedFrameworks)
                             {
                                 var repository = resources!.Value.Repository;
                                 var candidates = compatibleMetadataList.ToList();
-                                var unsupported = await Task.WhenAll(candidates.Select(meta =>
-                                    FallsBackToNetStandard(targetFramework, meta)
-                                        ? DeclaresFrameworkUnsupportedAsync(repository, meta.Identity, targetFramework, checkDependencies: true, cancellationToken)
-                                        : Task.FromResult(false))).ConfigureAwait(false);
-                                compatibleMetadataList = candidates.Where((_, index) => !unsupported[index]).ToList();
+                                var fallbackGroups = candidates
+                                    .Where(meta => FallsBackToNetStandard(targetFramework, meta))
+                                    .GroupBy(DependencyFrameworksKey, StringComparer.Ordinal)
+                                    .ToList();
+                                var unsupported = await Task.WhenAll(fallbackGroups.Select(group =>
+                                    DeclaresFrameworkUnsupportedAsync(repository, group.MaxBy(meta => meta.Identity.Version)!.Identity,
+                                        targetFramework, checkDependencies: true, cancellationToken))).ConfigureAwait(false);
+                                var unsupportedKeys = fallbackGroups.Where((_, index) => unsupported[index]).Select(group => group.Key).ToHashSet(StringComparer.Ordinal);
+                                compatibleMetadataList = candidates
+                                    .Where(meta => !FallsBackToNetStandard(targetFramework, meta) || !unsupportedKeys.Contains(DependencyFrameworksKey(meta)))
+                                    .ToList();
                             }
                         }
 
@@ -207,6 +222,9 @@ namespace DotNetOutdated.Core.Services
                    frameworks.Any(f => f.Framework == FrameworkConstants.FrameworkIdentifiers.NetCoreApp);
         }
 
+        private static string DependencyFrameworksKey(IPackageSearchMetadata meta) =>
+            string.Join(";", (meta.DependencySets ?? []).Select(ds => ds.TargetFramework.DotNetFrameworkName).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase));
+
         /// <summary>
         /// Whether the package's MSBuild files for <paramref name="targetFramework"/>, selected the way restore selects
         /// them, contain the <c>NETStandardCompatError_*</c> target the .NET runtime packages use to warn that a target
@@ -225,12 +243,42 @@ namespace DotNetOutdated.Core.Services
         {
             try
             {
-                // Shared through the cache, so it doesn't take one caller's cancellation token.
+                var (declaresUnsupported, dependencies) = await InspectPackageAsync(repository, identity, targetFramework, checkDependencies).ConfigureAwait(false);
+                if (declaresUnsupported)
+                {
+                    return true;
+                }
+
+                // Checked after the download slot is released, as each dependency takes one of its own.
+                var dependencyChecks = await Task.WhenAll((dependencies?.Packages ?? [])
+                    .Where(dependency => dependency.VersionRange.MinVersion != null)
+                    .Select(dependency => DeclaresFrameworkUnsupportedAsync(repository,
+                        new PackageIdentity(dependency.Id, dependency.VersionRange.MinVersion), targetFramework, checkDependencies: false, CancellationToken.None)))
+                    .ConfigureAwait(false);
+                return dependencyChecks.Any(unsupported => unsupported);
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Downloads the package and reads whether its MSBuild files for <paramref name="targetFramework"/> declare it
+        /// unsupported, and, with <paramref name="readDependencies"/>, the dependencies it brings in for that framework.
+        /// Holds one of the limited download slots, as each package is held in memory while it is read.
+        /// </summary>
+        private async Task<(bool DeclaresUnsupported, PackageDependencyGroup? Dependencies)> InspectPackageAsync(SourceRepository repository, PackageIdentity identity, NuGetFramework targetFramework, bool readDependencies)
+        {
+            // Shared through the cache, so it doesn't take one caller's cancellation token.
+            await _packageDownloads.WaitAsync().ConfigureAwait(false);
+            try
+            {
                 var resource = await repository.GetResourceAsync<FindPackageByIdResource>().ConfigureAwait(false);
                 using var package = new MemoryStream();
                 if (resource == null || !await resource.CopyNupkgToStreamAsync(identity.Id, identity.Version, package, _context, NullLogger.Instance, CancellationToken.None).ConfigureAwait(false))
                 {
-                    return false;
+                    return (false, null);
                 }
 
                 package.Position = 0;
@@ -248,29 +296,25 @@ namespace DotNetOutdated.Core.Services
                     using var file = new StreamReader(reader.GetStream(item.Path));
                     if ((await file.ReadToEndAsync().ConfigureAwait(false)).Contains("NETStandardCompatError_", StringComparison.Ordinal))
                     {
-                        return true;
+                        return (true, null);
                     }
                 }
 
-                var dependencies = checkDependencies
+                var dependencies = readDependencies
                     ? NuGetFrameworkUtility.GetNearest(reader.GetPackageDependencies(), targetFramework, g => g.TargetFramework)
                     : null;
-                var dependencyChecks = await Task.WhenAll((dependencies?.Packages ?? [])
-                    .Where(dependency => dependency.VersionRange.MinVersion != null)
-                    .Select(dependency => DeclaresFrameworkUnsupportedAsync(repository,
-                        new PackageIdentity(dependency.Id, dependency.VersionRange.MinVersion), targetFramework, checkDependencies: false, CancellationToken.None)))
-                    .ConfigureAwait(false);
-                return dependencyChecks.Any(unsupported => unsupported);
+                return (false, dependencies);
             }
-            catch (Exception)
+            finally
             {
-                return false;
+                _packageDownloads.Release();
             }
         }
 
         public void Dispose()
         {
             _context?.Dispose();
+            _packageDownloads.Dispose();
         }
     }
 }

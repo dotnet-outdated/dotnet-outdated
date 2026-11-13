@@ -121,7 +121,7 @@ namespace DotNetOutdated.Tests
 
             // Also only reaches net8.0 through netstandard2.0, but doesn't warn, so the fallback is supported.
             feed.Add("Contoso.Widgets", "3.0.0", published: DateTime.UtcNow.AddDays(-1),
-                dependencyFrameworks: ["net10.0", "netstandard2.0"]);
+                dependencyFrameworks: ["net11.0", "netstandard2.0"]);
             using var service = new NuGetPackageInfoService();
 
             var versions = await service.GetAllVersionsAsync(new PackageVersionsQuery
@@ -129,6 +129,36 @@ namespace DotNetOutdated.Tests
                 PackageId = "Contoso.Widgets",
                 Sources = [feed.Uri],
                 TargetFramework = NuGetFramework.Parse(targetFramework),
+                AllowUnsupportedFrameworks = allowUnsupportedFrameworks,
+            });
+
+            Assert.Equal(expected, versions.Select(v => v.ToNormalizedString()).Order(StringComparer.Ordinal));
+        }
+
+        [Theory]
+        [InlineData(false, new[] { "1.0.0", "3.0.0", "3.1.0" })]
+        [InlineData(true, new[] { "1.0.0", "2.0.0", "2.1.0", "3.0.0", "3.1.0" })]
+        public async Task GetAllVersionsAsync_ChecksOnlyTheNewestVersionWithTheSameDependencyFrameworks(bool allowUnsupportedFrameworks, string[] expected)
+        {
+            // Versions with the same dependency-group frameworks (a release line, like 10.0.x) share the result of the
+            // newest one, so only that one is downloaded. The older versions here disagree with it, which shows they
+            // weren't read.
+            const string compatError = """<Project><Target Name="NETStandardCompatError_Contoso_Widgets_net10_0" /></Project>""";
+            using var feed = new LocalFeed();
+            feed.Add("Contoso.Widgets", "1.0.0", published: DateTime.UtcNow.AddDays(-5), dependencyFrameworks: ["net8.0", "netstandard2.0"]);
+            feed.Add("Contoso.Widgets", "2.0.0", published: DateTime.UtcNow.AddDays(-4), dependencyFrameworks: ["net10.0", "netstandard2.0"]);
+            feed.Add("Contoso.Widgets", "2.1.0", published: DateTime.UtcNow.AddDays(-3), dependencyFrameworks: ["net10.0", "netstandard2.0"],
+                files: [("buildTransitive/netcoreapp2.0/Contoso.Widgets.targets", compatError)]);
+            feed.Add("Contoso.Widgets", "3.0.0", published: DateTime.UtcNow.AddDays(-2), dependencyFrameworks: ["net11.0", "netstandard2.0"],
+                files: [("buildTransitive/netcoreapp2.0/Contoso.Widgets.targets", compatError)]);
+            feed.Add("Contoso.Widgets", "3.1.0", published: DateTime.UtcNow.AddDays(-1), dependencyFrameworks: ["net11.0", "netstandard2.0"]);
+            using var service = new NuGetPackageInfoService();
+
+            var versions = await service.GetAllVersionsAsync(new PackageVersionsQuery
+            {
+                PackageId = "Contoso.Widgets",
+                Sources = [feed.Uri],
+                TargetFramework = NuGetFramework.Parse("net8.0"),
                 AllowUnsupportedFrameworks = allowUnsupportedFrameworks,
             });
 
