@@ -28,7 +28,7 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.14" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="11.0.0" />
     <PackageReference Include="NuGet.Configuration" Version="7.9.0" />
     <PackageReference Include="NuGet.Credentials" Version="7.9.0" />
     <PackageReference Include="NuGet.ProjectModel" Version="7.9.0" />
