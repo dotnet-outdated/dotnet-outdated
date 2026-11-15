@@ -1,0 +1,6 @@
+<Project>
+  <PropertyGroup>
+    <FakeJsonVersion>11.0.1</FakeJsonVersion>
+    <FakeExtensionsVersion>2.1.0</FakeExtensionsVersion>
+  </PropertyGroup>
+</Project>

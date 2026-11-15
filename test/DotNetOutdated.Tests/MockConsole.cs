@@ -1,4 +1,3 @@
-using McMaster.Extensions.CommandLineUtils;
 using System;
 using System.IO;
 
@@ -8,9 +7,12 @@ namespace DotNetOutdated.Tests
     {
         private readonly MockTextWriter _out;
         private readonly MockTextWriter _error;
+        private readonly TextReader _in;
 
-        public MockConsole()
+        /// <param name="input">What the console reads, for a test that answers prompts; reading throws without it.</param>
+        public MockConsole(string input = null)
         {
+            _in = input == null ? null : new StringReader(input);
             _out = new MockTextWriter();
             _error = new MockTextWriter();
         }
@@ -21,13 +23,7 @@ namespace DotNetOutdated.Tests
 
         public TextWriter Error => _error;
 
-        public TextReader In => throw new NotSupportedException();
-
-        public bool IsInputRedirected => throw new NotSupportedException();
-
-        public bool IsOutputRedirected => true;
-
-        public bool IsErrorRedirected => true;
+        public TextReader In => _in ?? throw new NotSupportedException();
 
         private ConsoleColor _foreground = ConsoleColor.White;
 
@@ -41,13 +37,6 @@ namespace DotNetOutdated.Tests
         }
 
         public ConsoleColor BackgroundColor { get; set; }
-
-        // build warning because it is not used
-#pragma warning disable 67
-
-        public event ConsoleCancelEventHandler CancelKeyPress;
-
-#pragma warning restore 67
 
         public void ResetColor()
         {

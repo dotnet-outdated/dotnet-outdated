@@ -60,7 +60,7 @@ dotnet tool update --global dotnet-outdated-tool
 Usage: dotnet outdated [options] <Path>
 
 Arguments:
-  Path                                                  The path to a .sln, .slnx, .slnf, .csproj or .fsproj file, or to a directory containing a .NET Core solution/project. If none is specified, the current directory will be used.
+  Path                                                  The path to a .sln, .slnx, .slnf, .csproj, .fsproj or .cs file-based app, or to a directory containing a .NET Core solution/project. If none is specified, the current directory will be used.
 
 Options:
   --version                                             Show version information.
@@ -90,6 +90,7 @@ Options:
                                                         Default value is: 0.
   -n|--no-restore                                       Add the reference without performing restore preview and compatibility check.
   -r|--recursive                                        Recursively search for all projects within the provided directory.
+  -fba|--include-file-based-apps                        Include loose file-based apps when recursively searching a directory.
   -ifs|--ignore-failed-sources                          Treat package source failures as warnings.
   -utd|--include-up-to-date                             Include all dependencies in the report even the ones not outdated.
   -prl|--pre-release-label <PRERELEASE_LABEL>           Specifies an optional label to restrict matches to when looking for pre-release versions of packages. For example, a label of 'rc.1' would only match
@@ -110,11 +111,31 @@ You can run **dotnet-outdated** without specifying the `Path` argument. In this 
 
 You can also pass a directory in the `Path` argument, in which case the same logic described above will be used, but in the directory specified.
 
-Lastly, you can specify the path to a solution (`.sln` or `.slnx`) or project (`.csproj` or `.fsproj`) which **dotnet-outdated** must analyze.
+Lastly, you can specify the path to a solution (`.sln` or `.slnx`), project (`.csproj` or `.fsproj`), or .NET file-based app (`.cs`) which **dotnet-outdated** must analyze. File-based apps require .NET SDK 10.0.300 or later.
+
+When `--recursive --include-file-based-apps` is used, **dotnet-outdated** also discovers loose `.cs` file-based apps that start with a shebang (`#!`). `.cs` files under a `.csproj` directory tree are ignored during recursive file-based app discovery.
+
+File-based apps can declare NuGet packages with `#:package` and MSBuild SDK packages with `#:sdk` (for example `#:sdk Cake.Sdk@6.0.0`). Variable-backed versions use `#:property` the same way as for packages.
+
+Versioned MSBuild project SDKs declared in a project file, as `<Project Sdk="Aspire.AppHost.Sdk/13.0.0">`, as `<Sdk Name="Aspire.AppHost.Sdk" Version="13.0.0" />` or as `<Import Project="Sdk.props" Sdk="Aspire.AppHost.Sdk" Version="13.0.0" />`, are reported and upgraded like packages. SDKs inside XML comments are ignored. SDK versions pinned in `global.json` (`msbuild-sdks`) or through MSBuild properties are not supported.
 
 ## Upgrading packages
 
 **dotnet-outdated** can automatically attempt to upgrade any outdated packages to the latest version by passing the `-u|--upgrade` option. You can let **dotnet-outdated** prompt you for each outdated package by using the `-u:prompt` option.
+
+If a package reference declares a [version range](https://learn.microsoft.com/nuget/concepts/package-versioning#version-ranges) with an upper bound, the latest version within that range is chosen and the upper bound is kept. For example, `[6.0.13,7)` is upgraded to `[6.0.36, 7.0.0)`, and `[6.0.13,7.0.0]` to `[7.0.0]`. This also applies to ranges in `Directory.Packages.props`, `VersionOverride` and MSBuild properties such as `$(MyPackageVersion)`. The range is rewritten in NuGet's normalized form. `--maximum-version` only narrows a declared range, so `[6.0.0, 10.0.0)` with `--maximum-version 8.0` becomes `[8.0.x, 10.0.0)`. Floating versions such as `6.*` are replaced by a plain version, and transitive packages promoted with `--transitive` are always written as a plain version.
+
+### Target frameworks a new version doesn't support
+
+NuGet treats a package as compatible with a .NET target framework when one of its netstandard assets applies. The .NET runtime packages (such as `Microsoft.Extensions.*`) keep a netstandard asset after they drop a .NET version, but warn at build time that the new version doesn't support it, for example `Microsoft.Extensions.Options 11.0.0 doesn't support net8.0 and has not been tested with it`. The report still lists these updates, so you can see what moving to a supported target framework would bring. When upgrading, a target framework the new version declares unsupported keeps its version, and the others are upgraded. For example, in a project targeting `net8.0` and `net10.0` that references `Microsoft.Extensions.Options` separately for each, the `net10.0` reference is upgraded to `11.0.0` and the `net8.0` one keeps its version:
+
+```
+Upgrading package Microsoft.Extensions.Options...
+Project MyProject upgraded successfully
+Microsoft.Extensions.Options 11.0.0 doesn't support net8.0, so MyProject [net8.0] keeps 10.0.0. Move to a supported target framework to upgrade it.
+```
+
+To find out, **dotnet-outdated** downloads a new version that reaches the target framework only through netstandard, and looks in the MSBuild files restore would use for that framework, and in those of the dependencies it brings in for it, for the warning. A version that can't be downloaded or read is treated as supported. A reference whose version is shared with a target framework being upgraded (an unconditional `PackageReference`, a central `PackageVersion`, or a shared MSBuild property) is still upgraded and restored, and you are told so (before you're asked, with `-u:prompt`); declare it separately for each target framework to keep the unsupported ones on their version.
 
 ## Working with secure feeds
 
@@ -172,6 +193,8 @@ Before version 1.2 of **dotnet-outdated**, it used to include automatically refe
 
 From version 1.2, if you want these packages reported, you can pass the `-i|--include-auto-references` option. These packages will also be denoted with the text **[A]** appearing in the output after the package name.
 
+MSBuild SDKs that are resolved from NuGet, such as `MSTest.Sdk` or `Cake.Sdk`, can add package references of their own. Their versions come from the SDK, so they cannot be upgraded in the project. **dotnet-outdated** treats a package as auto-referenced when every reference to it is defined in a file inside a NuGet packages folder, and you upgrade it by upgrading the SDK. A package you also reference yourself, in the project or in a `Directory.Build.props` file, is reported as usual. This check runs for projects that declare an SDK other than `Microsoft.NET.Sdk*` in the project file or in a `Directory.Build.props` or `Directory.Build.targets` file in the project's directory or above. SDKs imported from other files are not detected.
+
 ## Saving results to a file
 
 You can save the results of **dotnet-outdated** to a file by specifying the name of an output file using the `-o|--output` option. By default, the results will be saved in JSON format. You can specify an alternate format using the `-of|--output-format` option.
@@ -194,11 +217,132 @@ For failing CI builds, a proposed protocol is to have another CI build which wil
 
 Also, some companies/users do not feel comfortable jumping directly on the newest versions, as they might contain some bugs, and might want to wait for some time before updating to the newest package.
 
+## Shell completions
+
+**dotnet-outdated** can generate tab-completion scripts for its options and their values (for example `-of <TAB>` offers `Csv`, `Json` and `Markdown`) for Bash, Zsh, Fish, PowerShell and Nushell:
+
+```bash
+dotnet-outdated completions script <bash|zsh|fish|pwsh|nushell>
+```
+
+Without a shell name, it uses the shell named in the `SHELL` environment variable (PowerShell on Windows).
+
+Shell completions require the .NET 10 runtime or later. On older runtimes the tool runs without the `completions` command. Completion is registered for the `dotnet-outdated` command, which `dotnet tool install --global` puts on your `PATH`. It does not work with `dotnet outdated`, which the `dotnet` command's own completion handles. A script saved to a file lists the tool's options, so generate it again after you update the tool.
+
+### Bash
+
+With the [bash-completion](https://github.com/scop/bash-completion) package installed, which most Linux distributions include, save the script where bash-completion loads it on demand:
+
+```bash
+mkdir -p ~/.local/share/bash-completion/completions
+dotnet-outdated completions script bash > ~/.local/share/bash-completion/completions/dotnet-outdated
+```
+
+Without bash-completion, add this to your `~/.bashrc` instead:
+
+```bash
+eval "$(dotnet-outdated completions script bash)"
+```
+
+### Zsh
+
+Save the script as `_dotnet-outdated` in a directory on your `fpath`:
+
+```zsh
+mkdir -p ~/.zfunc
+dotnet-outdated completions script zsh > ~/.zfunc/_dotnet-outdated
+```
+
+If that directory is not already on your `fpath`, add it in your `~/.zshrc` before `compinit` runs:
+
+```zsh
+fpath=(~/.zfunc $fpath)
+autoload -Uz compinit && compinit
+```
+
+### Fish
+
+```fish
+dotnet-outdated completions script fish > ~/.config/fish/completions/dotnet-outdated.fish
+```
+
+### PowerShell
+
+Add this line to your PowerShell profile, which is the file `$PROFILE` names:
+
+```powershell
+dotnet-outdated completions script pwsh | Out-String | Invoke-Expression
+```
+
+It generates the script each time PowerShell starts, so it stays current after you update the tool. Don't append the script itself to your profile: it starts with `using` statements, which PowerShell only allows at the top of a file.
+
+### Nushell
+
+Save the script and `source` it from your `config.nu`:
+
+```nu
+mkdir ($nu.default-config-dir | path join completions)
+dotnet-outdated completions script nushell | save -f ($nu.default-config-dir | path join completions dotnet-outdated.nu)
+```
+
+```nu
+# in config.nu
+source ($nu.default-config-dir | path join completions dotnet-outdated.nu)
+```
+
+The Nushell script asks **dotnet-outdated** for completions each time you press <kbd>Tab</kbd>, so it stays current after you update the tool.
+
+## Model Context Protocol (MCP) Server
+
+**dotnet-outdated** includes a built-in [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server. This allows AI agents (like Claude Desktop, GitHub Copilot, etc.) to interact with your .NET projects to discover, analyze, and update outdated NuGet packages.
+
+### Usage
+
+To start the MCP server, run:
+
+```bash
+dotnet outdated mcp
+```
+
+### Configuration
+
+#### Claude Desktop
+
+Add the following to your `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "dotnet-outdated": {
+      "command": "dotnet-outdated",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+#### VS Code (with MCP Extension)
+
+Add the following to your `.vscode/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "dotnet-outdated": {
+      "command": "dotnet-outdated",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
 ## FAQ
 
 ### Why are unrelated changes made to .csproj files when running with `-u`?
 
-`dotnet-outdated` does not make any changes to .csproj files directly. Instead, it runs `dotnet add package` to update packages, so that command is responsible for all changes made. To track issues related to this command, head over to the [.NET CLI repo](https://github.com/dotnet/cli)
+`dotnet-outdated` does not make changes to .csproj files directly, except for versioned MSBuild project SDKs, which `dotnet add package` cannot update. Instead, it runs `dotnet add package` to update packages, so that command is responsible for those changes. For file-based apps that use variable-backed `#:package` or `#:sdk` directives, `dotnet-outdated` updates the referenced `#:property` value directly so the variable reference is preserved. Literal `#:package` and `#:sdk` directives are updated in the `.cs` source file. To track issues related to the .NET CLI command, head over to the [.NET SDK repo](https://github.com/dotnet/sdk)
+
+For version-only updates in `Directory.Packages.props`, `dotnet-outdated` preserves the original blank lines, indentation, line endings, trailing whitespace and UTF-8/UTF-16 byte order mark. If `dotnet add package` makes other XML changes, such as adding an entry, its output is kept as written, including its formatting. This also applies when a package has several `PackageVersion` entries in one file (for example per-target-framework entries under different `Condition`s) and only one of them is updated, so those files still lose their formatting.
 
 ### Why I am getting an error about required library hostfxr.dll/libhostfxr.so/libhostfxr.dylib not found?
 

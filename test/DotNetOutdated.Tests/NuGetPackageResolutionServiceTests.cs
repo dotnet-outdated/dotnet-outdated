@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using DotNetOutdated.Core;
 using DotNetOutdated.Core.Services;
@@ -24,6 +25,7 @@ namespace DotNetOutdated.Tests
                 new NuGetVersion("1.1.0"),
                 new NuGetVersion("1.2.0"),
                 new NuGetVersion("1.2.2"),
+                new NuGetVersion("1.2.3-pre"),
                 new NuGetVersion("1.3.0-pre"),
                 new NuGetVersion("1.3.0"),
                 new NuGetVersion("1.4.0-pre"),
@@ -62,15 +64,47 @@ namespace DotNetOutdated.Tests
             List<NuGetVersion> availableVersions3 = new();
 
             var nuGetPackageInfoService = Substitute.For<INuGetPackageInfoService>();
-            nuGetPackageInfoService.GetAllVersions(_packageName1, Arg.Any<List<Uri>>(), Arg.Any<bool>(), Arg.Any<NuGetFramework>(), Arg.Any<string>(), Arg.Any<bool>(), 0, Arg.Any<bool>())
+            nuGetPackageInfoService.GetAllVersionsAsync(Arg.Is<PackageVersionsQuery>(query => query.PackageId == _packageName1 && query.OlderThanDays == 0), Arg.Any<CancellationToken>())
                 .Returns(availableVersions1);
-            nuGetPackageInfoService.GetAllVersions(_packageName2, Arg.Any<List<Uri>>(), Arg.Any<bool>(), Arg.Any<NuGetFramework>(), Arg.Any<string>(), Arg.Any<bool>(), 0, Arg.Any<bool>())
+            nuGetPackageInfoService.GetAllVersionsAsync(Arg.Is<PackageVersionsQuery>(query => query.PackageId == _packageName2 && query.OlderThanDays == 0), Arg.Any<CancellationToken>())
                 .Returns(availableVersions2);
-            nuGetPackageInfoService.GetAllVersions(_packageName3, Arg.Any<List<Uri>>(), Arg.Any<bool>(), Arg.Any<NuGetFramework>(), Arg.Any<string>(), Arg.Any<bool>(), 0, Arg.Any<bool>())
+            nuGetPackageInfoService.GetAllVersionsAsync(Arg.Is<PackageVersionsQuery>(query => query.PackageId == _packageName3 && query.OlderThanDays == 0), Arg.Any<CancellationToken>())
                 .Returns(availableVersions3);
 
             _nuGetPackageResolutionService = new NuGetPackageResolutionService(nuGetPackageInfoService);
         }
+
+        [Fact]
+        public async Task CancellingOneLookup_DoesNotCancelTheSharedVersionRequest()
+        {
+            var versions = new TaskCompletionSource<IReadOnlyList<NuGetVersion>>();
+            var infoService = Substitute.For<INuGetPackageInfoService>();
+            infoService.GetAllVersionsAsync(Arg.Any<PackageVersionsQuery>(), Arg.Any<CancellationToken>()).Returns(versions.Task);
+            var service = new NuGetPackageResolutionService(infoService);
+            var query = Query("Shared", "1.0.0", VersionLock.None, PrereleaseReporting.Auto, null);
+
+            using var cancellation = new CancellationTokenSource();
+            var cancelled = service.ResolveLatestVersionAsync(query, cancellation.Token);
+            var waiting = service.ResolveLatestVersionAsync(query);
+            cancellation.Cancel();
+            versions.SetResult([new NuGetVersion("1.0.0"), new NuGetVersion("2.0.0")]);
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => cancelled);
+            Assert.Equal(new NuGetVersion("2.0.0"), await waiting);
+            await infoService.Received(1).GetAllVersionsAsync(Arg.Any<PackageVersionsQuery>(), CancellationToken.None);
+        }
+
+        private static LatestVersionQuery Query(string packageId, string current, VersionLock versionLock, PrereleaseReporting prerelease, string prereleaseLabel) => new()
+        {
+            PackageId = packageId,
+            CurrentVersion = NuGetVersion.Parse(current),
+            AllowedRange = VersionRange.Parse(current),
+            Sources = [],
+            TargetFramework = NuGetFramework.AnyFramework,
+            VersionLock = versionLock,
+            Prerelease = prerelease,
+            PrereleaseLabel = prereleaseLabel,
+        };
 
         [Theory]
         [InlineData("1.2.0", VersionLock.None, PrereleaseReporting.Auto, "2.1.0")]
@@ -79,6 +113,7 @@ namespace DotNetOutdated.Tests
         [InlineData("1.3.0-pre", VersionLock.None, PrereleaseReporting.Never, "2.1.0")]
         [InlineData("1.2.0", VersionLock.Major, PrereleaseReporting.Auto, "1.3.0")]
         [InlineData("1.2.0", VersionLock.Minor, PrereleaseReporting.Auto, "1.2.2")]
+        [InlineData("1.2.0", VersionLock.Minor, PrereleaseReporting.Always, "1.2.3-pre")]
         [InlineData("3.0.0-pre.1", VersionLock.None, PrereleaseReporting.Never, "3.0.0-pre.1")]
         [InlineData("3.0.0-pre.1", VersionLock.None, PrereleaseReporting.Always, "4.0.0-pre.1")]
         [InlineData("3.0.0-pre.1", VersionLock.None, PrereleaseReporting.Auto, "4.0.0-pre.1")]
@@ -89,7 +124,7 @@ namespace DotNetOutdated.Tests
         public async Task ResolvesVersionCorrectly(string current, VersionLock versionLock, PrereleaseReporting prerelease, string latest)
         {
             // Act
-            var latestVersion = await _nuGetPackageResolutionService.ResolvePackageVersions(_packageName1, NuGetVersion.Parse(current), new List<Uri>(), VersionRange.Parse(current), versionLock, prerelease, null, null, null, false, 0).ConfigureAwait(true);
+            var latestVersion = await _nuGetPackageResolutionService.ResolveLatestVersionAsync(Query(_packageName1, current, versionLock, prerelease, null));
 
             // Assert
             Assert.Equal(NuGetVersion.Parse(latest), latestVersion);
@@ -131,7 +166,7 @@ namespace DotNetOutdated.Tests
         public async Task ResolvesVersionCorrectlyWithParts(string current, VersionLock versionLock, PrereleaseReporting prerelease, string prereleaseLabel, string latest)
         {
             // Act
-            var latestVersion = await _nuGetPackageResolutionService.ResolvePackageVersions(_packageName2, NuGetVersion.Parse(current), new List<Uri>(), VersionRange.Parse(current), versionLock, prerelease, prereleaseLabel, null, null, false, 0).ConfigureAwait(true);
+            var latestVersion = await _nuGetPackageResolutionService.ResolveLatestVersionAsync(Query(_packageName2, current, versionLock, prerelease, prereleaseLabel));
 
             // Assert
             Assert.Equal(NuGetVersion.Parse(latest), latestVersion);
@@ -173,7 +208,7 @@ namespace DotNetOutdated.Tests
         public async Task ResolvesVersionCorrectlyIfPackageIsLatest(string current, VersionLock versionLock, PrereleaseReporting prerelease, string prereleaseLabel)
         {
             // Act
-            var latestVersion = await _nuGetPackageResolutionService.ResolvePackageVersions(_packageName3, NuGetVersion.Parse(current), new List<Uri>(), VersionRange.Parse(current), versionLock, prerelease, prereleaseLabel, null, null, false, 0).ConfigureAwait(true);
+            var latestVersion = await _nuGetPackageResolutionService.ResolveLatestVersionAsync(Query(_packageName3, current, versionLock, prerelease, prereleaseLabel));
 
             // Assert
             Assert.Equal(NuGetVersion.Parse(current), latestVersion);

@@ -3,7 +3,7 @@ using NuGet.ProjectModel;
 
 namespace DotNetOutdated
 {
-    public class ExtendedDependencyGraphSpec : DependencyGraphSpec
+    internal class ExtendedDependencyGraphSpec : DependencyGraphSpec
     {
         public ExtendedDependencyGraphSpec(string json)
             : base()

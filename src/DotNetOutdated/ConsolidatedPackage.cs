@@ -1,4 +1,6 @@
-﻿using DotNetOutdated.Models;
+﻿using DotNetOutdated.Core.Models;
+using DotNetOutdated.Core.Services;
+using DotNetOutdated.Models;
 using NuGet.Versioning;
 using System.Collections.Generic;
 
@@ -25,7 +27,7 @@ namespace DotNetOutdated
 
         public bool IsTransitive { get; set; }
 
-        public bool IsVersionCentrallyManaged { get; set; }
+        public ReferenceKind Kind { get; set; }
 
         public NuGetVersion LatestVersion { get; set; }
 

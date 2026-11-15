@@ -12,11 +12,13 @@ namespace DotNetOutdated.Core.Services
     /// <remarks>
     /// Credit for the stuff happening in here goes to the https://github.com/jaredcnance/dotnet-status project
     /// </remarks>
-    public class DotNetRunner : IDotNetRunner
+    internal class DotNetRunner(DotNetRunnerOptions options) : IDotNetRunner
     {
-        public RunStatus Run(string workingDirectory, string[] arguments)
+        public DotNetRunner() : this(new DotNetRunnerOptions()) { }
+
+        public RunStatus Run(string? workingDirectory, string[] arguments)
         {
-            var psi = new ProcessStartInfo("dotnet", arguments)
+            var psi = new ProcessStartInfo(options.FileName, arguments)
             {
                 WorkingDirectory = workingDirectory,
                 UseShellExecute = false,
@@ -37,7 +39,6 @@ namespace DotNetOutdated.Core.Services
                 var outputTask = ConsumeStreamReaderAsync(p.StandardOutput, timeSinceLastOutput, output);
                 var errorTask = ConsumeStreamReaderAsync(p.StandardError, timeSinceLastOutput, errors);
                 bool processExited = false;
-                const int Timeout = 20_000;
 
                 while (true) {
                     if (p.HasExited) {
@@ -48,7 +49,7 @@ namespace DotNetOutdated.Core.Services
                     // If output has not been received for a while, then
                     // assume that the process has hung and stop waiting.
                     lock(timeSinceLastOutput) {
-                        if (timeSinceLastOutput.ElapsedMilliseconds > Timeout) {
+                        if (timeSinceLastOutput.Elapsed > options.IdleTimeout) {
                             break;
                         }
                     }
@@ -60,7 +61,14 @@ namespace DotNetOutdated.Core.Services
                 {
                     p.Kill();
 
-                    return new RunStatus(output.ToString(), errors.ToString(), exitCode: -1);
+                    // The stream readers may still be appending, so build the message separately rather than
+                    // writing to the shared StringBuilder.
+                    string timeoutMessage =
+                        $"'{options.FileName} {string.Join(' ', arguments)}' produced no output for {options.IdleTimeout.TotalSeconds:0} seconds " +
+                        "and was stopped because it appeared to have hung. If the command is just slow (for example a long " +
+                        "package restore), allow it more time with --idle-timeout.";
+
+                    return new RunStatus(output.ToString(), errors.ToString() + timeoutMessage, exitCode: -1);
                 }
 
                 Task.WaitAll(outputTask, errorTask);
@@ -77,7 +85,7 @@ namespace DotNetOutdated.Core.Services
         {
             await Task.Yield();
 
-            string line;
+            string? line;
             while ((line = await reader.ReadLineAsync().ConfigureAwait(false)) != null)
             {
                 lock (timeSinceLastOutput) {

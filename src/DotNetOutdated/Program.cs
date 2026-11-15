@@ -2,14 +2,10 @@ using DotNetOutdated.Core;
 using DotNetOutdated.Core.Exceptions;
 using DotNetOutdated.Core.Models;
 using DotNetOutdated.Core.Services;
-using DotNetOutdated.Models;
-using McMaster.Extensions.CommandLineUtils;
 using Microsoft.Extensions.DependencyInjection;
 using NuGet.Common;
-using NuGet.Credentials;
 using NuGet.Versioning;
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO.Abstractions;
@@ -24,143 +20,88 @@ using System.Threading.Tasks;
 
 namespace DotNetOutdated
 {
-    [Command(
-       Name = "dotnet outdated",
-       FullName = "A .NET Core global tool to list outdated Nuget packages.")]
-   [VersionOptionFromMember(MemberName = nameof(GetVersion))]
    internal class Program(
         IFileSystem fileSystem,
         IReporter reporter,
-        INuGetPackageResolutionService nugetService,
-        IProjectAnalysisService projectAnalysisService,
-        IProjectDiscoveryService projectDiscoveryService,
-        IDotNetPackageService dotNetPackageService,
-        ICentralPackageVersionManagementService centralPackageVersionManagementService) : CommandBase
+        IOutdatedDependencyService outdatedDependencyService,
+        IReferenceUpgrader referenceUpgrader,
+        INuGetPackageInfoService nuGetPackageInfoService,
+        DotNetRunnerOptions dotNetRunnerOptions)
    {
       private readonly IFileSystem _fileSystem = fileSystem;
       private readonly IReporter _reporter = reporter;
-      private readonly INuGetPackageResolutionService _nugetService = nugetService;
-      private readonly IProjectAnalysisService _projectAnalysisService = projectAnalysisService;
-      private readonly IProjectDiscoveryService _projectDiscoveryService = projectDiscoveryService;
-      private readonly IDotNetPackageService _dotNetPackageService = dotNetPackageService;
-      private readonly ICentralPackageVersionManagementService _centralPackageVersionManagementService = centralPackageVersionManagementService;
+      private readonly IOutdatedDependencyService _outdatedDependencyService = outdatedDependencyService;
+      private readonly IReferenceUpgrader _referenceUpgrader = referenceUpgrader;
+      private readonly INuGetPackageInfoService _nuGetPackageInfoService = nuGetPackageInfoService;
+      private readonly DotNetRunnerOptions _dotNetRunnerOptions = dotNetRunnerOptions;
 
-      [Option(CommandOptionType.NoValue, Description = "Specifies whether to include auto-referenced packages.",
-          LongName = "include-auto-references")]
       public bool IncludeAutoReferences { get; set; } = false;
 
-      [Argument(0, Description = "The path to a .sln, .slnx, .slnf, .csproj or .fsproj file, or to a directory containing a .NET Core solution/project. " +
-                                 "If none is specified, the current directory will be used.")]
       public string Path { get; set; }
 
-      [Option(CommandOptionType.SingleValue, Description = "Specifies whether to look for pre-release versions of packages. " +
-                                                           "Possible values: Auto (default), Always or Never.",
-          ShortName = "pre", LongName = "pre-release")]
       public PrereleaseReporting Prerelease { get; set; } = PrereleaseReporting.Auto;
 
-      [Option(CommandOptionType.SingleValue, Description = "Specifies whether the package should be locked to the current Major or Minor version. " +
-                                                           "Possible values: None (default), Major or Minor.",
-          ShortName = "vl", LongName = "version-lock")]
       public VersionLock VersionLock { get; set; } = VersionLock.None;
 
-      [Option(CommandOptionType.NoValue, Description = "Specifies whether it should detect transitive dependencies.",
-          ShortName = "t", LongName = "transitive")]
       public bool Transitive { get; set; } = false;
 
-      [Option(CommandOptionType.SingleValue, Description = "Defines how many levels deep transitive dependencies should be analyzed. " +
-                                                           "Integer value (default = 1)",
-          ShortName = "td", LongName = "transitive-depth")]
       public int TransitiveDepth { get; set; } = 1;
 
-      [Option(CommandOptionType.SingleOrNoValue, Description = "Specifies whether outdated packages should be upgraded. " +
-                                                           "Possible values for <TYPE> is Auto (default) or Prompt.",
-          ShortName = "u", LongName = "upgrade", ValueName = "TYPE")]
       public (bool HasValue, UpgradeType UpgradeType) Upgrade { get; set; }
 
-      [Option(CommandOptionType.NoValue, Description = "Specifies whether it should return a non-zero exit code when updates are found.",
-          ShortName = "f", LongName = "fail-on-updates")]
       public bool FailOnUpdates { get; set; } = false;
 
-      [Option(CommandOptionType.MultipleValue, Description = "Specifies to only look at packages where the name contains the provided string. Culture and case insensitive. If provided multiple times, a single match is enough to include a package.",
-          ShortName = "inc", LongName = "include")]
       public List<string> FilterInclude { get; set; } = [];
 
-      [Option(CommandOptionType.MultipleValue, Description = "Specifies to only look at packages where the name does not contain the provided string. Culture and case insensitive. If provided multiple times, a single match is enough to exclude a package.",
-          ShortName = "exc", LongName = "exclude")]
       public List<string> FilterExclude { get; set; } = [];
 
-      [Option(CommandOptionType.SingleValue, Description = "Specifies the filename for a generated report. " +
-                                                           "(Use the -of|--output-format option to specify the format. JSON by default.)",
-          ShortName = "o", LongName = "output")]
       public string OutputFilename { get; set; } = null;
 
-      [Option(CommandOptionType.SingleValue, Description = "Specifies the output format for the generated report. " +
-                                                           "Possible values: json (default), csv, or markdown.",
-          ShortName = "of", LongName = "output-format")]
       public OutputFormat OutputFileFormat { get; set; } = OutputFormat.Json;
 
-      [Option(CommandOptionType.SingleValue, Description = "Only include package versions that are older than the specified number of days.",
-          ShortName = "ot", LongName = "older-than")]
       public int OlderThanDays { get; set; }
 
-      [Option(CommandOptionType.NoValue, Description = "Add the reference without performing restore preview and compatibility check.",
-          ShortName = "n", LongName = "no-restore")]
       public bool NoRestore { get; set; } = false;
 
-      [Option(CommandOptionType.NoValue, Description = "Recursively search for all projects within the provided directory.",
-          ShortName = "r", LongName = "recursive")]
       public bool Recursive { get; set; } = false;
 
-      [Option(CommandOptionType.NoValue, Description = "Treat package source failures as warnings.", ShortName = "ifs", LongName = "ignore-failed-sources")]
+      public bool IncludeFileBasedApps { get; set; } = false;
+
       public bool IgnoreFailedSources { get; set; } = false;
 
-      [Option(CommandOptionType.NoValue, Description = "Include all dependencies in the report even the ones not outdated.",
-          ShortName = "utd", LongName = "include-up-to-date")]
       public bool IncludeUpToDate { get; set; } = false;
 
-      [Option(CommandOptionType.SingleValue, Description = "Specifies an optional label to restrict matches to when looking for pre-release versions of packages. " +
-                                                           "For example, a label of 'rc.1' would only match pre-release packages with a pre-release label that starts with that prefix.",
-          ShortName = "prl", LongName = "pre-release-label")]
       public string PrereleaseLabel { get; set; } = string.Empty;
 
-      [Option(CommandOptionType.SingleValue, Description = "Specifies the minimum level of logs for NuGet Credential Service. " +
-                                                            "Possible values: debug, verbose, information, warning (default), or error",
-          ShortName = "ncll", LongName = "nuget-cred-log-level")]
       public LogLevel NuGetCredLogLevel { get; set; } = LogLevel.Warning;
       
-      [Option(CommandOptionType.SingleValue, Description = "Specifies an optional runtime identifier to be used during the restore target when projects are analyzed. " +
-                                                           "More information available on https://learn.microsoft.com/dotnet/core/rid-catalog",
-         ShortName = "rt", LongName = "runtime")]
       public string Runtime { get; set; } = string.Empty;
 
-      [Option(CommandOptionType.SingleValue, Description = "The inclusive maximum package version to upgrade to." +
-                                                           "For example, a value of '8.0' would upgrade System.Text.Json 6.0.0 to the latest patch version of 8.0.x",
-         ShortName = "mv", LongName = "maximum-version")]
       public string MaxVersion { get; set; } = string.Empty;
+
+      public int IdleTimeout { get; set; } = 120;
       
       public static int Main(string[] args)
       {
-         using var services = new ServiceCollection()
-                 .AddSingleton(PhysicalConsole.Singleton)
-                 .AddSingleton<IReporter>(provider => new ConsoleReporter(provider.GetService<IConsole>()))
-                 .AddSingleton<IFileSystem, FileSystem>()
-                 .AddSingleton<IProjectDiscoveryService, ProjectDiscoveryService>()
-                 .AddSingleton<IProjectAnalysisService, ProjectAnalysisService>()
-                 .AddSingleton<IDotNetRunner, DotNetRunner>()
-                 .AddSingleton<IDependencyGraphService, DependencyGraphService>()
-                 .AddSingleton<IDotNetRestoreService, DotNetRestoreService>()
-                 .AddSingleton<IDotNetPackageService, DotNetPackageService>()
-                 .AddSingleton<INuGetPackageInfoService, NuGetPackageInfoService>()
-                 .AddSingleton<INuGetPackageResolutionService, NuGetPackageResolutionService>()
-                 .AddSingleton<ICentralPackageVersionManagementService, CentralPackageVersionManagementService>()
-                 .BuildServiceProvider();
+         ProgramCommandLine commandLine = null;
+         commandLine = new ProgramCommandLine(
+            run: async (parseResult, _) =>
+            {
+               // NuGet logs at the level --nuget-cred-log-level asks for, credential providers included.
+               await using var services = new ServiceCollection()
+                       .AddSingleton(PhysicalConsole.Singleton)
+                       .AddSingleton<IReporter>(provider => new ConsoleReporter(provider.GetService<IConsole>()))
+                       .AddSingleton<ILogger>(provider => new ConsoleLogger(provider.GetService<IConsole>(), parseResult.GetValue(commandLine.NuGetCredLogLevel)))
+                       .AddDotNetOutdated()
+                       .BuildServiceProvider();
 
-         using var app = new CommandLineApplication<Program>();
-         app.Conventions
-             .UseDefaultConventions()
-             .UseConstructorInjection(services);
+               var program = ActivatorUtilities.CreateInstance<Program>(services);
+               commandLine.Bind(parseResult, program);
+               return await program.OnExecute(services.GetRequiredService<IConsole>());
+            },
+            runMcp: _ => new McpCommand().OnExecuteAsync());
 
-         return app.Execute(args);
+         return commandLine.Parse(args).Invoke();
       }
 
       public static string GetVersion() => typeof(Program)
@@ -168,10 +109,11 @@ namespace DotNetOutdated
           .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
           .InformationalVersion;
 
-      public async Task<int> OnExecute(CommandLineApplication app, IConsole console)
+      public async Task<int> OnExecute(IConsole console)
       {
-         ArgumentNullException.ThrowIfNull(app);
          ArgumentNullException.ThrowIfNull(console);
+         
+         _dotNetRunnerOptions.IdleTimeout = TimeSpan.FromSeconds(IdleTimeout);
 
          try
          {
@@ -181,26 +123,13 @@ namespace DotNetOutdated
             if (string.IsNullOrEmpty(Path))
                Path = _fileSystem.Directory.GetCurrentDirectory();
 
-            // Get all the projects
-            console.WriteLine("Discovering projects...");
+            var report = await _outdatedDependencyService.FindOutdatedAsync(Path, CreateOutdatedOptions(), new ConsoleProgress(console)).ConfigureAwait(false);
 
-            DefaultCredentialServiceUtility.SetupDefaultCredentialService(new ConsoleLogger(console, NuGetCredLogLevel), true);
-
-            var projectPaths = _projectDiscoveryService.DiscoverProjects(Path, Recursive);
-
-            // Analyze the projects
-            console.WriteLine("Analyzing project(s)...");
-
-            var projectLists = new ConcurrentBag<List<Project>>();
-            await Parallel.ForEachAsync(projectPaths, async (path, _) =>
-            {
-                projectLists.Add(await _projectAnalysisService.AnalyzeProjectAsync(path, false, Transitive, TransitiveDepth, Runtime).ConfigureAwait(false));
-            }).ConfigureAwait(false);
-
-            var projects = projectLists.SelectMany(p => p).ToList();
-
-            // Analyze the dependencies
-            var outdatedProjects = await AnalyzeDependencies(projects, console).ConfigureAwait(false);
+            // Show only the target frameworks, and the projects, with something to report.
+            var outdatedProjects = report.Projects
+               .Select(project => project with { TargetFrameworks = [.. project.TargetFrameworks.Where(targetFramework => targetFramework.Dependencies.Count != 0)] })
+               .Where(project => project.TargetFrameworks.Count != 0)
+               .ToList();
 
             if (outdatedProjects.Count != 0)
             {
@@ -208,7 +137,7 @@ namespace DotNetOutdated
                ReportOutdatedDependencies(outdatedProjects, console);
 
                // Upgrade the packages
-               var success = UpgradePackages(outdatedProjects, console);
+               var success = await UpgradePackagesAsync(outdatedProjects, console).ConfigureAwait(false);
 
                if (!Upgrade.HasValue)
                {
@@ -217,7 +146,7 @@ namespace DotNetOutdated
                }
 
                // Output report file
-               await GenerateOutputFile(outdatedProjects).ConfigureAwait(false);
+               await GenerateOutputFile(outdatedProjects);
 
                if (FailOnUpdates)
                   return 2;
@@ -242,7 +171,7 @@ namespace DotNetOutdated
          }
       }
 
-      private bool UpgradePackages(List<AnalyzedProject> projects, IConsole console)
+      internal async Task<bool> UpgradePackagesAsync(IReadOnlyList<OutdatedProject> projects, IConsole console)
       {
          bool success = true;
 
@@ -255,60 +184,112 @@ namespace DotNetOutdated
          foreach (var package in consolidatedPackages)
          {
             bool upgrade = true;
+            string referenceNoun = package.Kind == ReferenceKind.Sdk ? "SDK" : "package";
+
+            // A target framework the new version declares unsupported (with a build warning) keeps its version; the
+            // others are upgraded.
+            var heldBack = await FindUnsupportedTargetFrameworksAsync(package).ConfigureAwait(false);
+            var upgradedProjects = package.Projects.Except(heldBack).ToList();
+            if (upgradedProjects.Count == 0)
+            {
+               WriteHeldBack(package, heldBack, [], upgraded: false, console);
+               console.WriteLine();
+               continue;
+            }
+
+            var request = new ReferenceUpgrade
+            {
+               Name = package.Name,
+               Kind = package.Kind,
+               Version = package.LatestVersion,
+               Projects = upgradedProjects.Select(ToUpgradeProject).ToList(),
+               HeldBack = heldBack.Select(ToUpgradeProject).ToList(),
+               NoRestore = NoRestore,
+               IgnoreFailedSources = IgnoreFailedSources,
+            };
+
+            // A held-back project that shares its version with an upgraded one is upgraded too.
+            var upgradedToo = heldBack.Count == 0 ? [] : _referenceUpgrader.FindHeldBackSharingVersion(request).ToHashSet();
 
             if (Upgrade.UpgradeType == UpgradeType.Prompt)
             {
                string resolvedVersion = package.ResolvedVersion?.ToString() ?? "";
                string latestVersion = package.LatestVersion?.ToString() ?? "";
 
-               console.Write("The package ");
+               console.Write($"The {referenceNoun} ");
                console.Write(package.Description, Constants.ReportingColors.PackageName);
                console.Write($" can be upgraded from {resolvedVersion} to ");
                console.Write(latestVersion, GetUpgradeSeverityColor(package.UpgradeSeverity));
                console.WriteLine(". The following project(s) will be affected:");
-               foreach (var project in package.Projects)
+               foreach (var project in upgradedProjects.Concat(heldBack.Where(project => upgradedToo.Contains(ToUpgradeProject(project)))))
                {
                   WriteProjectName(project.Description, console);
                }
 
-               upgrade = Prompt.GetYesNo("Do you wish to upgrade this package?", true);
+               WriteHeldBack(package, heldBack, upgradedToo, upgraded: false, console);
+
+               bool? answer = Prompt.GetYesNo(console, $"Do you wish to upgrade this {referenceNoun}?", true);
+               if (answer is null)
+               {
+                  // The input has ended, so no-one can confirm this or any later upgrade (#831).
+                  console.WriteLine();
+                  console.WriteLine("No input is available to answer the prompt, so the remaining upgrades were skipped.");
+                  break;
+               }
+
+               upgrade = answer.Value;
             }
 
             if (upgrade)
             {
-               console.Write("Upgrading package ");
+               console.Write($"Upgrading {referenceNoun} ");
                console.Write(package.Description, Constants.ReportingColors.PackageName);
                console.Write("...");
                console.WriteLine();
 
-               foreach (var project in package.Projects)
-               {
-                  RunStatus status = null;
+               var results = _referenceUpgrader.Upgrade(request);
 
-                  if (!project.IsProjectSdkStyle() && !package.IsVersionCentrallyManaged)
+               foreach (var result in results)
+               {
+                  string projectName = package.Projects.First(project => project.ProjectFilePath == result.ProjectPath).Project;
+                  foreach (var warning in result.Warnings)
                   {
-                     console.WriteLine("Project format not SDK style or centrally managed, removing package before upgrade.");
-                     status = _dotNetPackageService.RemovePackage(project.ProjectFilePath, package.Name);
+                     console.WriteLine(warning, ConsoleColor.Yellow);
                   }
 
-                  if (status is null || status.IsSuccess)
-                     status = package.IsVersionCentrallyManaged
-                        ? _centralPackageVersionManagementService.AddPackage(project.ProjectFilePath, package.Name, package.LatestVersion, NoRestore)
-                        : _dotNetPackageService.AddPackage(project.ProjectFilePath, package.Name, project.Framework.ToString(), package.LatestVersion, NoRestore, IgnoreFailedSources);
-
-                  if (status.IsSuccess)
+                  if (result.IsSuccess)
                   {
-                     console.Write($"Project {project.Description} upgraded successfully", Constants.ReportingColors.UpgradeSuccess);
+                     console.Write(
+                        result.Outcome == UpgradeOutcome.AlreadyCurrent
+                           ? $"Project {projectName} already has {package.Name} {package.LatestVersion}"
+                           : $"Project {projectName} upgraded successfully",
+                        Constants.ReportingColors.UpgradeSuccess);
                      console.WriteLine();
                   }
                   else
                   {
                      success = false;
-                     console.Write($"An error occurred while upgrading {project.Project}", Constants.ReportingColors.UpgradeFailure);
+                     console.Write($"An error occurred while upgrading {projectName}", Constants.ReportingColors.UpgradeFailure);
                      console.WriteLine();
-                     console.Write(status.Errors, Constants.ReportingColors.UpgradeFailure);
-                     console.WriteLine();
+                     if (result.FailureDetails.Length > 0)
+                     {
+                        console.Write(result.FailureDetails, Constants.ReportingColors.UpgradeFailure);
+                        console.WriteLine();
+                     }
                   }
+               }
+
+               // The prompt has said what happens to the held-back projects already. One that was to be upgraded too
+               // but isn't in a result's HeldBackUpgraded failed, which its result has reported.
+               if (Upgrade.UpgradeType != UpgradeType.Prompt)
+               {
+                  var upgradedWith = results.SelectMany(result => result.HeldBackUpgraded).ToHashSet();
+                  WriteHeldBack(
+                     package,
+                     heldBack.Where(project => !upgradedToo.Contains(ToUpgradeProject(project)) || upgradedWith.Contains(ToUpgradeProject(project))),
+                     upgradedWith,
+                     upgraded: true,
+                     console);
                }
             }
 
@@ -316,6 +297,49 @@ namespace DotNetOutdated
          }
 
          return success;
+      }
+
+      private static UpgradeProject ToUpgradeProject(PackageProjectReference project) =>
+         new(project.ProjectFilePath, project.TargetAlias);
+
+      // The projects (target frameworks) the package's new version declares unsupported.
+      private async Task<List<PackageProjectReference>> FindUnsupportedTargetFrameworksAsync(ConsolidatedPackage package)
+      {
+         if (package.Kind != ReferenceKind.Package)
+         {
+            return [];
+         }
+
+         var checks = await Task.WhenAll(package.Projects.Select(async project => (
+            Project: project,
+            Unsupported: await _nuGetPackageInfoService.DeclaresTargetFrameworkUnsupportedAsync(new TargetFrameworkSupportQuery
+            {
+               PackageId = package.Name,
+               Version = package.LatestVersion,
+               TargetFramework = project.Framework,
+               Sources = project.Sources,
+               ProjectFilePath = project.ProjectFilePath,
+            }).ConfigureAwait(false)))).ConfigureAwait(false);
+
+         return checks.Where(check => check.Unsupported).Select(check => check.Project).ToList();
+      }
+
+      // Says why each held-back project isn't upgraded, or, for one that shares its version with an upgraded project
+      // (in upgradedToo), that it is upgraded anyway: before the upgrade, or once it has been (upgraded).
+      private static void WriteHeldBack(ConsolidatedPackage package, IEnumerable<PackageProjectReference> heldBack, HashSet<UpgradeProject> upgradedToo, bool upgraded, IConsole console)
+      {
+         foreach (var project in heldBack)
+         {
+            string framework = project.Framework.GetShortFolderName();
+            console.WriteLine(
+               upgradedToo.Contains(ToUpgradeProject(project))
+                  ? $"{package.Name} {package.LatestVersion} doesn't support {framework}, but {project.Description} shares its version with a target framework " +
+                    (upgraded ? "that was upgraded, so it was upgraded too. " : "being upgraded, so it will be upgraded too. ") +
+                    $"Declare the reference separately for each target framework to keep {framework} on {package.ResolvedVersion}."
+                  : $"{package.Name} {package.LatestVersion} doesn't support {framework}, so {project.Description} keeps {package.ResolvedVersion}. " +
+                    "Move to a supported target framework to upgrade it.",
+               ConsoleColor.Yellow);
+         }
       }
 
       private static void PrintColorLegend(IConsole console)
@@ -366,7 +390,7 @@ namespace DotNetOutdated
          console.Write(rest, GetUpgradeSeverityColor(upgradeSeverity));
       }
 
-      private static void ReportOutdatedDependencies(List<AnalyzedProject> projects, IConsole console)
+      private static void ReportOutdatedDependencies(List<OutdatedProject> projects, IConsole console)
       {
          foreach (var project in projects)
          {
@@ -384,9 +408,9 @@ namespace DotNetOutdated
                foreach (var dependency in dependencies)
                {
                   console.WriteIndent();
-                  console.Write(dependency.Description?.PadRight(columnWidths[0] + 2));
+                  console.Write(dependency.Description().PadRight(columnWidths[0] + 2));
 
-                  WriteColoredUpgrade(dependency.UpgradeSeverity, dependency.ResolvedVersion, dependency.LatestVersion, columnWidths[1], columnWidths[2], console);
+                  WriteColoredUpgrade(dependency.UpgradeSeverity, dependency.Dependency.ResolvedVersion, dependency.LatestVersion, columnWidths[1], columnWidths[2], console);
 
                   console.WriteLine();
                }
@@ -395,7 +419,28 @@ namespace DotNetOutdated
             console.WriteLine();
          }
 
-         if (projects.SelectMany(p => p.TargetFrameworks).SelectMany(f => f.Dependencies).Any(d => d.UpgradeSeverity == DependencyUpgradeSeverity.Unknown))
+         var allDependencies = projects.SelectMany(p => p.TargetFrameworks).SelectMany(f => f.Dependencies).ToList();
+
+         // A range without a lower bound is never looked up, so it says nothing about the NuGet sources.
+         var unboundedDependencies = allDependencies
+            .Where(d => d.LatestVersionUnknownReason == LatestVersionUnknownReason.NoLowerBound)
+            .Select(d => d.Dependency)
+            .DistinctBy(d => (d.Name, d.VersionRange))
+            .OrderBy(d => d.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+         foreach (var dependency in unboundedDependencies)
+         {
+            console.WriteLine($"The latest version of {dependency.Name} can't be determined because its version range {dependency.VersionRange} has no lower bound.", ConsoleColor.Yellow);
+         }
+
+         if (unboundedDependencies.Count != 0)
+         {
+            console.WriteLine();
+         }
+
+         // Restore failing to resolve a package is the usual way a source problem shows up here: a lookup that can't
+         // reach a source reports the resolved version instead.
+         if (allDependencies.Any(d => d.LatestVersionUnknownReason is LatestVersionUnknownReason.Unresolved or LatestVersionUnknownReason.NotProvided))
          {
             console.WriteLine("Errors occurred while analyzing dependencies for some of your projects. Are you sure you can connect to all your configured NuGet servers?", ConsoleColor.Red);
             if (String.IsNullOrEmpty(Environment.GetEnvironmentVariable("DOTNET_HOST_PATH")))
@@ -413,173 +458,58 @@ namespace DotNetOutdated
          PrintColorLegend(console);
       }
 
-      private async Task<List<AnalyzedProject>> AnalyzeDependencies(List<Project> projects, IConsole console)
+      private OutdatedOptions CreateOutdatedOptions() => new()
       {
-         var outdatedProjects = new ConcurrentBag<AnalyzedProject>();
+         Recursive = Recursive,
+         IncludeFileBasedApps = IncludeFileBasedApps,
+         IncludeTransitiveDependencies = Transitive,
+         TransitiveDepth = TransitiveDepth,
+         Runtime = Runtime,
+         VersionLock = VersionLock,
+         Prerelease = Prerelease,
+         PrereleaseLabel = PrereleaseLabel,
+         OlderThanDays = OlderThanDays,
+         MaximumVersion = ParseMaximumVersion(),
+         IgnoreFailedSources = IgnoreFailedSources,
+         IncludeAutoReferences = IncludeAutoReferences,
+         IncludeUpToDate = IncludeUpToDate,
+         IncludeFilters = FilterInclude,
+         ExcludeFilters = FilterExclude,
+      };
 
-         console.WriteLine("Analyzing dependencies...");
-
-         await Parallel.ForEachAsync(projects, async (project, _) => await AddOutdatedProjectsIfNeeded(project, outdatedProjects).ConfigureAwait(false)).ConfigureAwait(false);
-
-         return outdatedProjects
-             .OrderBy(p => p.Name)
-             .ThenBy(p => p.FilePath)
-             .ToList();
+      /// <summary>Says which stage of finding outdated dependencies has started, as it starts.</summary>
+      private sealed class ConsoleProgress(IConsole console) : IProgress<OutdatedReportStage>
+      {
+         public void Report(OutdatedReportStage value) => console.WriteLine(value switch
+         {
+            OutdatedReportStage.DiscoveringProjects => "Discovering projects...",
+            OutdatedReportStage.AnalyzingProjects => "Analyzing project(s)...",
+            _ => "Analyzing dependencies...",
+         });
       }
 
-      private bool AnyIncludeFilterMatches(Dependency dep) =>
-          FilterInclude.Any(f => NameContains(dep, f));
-
-      private bool NoExcludeFilterMatches(Dependency dep) =>
-          !FilterExclude.Any(f => NameContains(dep, f));
-
-      private static bool NameContains(Dependency dep, string part) =>
-          dep.Name.Contains(part, StringComparison.InvariantCultureIgnoreCase);
-
-      private async Task AddOutdatedProjectsIfNeeded(Project project, ConcurrentBag<AnalyzedProject> outdatedProjects)
+      private NuGetVersion ParseMaximumVersion()
       {
-         var outdatedFrameworks = new ConcurrentBag<AnalyzedTargetFramework>();
-
-         var tasks = new Task[project.TargetFrameworks.Count];
-
-         // Process each target framework with its related dependencies
-         for (var index = 0; index < project.TargetFrameworks.Count; index++)
+         if (string.IsNullOrEmpty(MaxVersion))
          {
-            var targetFramework = project.TargetFrameworks[index];
-            tasks[index] = AddOutdatedFrameworkIfNeeded(targetFramework, project, outdatedFrameworks);
+            return null;
          }
 
-         await Task.WhenAll(tasks).ConfigureAwait(false);
-
-         if (!outdatedFrameworks.IsEmpty)
-            outdatedProjects.Add(new AnalyzedProject(project.Name, project.FilePath, outdatedFrameworks));
-      }
-
-      private async Task AddOutdatedFrameworkIfNeeded(TargetFramework targetFramework, Project project, ConcurrentBag<AnalyzedTargetFramework> outdatedFrameworks)
-      {
-         var outdatedDependencies = new ConcurrentBag<AnalyzedDependency>();
-
-         IEnumerable<Dependency> deps = targetFramework.Dependencies.Values;
-         
-         if (!this.IncludeAutoReferences)
+         if (!Version.TryParse(MaxVersion, out var maxVersion))
          {
-            deps = deps.Where(d => !d.IsAutoReferenced);
+            throw new CommandValidationException($"The specified maximum version '{MaxVersion}' is not a valid version string.");
          }
 
-         if (FilterInclude.Count != 0)
-            deps = deps.Where(AnyIncludeFilterMatches);
-
-         if (FilterExclude.Count != 0)
-            deps = deps.Where(NoExcludeFilterMatches);
-
-         NuGetVersion maximumVersion = null;
-
-         if (!string.IsNullOrEmpty(MaxVersion))
+         // NuGetVersion normalizes no build or revision to 0, when we actually want
+         // those to mean "any version", so we need to force them to int.MaxValue.
+         if (maxVersion.Build is -1 || maxVersion.Revision is -1)
          {
-             if (!Version.TryParse(MaxVersion, out var maxVersion))
-             {
-                 throw new CommandValidationException($"The specified maximum version '{MaxVersion}' is not a valid version string.");
-             }
-
-             // NuGetVersion normalizes no build or revision to 0, when we actually want
-             // those to mean "any version", so we need to force them to int.MaxValue.
-             if (maxVersion.Build is -1 || maxVersion.Revision is -1)
-             {
-                 var build = maxVersion.Build == -1 ? int.MaxValue : maxVersion.Build;
-                 var revision = maxVersion.Revision == -1 ? int.MaxValue : maxVersion.Revision;
-                 maxVersion = new(maxVersion.Major, maxVersion.Minor, build, revision);
-             }
-
-             maximumVersion = new NuGetVersion(maxVersion);
+            var build = maxVersion.Build == -1 ? int.MaxValue : maxVersion.Build;
+            var revision = maxVersion.Revision == -1 ? int.MaxValue : maxVersion.Revision;
+            maxVersion = new(maxVersion.Major, maxVersion.Minor, build, revision);
          }
 
-         var dependencies = deps.OrderBy(dependency => dependency.IsTransitive)
-             .ThenBy(dependency => dependency.Name)
-             .ToArray();
-
-         var tasks = new Task[dependencies.Length];
-
-         for (var index = 0; index < dependencies.Length; index++)
-         {
-            var dependency = dependencies[index];
-
-            tasks[index] = AddOutdatedDependencyIfNeeded(project, targetFramework, dependency, maximumVersion, outdatedDependencies);
-         }
-
-         await Task.WhenAll(tasks).ConfigureAwait(false);
-
-         if (!outdatedDependencies.IsEmpty)
-            outdatedFrameworks.Add(new AnalyzedTargetFramework(targetFramework.Name, outdatedDependencies));
-      }
-
-      private async Task AddOutdatedDependencyIfNeeded(
-          Project project,
-          TargetFramework targetFramework,
-          Dependency dependency,
-          NuGetVersion maximumVersion,
-          ConcurrentBag<AnalyzedDependency> outdatedDependencies)
-      {
-         var referencedVersion = dependency.ResolvedVersion;
-         var versionRange = dependency.VersionRange;
-         NuGetVersion latestVersion = null;
-
-        if (maximumVersion is not null &&
-            (versionRange.MaxVersion is null || maximumVersion > versionRange.MaxVersion))
-        {
-            // Patch the version range to include the user-specified maximum
-            versionRange = new(
-                versionRange.MinVersion,
-                versionRange.IsMinInclusive,
-                maximumVersion,
-                includeMaxVersion: true,
-                versionRange.Float,
-                versionRange.OriginalString);
-        }
-
-         if (referencedVersion != null)
-         {
-            latestVersion = await _nugetService.ResolvePackageVersions(
-                dependency.Name,
-                referencedVersion,
-                project.Sources,
-                versionRange,
-                VersionLock,
-                Prerelease,
-                PrereleaseLabel,
-                targetFramework.Name,
-                project.FilePath,
-                dependency.IsDevelopmentDependency,
-                OlderThanDays,
-                IgnoreFailedSources).ConfigureAwait(false);
-         }
-
-         if (referencedVersion == null || latestVersion == null || referencedVersion != latestVersion || IncludeUpToDate)
-         {
-            // special case when there is version installed which is not older than "OlderThan" days makes "latestVersion" to be null
-            if (OlderThanDays > 0 && latestVersion == null)
-            {
-               NuGetVersion absoluteLatestVersion = await _nugetService.ResolvePackageVersions(
-                   dependency.Name,
-                   referencedVersion,
-                   project.Sources,
-                   versionRange,
-                   VersionLock,
-                   Prerelease,
-                   PrereleaseLabel,
-                   targetFramework.Name,
-                   project.FilePath,
-                   dependency.IsDevelopmentDependency).ConfigureAwait(false);
-
-               if (absoluteLatestVersion == null || referencedVersion > absoluteLatestVersion)
-               {
-                  outdatedDependencies.Add(new AnalyzedDependency(dependency, latestVersion));
-               }
-            }
-            else
-            {
-               outdatedDependencies.Add(new AnalyzedDependency(dependency, latestVersion));
-            }
-         }
+         return new NuGetVersion(maxVersion);
       }
 
       private static ConsoleColor GetUpgradeSeverityColor(DependencyUpgradeSeverity? upgradeSeverity)
@@ -593,7 +523,7 @@ namespace DotNetOutdated
          };
       }
 
-      private async Task GenerateOutputFile(List<AnalyzedProject> projects)
+      private async Task GenerateOutputFile(List<OutdatedProject> projects)
       {
          if (OutputFilename != null)
          {
@@ -621,7 +551,7 @@ namespace DotNetOutdated
          console.WriteLine();
       }
 
-      private static void WriteTargetFramework(AnalyzedTargetFramework targetFramework, IConsole console)
+      private static void WriteTargetFramework(OutdatedTargetFramework targetFramework, IConsole console)
       {
          console.WriteIndent();
          console.Write($"[{targetFramework.Name}]", Constants.ReportingColors.TargetFrameworkName);

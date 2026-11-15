@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <FakeJsonVersion>11.0.1</FakeJsonVersion>
+    <FakeExtensionsVersion>2.1.0</FakeExtensionsVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="DotNetOutdated.Fake.Json" Version="$(FakeJsonVersion)" />
+    <PackageReference Include="DotNetOutdated.Fake.Logging" Version="$(FakeExtensionsVersion)" />
+    <PackageReference Include="DotNetOutdated.Fake.DependencyInjection" Version="$(FakeExtensionsVersion)" />
+  </ItemGroup>
+</Project>

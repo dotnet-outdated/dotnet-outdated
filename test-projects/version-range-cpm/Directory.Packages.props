@@ -1,0 +1,10 @@
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <FakeJsonVersion>[12.0.1,13.0.0)</FakeJsonVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageVersion Include="DotNetOutdated.Fake.Json" Version="$(FakeJsonVersion)" />
+    <PackageVersion Include="DotNetOutdated.Fake.TextJson" Version="[6.0.0,7.0.0)" />
+  </ItemGroup>
+</Project>

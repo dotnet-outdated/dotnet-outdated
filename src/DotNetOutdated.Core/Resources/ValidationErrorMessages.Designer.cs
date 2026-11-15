@@ -78,7 +78,7 @@ namespace DotNetOutdated.Core.Resources {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to The directory &apos;{0}&apos; does not contain any solutions or projects..
+        ///   Looks up a localized string similar to The directory &apos;{0}&apos; does not contain any solutions, projects, or file-based apps..
         /// </summary>
         internal static string DirectoryDoesNotContainSolutionsOrProjects {
             get {
@@ -96,11 +96,29 @@ namespace DotNetOutdated.Core.Resources {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to The file &apos;{0}&apos; is not a valid solution or project..
+        ///   Looks up a localized string similar to The file &apos;{0}&apos; is not a valid solution, project, or file-based app..
         /// </summary>
         internal static string FileNotAValidSolutionOrProject {
             get {
                 return ResourceManager.GetString("FileNotAValidSolutionOrProject", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to MSBuild did not produce a dependency graph for &apos;{0}&apos;. Make sure it is an SDK-style project or file-based app that supports NuGet restore..
+        /// </summary>
+        internal static string NoDependencyGraphForProject {
+            get {
+                return ResourceManager.GetString("NoDependencyGraphForProject", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to No restorable projects were found in &apos;{0}&apos;. Make sure it includes at least one SDK-style project, and that a solution filter or the active build configuration does not exclude it..
+        /// </summary>
+        internal static string NoRestorableProjectsInSolution {
+            get {
+                return ResourceManager.GetString("NoRestorableProjectsInSolution", resourceCulture);
             }
         }
     }

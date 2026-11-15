@@ -1,4 +1,6 @@
-﻿using NuGet.Frameworks;
+﻿using System;
+using System.Collections.Generic;
+using NuGet.Frameworks;
 
 namespace DotNetOutdated
 {
@@ -8,8 +10,12 @@ namespace DotNetOutdated
 
         public NuGetFramework Framework { get; set; }
 
+        public string TargetAlias { get; set; }
+
         public string Project { get; set; }
 
         public string ProjectFilePath { get; set; }
+
+        public IReadOnlyList<Uri> Sources { get; set; } = [];
     }
 }

@@ -32,7 +32,7 @@ namespace DotNetOutdated.Core.Models
             _nodes.Add(node);
         }
 
-        public bool Equals(DependencyNode other)
+        public bool Equals(DependencyNode? other)
         {
             if (other == null)
                 return false;
@@ -40,7 +40,7 @@ namespace DotNetOutdated.Core.Models
             return string.Equals(Id, other.Id, StringComparison.OrdinalIgnoreCase);
         }
 
-        public override bool Equals(object obj)
+        public override bool Equals(object? obj)
         {
             return Equals(obj as DependencyNode);
         }
@@ -52,7 +52,7 @@ namespace DotNetOutdated.Core.Models
 
         private string GetDebuggerDisplay()
         {
-            return $"{Id}/{DependencyItem.ResolvedVersion.ToNormalizedString()}";
+            return $"{Id}/{DependencyItem.ResolvedVersion?.ToNormalizedString()}";
         }
     }
 }

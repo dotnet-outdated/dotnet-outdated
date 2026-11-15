@@ -1,0 +1,6 @@
+<Project>
+  <PropertyGroup>
+    <!-- Restore into a project-local folder; the SDK is still resolved from the global packages folder. -->
+    <RestorePackagesPath>$(MSBuildThisFileDirectory)packages</RestorePackagesPath>
+  </PropertyGroup>
+</Project>

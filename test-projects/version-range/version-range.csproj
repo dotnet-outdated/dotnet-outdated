@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>netstandard2.0</TargetFrameworks>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="DotNetOutdated.Fake.TextJson" Version="[6.0.0, 8.0.0)" />
+    <PackageReference Include="DotNetOutdated.Fake.DependencyInjection" Version="[6.0.0, 7.0.0]" />
+  </ItemGroup>
+</Project>

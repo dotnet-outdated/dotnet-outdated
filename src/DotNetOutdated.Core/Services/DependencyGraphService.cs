@@ -1,8 +1,12 @@
-﻿using DotNetOutdated.Core.Exceptions;
+﻿using DotNetOutdated.Core;
+using DotNetOutdated.Core.Exceptions;
 using NuGet.ProjectModel;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO.Abstractions;
+using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 
 namespace DotNetOutdated.Core.Services
@@ -13,14 +17,90 @@ namespace DotNetOutdated.Core.Services
     /// <remarks>
     /// Credit for the stuff happening in here goes to the https://github.com/jaredcnance/dotnet-status project
     /// </remarks>
-    public sealed class DependencyGraphService(IDotNetRunner dotNetRunner, IFileSystem fileSystem) : IDependencyGraphService
+    internal sealed class DependencyGraphService(IDotNetRunner dotNetRunner, IFileSystem fileSystem) : IDependencyGraphService
     {
         private readonly IDotNetRunner _dotNetRunner = dotNetRunner;
         private readonly IFileSystem _fileSystem = fileSystem;
 
-        public async Task<DependencyGraphSpec> GenerateDependencyGraphAsync(string projectPath, string runtime)
+        public async Task<DependencyGraphSpec> GenerateDependencyGraphAsync(string projectPath, string? runtime)
         {
             var dgOutput = _fileSystem.Path.Combine(_fileSystem.Path.GetTempPath(), _fileSystem.Path.GetRandomFileName());
+            var projectDirectory = _fileSystem.Path.GetDirectoryName(projectPath);
+            var runStatus = projectPath.IsCSharpFile()
+                ? GenerateFileBasedAppDependencyGraph(projectPath, projectDirectory, runtime, dgOutput)
+                : GenerateProjectDependencyGraph(projectPath, projectDirectory, runtime, dgOutput);
+
+            if (runStatus.IsSuccess)
+            {
+                // MSBuild reports success without writing the restore graph file when there is nothing to
+                // restore: an empty solution, a solution filter that selects no projects, or a solution whose
+                // projects are all excluded from the build configuration or are not restorable (issue #747).
+                if (!_fileSystem.File.Exists(dgOutput))
+                {
+                    var message = projectPath.IsSolutionFile()
+                        ? Resources.ValidationErrorMessages.NoRestorableProjectsInSolution
+                        : Resources.ValidationErrorMessages.NoDependencyGraphForProject;
+                    throw new CommandValidationException(string.Format(CultureInfo.InvariantCulture, message, projectPath));
+                }
+
+                var dependencyGraphText = await _fileSystem.File.ReadAllTextAsync(dgOutput).ConfigureAwait(false);
+                return new ExtendedDependencyGraphSpec(dependencyGraphText);
+            }
+
+            var expectedProjectType = projectPath.IsCSharpFile()
+                ? "a valid .NET file-based app? File-based app support requires .NET SDK 10.0.300 or later"
+                : "a valid .NET Core or .NET Standard project type?";
+
+            throw new CommandValidationException($"Unable to process the project `{projectPath}`. Are you sure this is {expectedProjectType}" +
+                                                $"{Environment.NewLine}{Environment.NewLine}Here is the full error message returned from the Microsoft Build Engine:{Environment.NewLine}{Environment.NewLine}{runStatus.Output} - {runStatus.Errors} - exit code: {runStatus.ExitCode}");
+        }
+
+        public IReadOnlyList<PackageReferenceItem>? GetPackageReferenceItems(string projectPath, string targetFramework, string? runtime = null)
+        {
+            List<string> arguments =
+            [
+                "msbuild",
+                projectPath,
+                "-getItem:PackageReference",
+                $"-p:TargetFramework={targetFramework}"
+            ];
+
+            // Evaluate with the same runtime identifiers as the restore graph, so that runtime-conditioned
+            // references match the dependencies being classified.
+            if (!string.IsNullOrEmpty(runtime))
+            {
+                arguments.Add($"-p:RuntimeIdentifiers={runtime}");
+            }
+
+            var runStatus = _dotNetRunner.Run(_fileSystem.Path.GetDirectoryName(projectPath), [.. arguments]);
+            if (!runStatus.IsSuccess)
+            {
+                return null;
+            }
+
+            try
+            {
+                using var output = JsonDocument.Parse(runStatus.Output);
+                if (!output.RootElement.TryGetProperty("Items", out var items) ||
+                    !items.TryGetProperty("PackageReference", out var packageReferences))
+                {
+                    return [];
+                }
+
+                return packageReferences.EnumerateArray()
+                    .Select(item => new PackageReferenceItem(
+                        item.GetProperty("Identity").GetString(),
+                        item.TryGetProperty("DefiningProjectFullPath", out var definingProject) ? definingProject.GetString() : null))
+                    .ToList();
+            }
+            catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException)
+            {
+                return null;
+            }
+        }
+
+        private RunStatus GenerateProjectDependencyGraph(string projectPath, string? projectDirectory, string? runtime, string dgOutput)
+        {
             List<string> arguments =
             [
                 "msbuild",
@@ -36,16 +116,45 @@ namespace DotNetOutdated.Core.Services
                 arguments.Add($"/p:RuntimeIdentifiers={runtime}");
             }
 
-            var runStatus = _dotNetRunner.Run(_fileSystem.Path.GetDirectoryName(projectPath), arguments.ToArray());
+            return _dotNetRunner.Run(projectDirectory, arguments.ToArray());
+        }
 
-            if (runStatus.IsSuccess)
+        private RunStatus GenerateFileBasedAppDependencyGraph(string appPath, string? projectDirectory, string? runtime, string dgOutput)
+        {
+            List<string> restoreArguments =
+            [
+                "restore",
+                appPath
+            ];
+
+            if (!string.IsNullOrEmpty(runtime))
             {
-                var dependencyGraphText = await _fileSystem.File.ReadAllTextAsync(dgOutput).ConfigureAwait(false);
-                return new ExtendedDependencyGraphSpec(dependencyGraphText);
+                restoreArguments.Add($"/p:RuntimeIdentifiers={runtime}");
             }
 
-            throw new CommandValidationException($"Unable to process the project `{projectPath}. Are you sure this is a valid .NET Core or .NET Standard project type?" +
-                                                $"{Environment.NewLine}{Environment.NewLine}Here is the full error message returned from the Microsoft Build Engine:{Environment.NewLine}{Environment.NewLine}{runStatus.Output} - {runStatus.Errors} - exit code: {runStatus.ExitCode}");
+            var restoreStatus = _dotNetRunner.Run(projectDirectory, restoreArguments.ToArray());
+            if (!restoreStatus.IsSuccess)
+            {
+                return restoreStatus;
+            }
+
+            List<string> buildArguments =
+            [
+                "build",
+                appPath,
+                "--no-restore",
+                "/p:NoWarn=NU1605",
+                "/p:TreatWarningsAsErrors=false",
+                "/t:GenerateRestoreGraphFile",
+                $"/p:RestoreGraphOutputPath={dgOutput}"
+            ];
+
+            if (!string.IsNullOrEmpty(runtime))
+            {
+                buildArguments.Add($"/p:RuntimeIdentifiers={runtime}");
+            }
+
+            return _dotNetRunner.Run(projectDirectory, buildArguments.ToArray());
         }
     }
 }

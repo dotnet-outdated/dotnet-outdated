@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The only test project that uses real packages from nuget.org, for the CI smoke test of the built tool. It is only
+    analyzed, so its result doesn't depend on what is published there. The end-to-end tests use the fake packages of
+    TestPackageFeed instead.
+  -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="11.0.1" />
+  </ItemGroup>
+</Project>

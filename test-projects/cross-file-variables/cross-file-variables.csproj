@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="DotNetOutdated.Fake.Json" Version="$(FakeJsonVersion)" />
+    <PackageReference Include="DotNetOutdated.Fake.Logging" Version="$(FakeExtensionsVersion)" />
+  </ItemGroup>
+</Project>

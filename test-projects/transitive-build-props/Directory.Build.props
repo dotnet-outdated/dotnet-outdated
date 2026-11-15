@@ -1,0 +1,5 @@
+<Project>
+  <ItemGroup>
+    <PackageReference Include="DotNetOutdated.Fake.Logging" Version="6.0.0" />
+  </ItemGroup>
+</Project>

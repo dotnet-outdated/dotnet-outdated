@@ -2,12 +2,18 @@
 
 	<PropertyGroup>
 		<TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+		<!-- net8.0 and net9.0 are out of support, but people use this tool to upgrade off them, so keep
+		     targeting them and silence the SDK's end-of-life warning (NETSDK1138). -->
+		<CheckEolTargetFramework>false</CheckEolTargetFramework>
 		<IsPackable>true</IsPackable>
 		<PackageTags>dotnet;outdated;core;lib</PackageTags>
 		<Description>The core functionality of DotNet Outdated as a library which allows you to embed it into your own applications (Yextly fork)</Description>
 		<Authors>dotnet-outdated Team &amp; Contributors</Authors>
 		<Copyright>Copyright (c) Jerrie Pelser</Copyright>
 		<LangVersion>latest</LangVersion>
+		<Nullable>enable</Nullable>
+		<!-- Keep the public API files and nullability annotations accurate: both are part of the package's contract. -->
+		<WarningsAsErrors>$(WarningsAsErrors);Nullable;RS0016;RS0017;RS0036;RS0037</WarningsAsErrors>
 		<PackageId>Yextly.DotNetOutdatedTool.Core</PackageId>
 		<AssemblyName>Yextly.DotNetOutdatedTool.Core</AssemblyName>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
@@ -22,13 +28,27 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<PackageReference Include="NuGet.Configuration" Version="7.0.0" />
-		<PackageReference Include="NuGet.Credentials" Version="7.0.0" />
-		<PackageReference Include="NuGet.ProjectModel" Version="7.0.0" />
-		<PackageReference Include="NuGet.Protocol" Version="7.0.0" />
-		<PackageReference Include="NuGet.Versioning" Version="7.0.0" />
-		<PackageReference Include="System.Formats.Asn1" Version="10.0.0" />
-		<PackageReference Include="System.IO.Abstractions" Version="22.0.16" />
+		<PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" Version="5.6.0">
+			<PrivateAssets>all</PrivateAssets>
+			<IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+		</PackageReference>
+		<PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.14" />
+		<PackageReference Include="NuGet.Configuration" Version="7.9.0" />
+		<PackageReference Include="NuGet.Credentials" Version="7.9.0" />
+		<PackageReference Include="NuGet.ProjectModel" Version="7.9.0" />
+		<PackageReference Include="NuGet.Protocol" Version="7.9.0" />
+		<PackageReference Include="NuGet.Versioning" Version="7.9.0" />
+		<PackageReference Include="System.Formats.Asn1" Version="10.0.14" />
+		<PackageReference Include="System.IO.Abstractions" Version="22.3.0" />
+		<!-- NuGet.Packaging 7.9.0 pulls in System.Security.Cryptography.Pkcs 8.0.1, which has known vulnerabilities
+		     (GHSA-846f-f764-76mx, GHSA-2fmv-rv2c-59x7). Reference a patched version directly. -->
+		<PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.14" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<!-- The public API of the package. A change shows up here so it can be reviewed; see PublicAPI.Unshipped.txt. -->
+		<AdditionalFiles Include="PublicAPI.Shipped.txt" />
+		<AdditionalFiles Include="PublicAPI.Unshipped.txt" />
 	</ItemGroup>
 
 	<ItemGroup>
