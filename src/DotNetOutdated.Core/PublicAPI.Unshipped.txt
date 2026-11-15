@@ -297,8 +297,6 @@ static Microsoft.Extensions.DependencyInjection.DotNetOutdatedServiceCollectionE
 *REMOVED*DotNetOutdated.Core.Services.IDotNetPackageService.AddPackage(string! projectPath, string! packageName, string! frameworkName, NuGet.Versioning.VersionRange! versionRange, bool noRestore = false, bool ignoreFailedSources = false, DotNetOutdated.Core.Services.ReferenceKind kind = DotNetOutdated.Core.Services.ReferenceKind.Package) -> DotNetOutdated.Core.Services.RunStatus!
 *REMOVED*DotNetOutdated.Core.Services.IDotNetRestoreService
 *REMOVED*DotNetOutdated.Core.Services.IDotNetRestoreService.Restore(string! projectPath) -> DotNetOutdated.Core.Services.RunStatus!
-*REMOVED*DotNetOutdated.Core.Services.IDotNetRunner
-*REMOVED*DotNetOutdated.Core.Services.IDotNetRunner.Run(string? workingDirectory, string![]! arguments) -> DotNetOutdated.Core.Services.RunStatus!
 *REMOVED*DotNetOutdated.Core.Services.INuGetPackageInfoService.GetAllVersions(string! package, System.Collections.Generic.IEnumerable<System.Uri!>! sources, bool includePrerelease, NuGet.Frameworks.NuGetFramework! targetFramework, string! projectFilePath, bool isDevelopmentDependency) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<NuGet.Versioning.NuGetVersion!>!>!
 *REMOVED*DotNetOutdated.Core.Services.INuGetPackageInfoService.GetAllVersions(string! package, System.Collections.Generic.IEnumerable<System.Uri!>! sources, bool includePrerelease, NuGet.Frameworks.NuGetFramework! targetFramework, string! projectFilePath, bool isDevelopmentDependency, int olderThanDays, bool ignoreFailedSources) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<NuGet.Versioning.NuGetVersion!>!>!
 *REMOVED*DotNetOutdated.Core.Services.INuGetPackageInfoServiceLogger
