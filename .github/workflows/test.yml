@@ -25,7 +25,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        framework: ['net8.0', 'net9.0', 'net10.0', 'net11.0']
+        framework: ['net10.0', 'net11.0']
     timeout-minutes: 30
 
     steps:
@@ -35,8 +35,6 @@ jobs:
       uses: actions/setup-dotnet@v6.1.0
       with:
         dotnet-version: |
-            8.0.x
-            9.0.x
             10.0.x
             11.0.x
 
@@ -63,9 +61,8 @@ jobs:
       uses: actions/setup-dotnet@v6.1.0
       with:
         dotnet-version: |
-            9.0.x
             10.0.300
 
-    # SDK 10.0.300 can't target net11.0, so build only the net9.0 target.
+    # SDK 10.0.300 can't target net11.0, so build only the net10.0 target.
     - name: File-based app tests
-      run: dotnet test --configuration Release --framework net9.0 -p:TargetFrameworks=net9.0 --filter "FullyQualifiedName~FileBasedApp|FullyQualifiedName~File_Based_App"
+      run: dotnet test --configuration Release --framework net10.0 -p:TargetFrameworks=net10.0 --filter "FullyQualifiedName~FileBasedApp|FullyQualifiedName~File_Based_App"
