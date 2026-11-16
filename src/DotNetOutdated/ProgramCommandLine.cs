@@ -423,7 +423,7 @@ namespace DotNetOutdated
             case ShellNames.Fish:
                // The function's candidates when one starts with the token, else file names; a plain `complete` without
                // -f would list file names beside option values too. Case is ignored, as fish completes "-of j" to "Json".
-               return Regex.Replace(script, @"^complete -c (?<command>\S+) -f -a '\((?<function>\w+)\)'$", match =>
+               return Regex.Replace(script, @"^complete -c (?<command>\S+) -f -a '\((?<function>[^()\s]+)\)'$", match =>
                {
                   var function = match.Groups["function"].Value;
                   return $$"""
