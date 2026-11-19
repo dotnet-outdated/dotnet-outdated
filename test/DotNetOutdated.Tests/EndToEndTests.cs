@@ -245,7 +245,8 @@ public static class EndToEndTests
         Assert.Equal(0, Program.Main([appPath, "--upgrade"]));
 
         Assert.Equal(originalApp, File.ReadAllText(appPath));
-        Assert.StartsWith("#:package DotNetOutdated.Fake.Json@13.0.4\n", File.ReadAllText(includedPath));
+        // Git may check the project out with CRLF line endings, so compare the line.
+        Assert.Equal("#:package DotNetOutdated.Fake.Json@13.0.4", File.ReadLines(includedPath).First());
     }
 
     [RequiresFileBasedAppSdk]
