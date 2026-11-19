@@ -155,17 +155,6 @@ internal sealed class VersionLocator(IFileSystem fileSystem, IProjectEvaluator e
                 return new LiteralVersion(Declared: declared);
             }
 
-            if (_fileBasedAppDirectives.References(projectPath).Any(reference =>
-                    reference.Kind == ReferenceKind.Package &&
-                    reference.UsesPropertyReferences &&
-                    string.Equals(reference.Name, name, StringComparison.OrdinalIgnoreCase)))
-            {
-                return FileBasedAppNotEditable(
-                    projectPath,
-                    name,
-                    "Its #:package directive names the package through a property; change the version by hand.");
-            }
-
             return new FileBasedPackageDirectiveVersion(declared);
         }
 

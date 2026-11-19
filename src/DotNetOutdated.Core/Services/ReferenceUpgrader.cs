@@ -93,31 +93,40 @@ namespace DotNetOutdated.Core.Services
             var directives = new FileBasedAppDirectives(_fileSystem, _evaluator, _ => { });
             var locator = new VersionLocator(_fileSystem, _evaluator, directives);
             bool IsPackage(UpgradeProject project) => locator.ResolveKind(project.Path, upgrade.Name, upgrade.Kind) == ReferenceKind.Package;
-            string Location(UpgradeProject project) => PackageVersionLocation(project.Path, upgrade.Name, project.TargetFramework);
+            IEnumerable<string> Locations(UpgradeProject project) => PackageVersionLocations(directives, project.Path, upgrade.Name, project.TargetFramework);
 
-            var upgradedLocations = upgrade.Projects.Where(IsPackage).Select(Location).ToHashSet(StringComparer.OrdinalIgnoreCase);
-            return [.. upgrade.HeldBack.Where(project => IsPackage(project) && upgradedLocations.Contains(Location(project))).Distinct()];
+            var upgradedLocations = upgrade.Projects.Where(IsPackage).SelectMany(Locations).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            return [.. upgrade.HeldBack.Where(project => IsPackage(project) && Locations(project).Any(upgradedLocations.Contains)).Distinct()];
         }
 
         // Identifies where a package's version is written for a target framework of a project, so that target
         // frameworks and projects that share it can be told apart from those that don't. A package the project gives
-        // no version is added for that target framework alone.
-        private string PackageVersionLocation(string projectPath, string name, string? targetFramework)
+        // no version is added for that target framework alone. A file-based app can declare it in several of the files
+        // it compiles, which other apps may include too.
+        private IReadOnlyList<string> PackageVersionLocations(FileBasedAppDirectives directives, string projectPath, string name, string? targetFramework)
         {
             var fullPath = _fileSystem.Path.GetFullPath(projectPath);
             if (projectPath.IsCSharpFile())
             {
-                return fullPath;
+                if (directives.PackageVariables(projectPath, ReferenceKind.Package).TryGetValue(name, out var directiveVariable))
+                {
+                    return [VariableLocation(directiveVariable)];
+                }
+
+                var declaringFiles = directives.DeclaringFiles(projectPath, ReferenceKind.Package, name);
+                return declaringFiles.Count > 0
+                    ? [.. declaringFiles.Select(file => DirectiveLocation(file, ReferenceKind.Package, name))]
+                    : [fullPath];
             }
 
             if (!_evaluator.GetPackageVersions(projectPath, targetFramework).TryGetValue(name, out var declaration))
             {
-                return $"{fullPath}|{targetFramework}";
+                return [$"{fullPath}|{targetFramework}"];
             }
 
             return declaration.Variable is { UnsupportedReason: null } variable
-                ? VariableLocation(variable)
-                : $"{_fileSystem.Path.GetFullPath(declaration.FilePath)}|{declaration.ElementType}|{declaration.ElementIndex}";
+                ? [VariableLocation(variable)]
+                : [$"{_fileSystem.Path.GetFullPath(declaration.FilePath)}|{declaration.ElementType}|{declaration.ElementIndex}"];
         }
 
         /// <summary>
@@ -147,10 +156,17 @@ namespace DotNetOutdated.Core.Services
 
         private sealed record WriteFailed(string Message) : Write;
 
-        // The location was written directly with Value; Changed is false when it already held that value.
-        // PerTargetFramework is set when another target framework may declare the reference somewhere else (a pin
-        // under its own condition), so each target framework's location is written.
-        private sealed record Written(bool Changed, string Location, string Value, bool PerTargetFramework = false) : Write;
+        // The locations were written directly with Value; a location's Changed is false when it already held that
+        // value. A reference declared in several files (an app's directive repeated in a file it includes) has a
+        // location for each. PerTargetFramework is set when another target framework may declare the reference
+        // somewhere else (a pin under its own condition), so each target framework's location is written.
+        private sealed record Written(IReadOnlyList<(string Location, bool Changed)> Locations, string Value, bool PerTargetFramework = false) : Write
+        {
+            public Written(bool changed, string location, string value, bool perTargetFramework = false)
+                : this([(location, changed)], value, perTargetFramework)
+            {
+            }
+        }
 
         // `dotnet add package` changed the version, and restored the project unless --no-restore was set.
         private sealed record AddedWithDotNet(RunStatus Status) : Write;
@@ -213,8 +229,8 @@ namespace DotNetOutdated.Core.Services
             {
                 NotEditable notEditable => new WriteFailed(notEditable.Message),
                 FileBasedVariableVersion l => UpdateFileBasedVariable(context, l.Variable),
-                FileBasedDirectiveVersion l => UpdateFileBasedDirective(context, l.Reference),
-                FileBasedPackageDirectiveVersion => UpdateFileBasedPackageDirective(context, range),
+                FileBasedDirectiveVersion => UpdateFileBasedDirectives(context, ReferenceKind.Sdk, upgrade.Version.ToString()),
+                FileBasedPackageDirectiveVersion => UpdateFileBasedDirectives(context, ReferenceKind.Package, range.ToVersionString()),
                 ProjectSdkVersion l => UpdateProjectSdk(context, l.Sdk),
                 MSBuildVariableVersion l when upgrade.NoRestore || !l.DotNetAddCanUpdate => UpdateVariable(context, l.Variable, range),
                 MSBuildVariableVersion l => AddWithDotNet(context, range, l.Variable, targetFramework),
@@ -246,17 +262,21 @@ namespace DotNetOutdated.Core.Services
                     case AddedWithDotNet:
                         break;
 
-                    case Written { Changed: true } written:
-                        // No project has been restored since this write, whatever was restored at the value before.
-                        _writtenLocations[written.Location] = new WrittenLocation(written.Value);
-                        upgraded.Add(_writtenLocations[written.Location]);
-                        break;
+                    case Written written:
+                        foreach (var (location, changed) in written.Locations)
+                        {
+                            if (changed)
+                            {
+                                // No project has been restored since this write, whatever was restored at the value before.
+                                _writtenLocations[location] = new WrittenLocation(written.Value);
+                                upgraded.Add(_writtenLocations[location]);
+                            }
+                            else if (WroteValue(location, written.Value))
+                            {
+                                upgraded.Add(_writtenLocations[location]);
+                            }
+                        }
 
-                    case Written written when WroteValue(written.Location, written.Value):
-                        upgraded.Add(_writtenLocations[written.Location]);
-                        break;
-
-                    case Written:
                         break;
 
                     default:
@@ -321,31 +341,23 @@ namespace DotNetOutdated.Core.Services
                     "Could not update the matching #:property value or #:package/#:sdk directive.");
         }
 
-        private Write UpdateFileBasedDirective(Context context, FileBasedAppReference reference)
+        // Writes the directives for the reference in every file of the app that declares it. Each file is its own
+        // location, which apps that include it share.
+        private static Write UpdateFileBasedDirectives(Context context, ReferenceKind kind, string versionText)
         {
-            var version = context.Upgrade.Version;
-            // Keyed by the declaring file, which apps that include it share.
-            var location = $"{reference.FilePath}|#:{reference.Kind} {reference.Name}";
-            if (context.Directives.TryUpdateDirectReference(context.ProjectPath, reference.Name, reference.Kind, version))
+            var write = context.Directives.WriteDirective(context.ProjectPath, kind, context.Name, versionText);
+            if (write.Failure != null)
             {
-                return new Written(true, location, version.ToString());
+                return new WriteFailed(write.Failure);
             }
 
-            return reference.ResolvedVersion == version
-                ? new Written(false, location, version.ToString())
-                : new WriteFailed(
-                    $"Failed to update file-based app '{context.ProjectPath}' for '{context.Name}'. " +
-                    $"Expected a literal #:sdk {context.Name}@<version> directive (id match is case-insensitive; trailing comments are preserved).");
+            return new Written(
+                [.. write.DeclaringFiles.Select(file => (DirectiveLocation(file, kind, context.Name), write.ChangedFiles.Contains(file)))],
+                versionText);
         }
 
-        private Write UpdateFileBasedPackageDirective(Context context, VersionRange range)
-        {
-            var versionText = range.ToVersionString();
-            var write = context.Directives.WritePackageDirective(context.ProjectPath, context.Name, versionText);
-            return write.Failure != null
-                ? new WriteFailed(write.Failure)
-                : new Written(write.Changed, $"{write.FilePath}|#:{ReferenceKind.Package} {context.Name}", versionText);
-        }
+        private static string DirectiveLocation(string filePath, ReferenceKind kind, string name) =>
+            $"{filePath}|#:{kind} {name}";
 
         // `dotnet add package` cannot update an MSBuild project SDK, so rewrite its version in the project file.
         private Write UpdateProjectSdk(Context context, ProjectSdkReference sdk)
@@ -422,7 +434,7 @@ namespace DotNetOutdated.Core.Services
             }
 
             return elementIndex >= 0
-                ? new Written(updated, $"{filePath}|{context.Name}|{elementIndex}", versionText, PerTargetFramework: true)
+                ? new Written(updated, $"{filePath}|{context.Name}|{elementIndex}", versionText, perTargetFramework: true)
                 : new Written(updated, $"{filePath}|{context.Name}", versionText);
         }
 

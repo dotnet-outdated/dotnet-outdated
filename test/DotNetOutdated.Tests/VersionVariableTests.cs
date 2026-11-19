@@ -60,7 +60,7 @@ namespace DotNetOutdated.Tests
                 TryUpdatePackageVariable(variableInfo, newVersionRange);
 
             public bool UpdateFileBasedAppDirectReference(string projectFilePath, string name, ReferenceKind kind, NuGetVersion newVersion) =>
-                Directives.TryUpdateDirectReference(projectFilePath, name, kind, newVersion);
+                Directives.WriteDirective(projectFilePath, kind, name, newVersion.ToString()).ChangedFiles.Count > 0;
         }
 
         [Theory]

@@ -1,10 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.IO;
 using System.IO.Abstractions;
 using System.Linq;
-using System.Text;
 using System.Text.RegularExpressions;
 using NuGet.Versioning;
 
@@ -19,32 +17,19 @@ namespace DotNetOutdated.Core.Services;
 /// </summary>
 internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IProjectEvaluator evaluator, Action<string>? onWarning = null)
 {
-    // Included files can include others, and an exclude can drop a file that included more, so the set of files is
-    // read again until it settles; a set that keeps changing is cut off here.
-    private const int MaxIncludePasses = 32;
-
     // A version after `@`: quoted (as `dotnet package add` writes a range holding a space), a range that may hold a
-    // space, or a bare token.
-    private const string VersionTokenPattern = @"(?:""(?:[^""\\\r\n]|\\.)*""|[\[\(][^\]\)\r\n]*[\]\)]|[^\s]+)";
+    // space, or a bare token, but not Name=Value metadata (`#:package Id@ ExcludeAssets=runtime` has no version).
+    private const string VersionTokenPattern = @"(?![A-Za-z_][\w.-]*=)(?:""(?:[^""\\\r\n]|\\.)*""|[\[\(][^\]\)\r\n]*[\]\)]|[^\s]+)";
 
     private readonly IFileSystem _fileSystem = fileSystem;
     private readonly IProjectEvaluator _evaluator = evaluator;
     private readonly Action<string>? _onWarning = onWarning;
-
-    [GeneratedRegex(@"^[ \t]*#:[ \t]*(include|exclude)[ \t]+(.+?)\s*$")]
-    private static partial Regex IncludeDirectiveLineRegex();
-
-    [GeneratedRegex(@"^[ \t]*#[:!]")]
-    private static partial Regex DirectiveOrShebangLineRegex();
 
     [GeneratedRegex(@"^[ \t]*#:[ \t]*package[ \t]+(.+?)\s*$")]
     private static partial Regex PackageDirectiveLineRegex();
 
     [GeneratedRegex(@"^[ \t]*#:[ \t]*sdk[ \t]+(.+?)\s*$")]
     private static partial Regex SdkDirectiveLineRegex();
-
-    [GeneratedRegex(@"^[ \t]*#:[ \t]*property[ \t]+([^=\s]+)[ \t]*=[ \t]*(.*?)\s*$")]
-    private static partial Regex PropertyDirectiveLineRegex();
 
     [GeneratedRegex(@"(^[ \t]*#:[ \t]*package[ \t]+)([^\r\n]*)(\r?\n|$)", RegexOptions.Multiline)]
     private static partial Regex PackageDirectiveReplaceRegex();
@@ -146,7 +131,7 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
             return null;
         }
 
-        foreach (var line in ReadSources(projectFilePath).Files.SelectMany(file => file.Lines))
+        foreach (var line in ReadSources(projectFilePath).Files.SelectMany(file => file.Directives))
         {
             var match = PackageDirectiveLineRegex().Match(line);
             if (!match.Success)
@@ -189,83 +174,93 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
     }
 
     /// <summary>
-    /// Rewrites the version of every literal <c>#:package Id@Version</c> or <c>#:sdk Id@Version</c> directive for
-    /// <paramref name="name"/> in the files the app compiles. The SDK rejects the same id declared with different
-    /// versions, so a directive repeated in several files is changed in each.
+    /// The full paths of the files the app compiles that have a <c>#:package</c> or <c>#:sdk</c> directive for
+    /// <paramref name="name"/>, literal or not, in the order the app reads them.
     /// </summary>
-    /// <returns><see langword="true"/> when a directive line was changed.</returns>
-    public bool TryUpdateDirectReference(string projectFilePath, string name, ReferenceKind kind, NuGetVersion newVersion)
+    public IReadOnlyList<string> DeclaringFiles(string projectFilePath, ReferenceKind kind, string name)
     {
         if (!projectFilePath.IsCSharpFile() || !_fileSystem.File.Exists(projectFilePath))
         {
-            return false;
+            return [];
         }
 
-        var directiveRegex = DirectiveRegex(kind == ReferenceKind.Sdk ? "sdk" : "package", name);
-        var updated = false;
-        foreach (var source in ReadSources(projectFilePath).Files)
-        {
-            var file = EncodedText.Read(_fileSystem, source.Path);
-            var content = file.Content;
-            var updatedContent = directiveRegex.Replace(
-                content,
-                match => match.Groups[2].Success ? $"{match.Groups[1].Value}@{newVersion}" : match.Value);
-
-            if (!string.Equals(content, updatedContent, StringComparison.Ordinal))
-            {
-                file.Write(_fileSystem, source.Path, updatedContent);
-                updated = true;
-            }
-        }
-
-        return updated;
+        var lineRegex = kind == ReferenceKind.Sdk ? SdkDirectiveLineRegex() : PackageDirectiveLineRegex();
+        var sources = ReadSources(projectFilePath);
+        return [
+            .. sources.Files
+                .Where(file => file.Directives.Any(line =>
+                    lineRegex.Match(line) is { Success: true } match &&
+                    FileBasedAppSources.TryResolveProperties(NameExpression(match.Groups[1].Value), sources.Properties, out var resolved) &&
+                    string.Equals(resolved, name, StringComparison.OrdinalIgnoreCase)))
+                .Select(file => file.Path)
+        ];
     }
 
     /// <summary>
-    /// Writes <paramref name="versionText"/> to every <c>#:package</c> directive for <paramref name="name"/> in the
-    /// files the app compiles, or, when none declares it, adds a directive to the entry point. Nothing is written when
-    /// a directive for it has no version to change, or when no directive was found but an <c>#:include</c> could not
-    /// be followed (the package may be declared in a file that wasn't read).
+    /// Writes <paramref name="versionText"/> to every <c>#:package</c> or <c>#:sdk</c> directive for
+    /// <paramref name="name"/> in the files the app compiles: the SDK rejects the same id declared with different
+    /// versions, so a directive repeated in several files is changed in each. When no file declares a package, a
+    /// directive for it is added to the entry point. Nothing is written when a directive for it can't be rewritten (it
+    /// has no version, or names the id through a property), or when none was found but an <c>#:include</c> could not
+    /// be followed (it may be declared in a file that wasn't read).
     /// </summary>
-    public PackageDirectiveWrite WritePackageDirective(string projectFilePath, string name, string versionText)
+    public DirectiveWrite WriteDirective(string projectFilePath, ReferenceKind kind, string name, string versionText)
     {
+        var failure = $"Failed to update file-based app '{projectFilePath}' for '{name}'";
         if (!projectFilePath.IsCSharpFile() || !_fileSystem.File.Exists(projectFilePath))
         {
-            return new PackageDirectiveWrite(false, projectFilePath, $"File-based app '{projectFilePath}' was not found.");
+            return DirectiveWrite.Failed($"{failure}: the file was not found.");
         }
 
         var sources = ReadSources(projectFilePath);
-        var directiveRegex = DirectiveRegex("package", name);
+        var directiveName = kind == ReferenceKind.Sdk ? "sdk" : "package";
+        var lineRegex = kind == ReferenceKind.Sdk ? SdkDirectiveLineRegex() : PackageDirectiveLineRegex();
+        foreach (var source in sources.Files)
+        {
+            foreach (var line in source.Directives)
+            {
+                // Rewriting the literal id below would miss this directive, and adding one would declare the id twice.
+                if (lineRegex.Match(line) is { Success: true } match &&
+                    NameExpression(match.Groups[1].Value) is var expression &&
+                    VersionExpression.ContainsPropertyReference(expression) &&
+                    FileBasedAppSources.TryResolveProperties(expression, sources.Properties, out var resolved) &&
+                    string.Equals(resolved, name, StringComparison.OrdinalIgnoreCase))
+                {
+                    return DirectiveWrite.Failed(
+                        $"{failure}: '{line.Trim()}' in '{source.Path}' names it through a property; change the version by hand.");
+                }
+            }
+        }
+
+        var directiveRegex = DirectiveRegex(directiveName, name);
         var directiveVersion = versionText.Any(char.IsWhiteSpace) ? $"\"{versionText}\"" : versionText;
         var edits = new List<(string Path, EncodedText File, string Content)>();
-        string? declaringFile = null;
+        var declaringFiles = new List<string>();
         foreach (var source in sources.Files)
         {
             var file = EncodedText.Read(_fileSystem, source.Path);
             string? versionless = null;
-            var content = directiveRegex.Replace(file.Content, match =>
+            var declares = false;
+            var content = FileBasedAppSources.ReplaceInDirectives(file.Content, directiveRegex, match =>
             {
-                if (!match.Groups[2].Success)
+                declares = true;
+                if (!match.Groups[3].Success)
                 {
                     versionless = match.Value.Trim();
                     return match.Value;
                 }
 
-                return $"{match.Groups[1].Value}@{directiveVersion}";
+                return match.Groups[1].Value + match.Groups[2].Value + directiveVersion;
             });
 
             if (versionless != null)
             {
-                return new PackageDirectiveWrite(
-                    false,
-                    source.Path,
-                    $"Failed to update file-based app '{projectFilePath}' for '{name}': '{versionless}' in '{source.Path}' " +
-                    "has no version to update.");
+                return DirectiveWrite.Failed($"{failure}: '{versionless}' in '{source.Path}' has no version to update.");
             }
 
-            if (directiveRegex.IsMatch(file.Content))
+            if (declares)
             {
-                declaringFile ??= source.Path;
+                declaringFiles.Add(source.Path);
             }
 
             if (!string.Equals(content, file.Content, StringComparison.Ordinal))
@@ -274,20 +269,25 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
             }
         }
 
-        if (declaringFile == null)
+        if (declaringFiles.Count == 0)
         {
-            if (sources.UnresolvedIncludes.Count > 0)
+            if (kind == ReferenceKind.Sdk)
             {
-                return new PackageDirectiveWrite(
-                    false,
-                    projectFilePath,
-                    $"Failed to update file-based app '{projectFilePath}' for '{name}': no #:package directive for it was " +
-                    $"found, and {string.Join(", ", sources.UnresolvedIncludes)} could not be followed to look for one.");
+                return DirectiveWrite.Failed(
+                    $"{failure}. Expected a literal #:sdk {name}@<version> directive (id match is case-insensitive; trailing comments are preserved).");
             }
 
-            declaringFile = sources.Files[0].Path;
-            var entryPoint = EncodedText.Read(_fileSystem, declaringFile);
-            edits.Add((declaringFile, entryPoint, InsertDirective(entryPoint.Content, $"#:package {name}@{directiveVersion}")));
+            if (sources.UnresolvedIncludes.Count > 0)
+            {
+                return DirectiveWrite.Failed(
+                    $"{failure}: no #:package directive for it was found, and " +
+                    $"{string.Join(", ", sources.UnresolvedIncludes)} could not be followed to look for one.");
+            }
+
+            var entryPoint = sources.Files[0].Path;
+            var file = EncodedText.Read(_fileSystem, entryPoint);
+            edits.Add((entryPoint, file, FileBasedAppSources.InsertDirective(file.Content, $"#:package {name}@{directiveVersion}")));
+            declaringFiles.Add(entryPoint);
         }
 
         foreach (var edit in edits)
@@ -295,7 +295,7 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
             edit.File.Write(_fileSystem, edit.Path, edit.Content);
         }
 
-        return new PackageDirectiveWrite(edits.Count > 0, declaringFile, null);
+        return new DirectiveWrite(declaringFiles, [.. edits.Select(edit => edit.Path)], null);
     }
 
     /// <summary>
@@ -335,11 +335,10 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
                 var propertyFile = EncodedText.Read(_fileSystem, variableInfo.FilePath);
                 var propertyContent = propertyFile.Content;
                 var propertyPattern = $@"(^[ \t]*#:[ \t]*property[ \t]+{Regex.Escape(variableInfo.VariableName)}[ \t]*=[ \t]*)([^\r\n]*)(\r?\n|$)";
-                var newPropertyContent = Regex.Replace(
+                var newPropertyContent = FileBasedAppSources.ReplaceInDirectives(
                     propertyContent,
-                    propertyPattern,
-                    match => match.Groups[1].Value + newVersion + match.Groups[3].Value,
-                    RegexOptions.Multiline | RegexOptions.IgnoreCase);
+                    new Regex(propertyPattern, RegexOptions.Multiline | RegexOptions.IgnoreCase),
+                    match => match.Groups[1].Value + newVersion + match.Groups[3].Value);
                 if (!string.Equals(propertyContent, newPropertyContent, StringComparison.Ordinal))
                 {
                     propertyFile.Write(_fileSystem, variableInfo.FilePath, newPropertyContent);
@@ -369,14 +368,15 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
         {
             var file = EncodedText.Read(_fileSystem, source.Path);
             var content = file.Content;
-            var newContent = directiveReplaceRegex.Replace(
+            var newContent = FileBasedAppSources.ReplaceInDirectives(
                 content,
+                directiveReplaceRegex,
                 match =>
                 {
                     var directive = match.Groups[2].Value;
                     if (!TryParseDirective(directive, out var expression, out _) ||
                         (!string.Equals(expression, variableInfo.PackageReferenceName, StringComparison.OrdinalIgnoreCase) &&
-                         (!TryResolveProperties(expression, propertyDefinitions, out var resolvedName) ||
+                         (!FileBasedAppSources.TryResolveProperties(expression, propertyDefinitions, out var resolvedName) ||
                           !string.Equals(resolvedName, variableInfo.PackageName, StringComparison.OrdinalIgnoreCase))))
                     {
                         return match.Value;
@@ -441,7 +441,7 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
 
         foreach (var source in sources.Files)
         {
-            foreach (var line in source.Lines)
+            foreach (var line in source.Directives)
             {
                 var packageMatch = PackageDirectiveLineRegex().Match(line);
                 if (packageMatch.Success)
@@ -470,265 +470,24 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
         return new ScanResult(packageVariables, sdkVariables, literalReferences);
     }
 
-    private sealed record SourceFile(string Path, IReadOnlyList<string> Lines);
+    private FileBasedAppSources ReadSources(string projectFilePath) =>
+        FileBasedAppSources.Read(_fileSystem, _evaluator, projectFilePath);
 
-    /// <param name="Files">The entry point, then the included files.</param>
-    /// <param name="Properties">The imported properties, overridden by the files' <c>#:property</c> lines.</param>
-    /// <param name="HasIncludes">Whether any of the files has an <c>#:include</c> directive.</param>
-    /// <param name="UnresolvedIncludes">The include directives whose path uses a property that isn't defined.</param>
-    private sealed record Sources(
-        IReadOnlyList<SourceFile> Files,
-        Dictionary<string, (string Value, string FilePath)> Properties,
-        bool HasIncludes,
-        IReadOnlyList<string> UnresolvedIncludes);
-
-    // The SDK reads directives from every file the app compiles, so properties and includes from any of them apply to
-    // all. The entry point is always compiled (its Compile item is added whatever #:exclude says).
-    private Sources ReadSources(string projectFilePath)
-    {
-        var entryPoint = new SourceFile(_fileSystem.Path.GetFullPath(projectFilePath), [.. _fileSystem.File.ReadLines(projectFilePath)]);
-        var importedProperties = new Dictionary<string, (string Value, string FilePath)>(StringComparer.OrdinalIgnoreCase);
-        CollectEvaluatedProperties(projectFilePath, importedProperties);
-
-        var files = new List<SourceFile> { entryPoint };
-        for (var pass = 0; ; pass++)
-        {
-            var properties = new Dictionary<string, (string Value, string FilePath)>(importedProperties, StringComparer.OrdinalIgnoreCase);
-            foreach (var file in files)
-            {
-                foreach (var line in file.Lines)
-                {
-                    CollectPropertyFromLine(line, file.Path, properties);
-                }
-            }
-
-            var includes = FollowIncludes(files, properties);
-            var included = includes.Files.Where(path => !string.Equals(path, entryPoint.Path, StringComparison.OrdinalIgnoreCase)).ToList();
-            if (pass == MaxIncludePasses ||
-                included.SequenceEqual(files.Skip(1).Select(file => file.Path), StringComparer.OrdinalIgnoreCase))
-            {
-                return new Sources(files, properties, includes.HasIncludes, includes.Unresolved);
-            }
-
-            var read = files.ToDictionary(file => file.Path, StringComparer.OrdinalIgnoreCase);
-            files = [entryPoint, .. included.Select(path => read.TryGetValue(path, out var file) ? file : new SourceFile(path, [.. _fileSystem.File.ReadLines(path)]))];
-        }
-    }
-
-    // The .cs files the #:include directives of these files add, less those their #:exclude directives remove.
-    private (List<string> Files, bool HasIncludes, List<string> Unresolved) FollowIncludes(
-        List<SourceFile> files,
-        Dictionary<string, (string Value, string FilePath)> properties)
-    {
-        var included = new List<string>();
-        var excluded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var unresolved = new List<string>();
-        var hasIncludes = false;
-        foreach (var file in files)
-        {
-            var directory = _fileSystem.Path.GetDirectoryName(file.Path)!;
-            foreach (var line in file.Lines)
-            {
-                var match = IncludeDirectiveLineRegex().Match(line);
-                if (!match.Success)
-                {
-                    continue;
-                }
-
-                var isInclude = match.Groups[1].Value == "include";
-                hasIncludes |= isInclude;
-                if (!TryParsePathValue(match.Groups[2].Value, out var pattern))
-                {
-                    continue;
-                }
-
-                if (!TryResolveProperties(pattern, properties, out var resolvedPattern))
-                {
-                    unresolved.Add($"'#:{match.Groups[1].Value} {pattern}' in '{file.Path}'");
-                    continue;
-                }
-
-                var matches = MatchFiles(resolvedPattern, directory);
-                if (isInclude)
-                {
-                    included.AddRange(matches);
-                }
-                else
-                {
-                    excluded.UnionWith(matches);
-                }
-            }
-        }
-
-        return ([.. included.Distinct(StringComparer.OrdinalIgnoreCase).Where(path => !excluded.Contains(path))], hasIncludes, unresolved);
-    }
-
-    // The path an #:include or #:exclude names: its first token, or a whole quoted value with its escapes decoded.
-    // Trailing Name=Value metadata is ignored.
-    private static bool TryParsePathValue(string value, out string path)
-    {
-        value = value.Trim();
-        if (value.StartsWith('"'))
-        {
-            var builder = new StringBuilder();
-            for (var i = 1; i < value.Length; i++)
-            {
-                if (value[i] == '"')
-                {
-                    path = builder.ToString();
-                    return path.Length > 0;
-                }
-
-                if (value[i] == '\\' && i + 1 < value.Length)
-                {
-                    i++;
-                }
-
-                builder.Append(value[i]);
-            }
-
-            path = string.Empty;
-            return false;
-        }
-
-        var end = value.IndexOfAny([' ', '\t']);
-        path = end < 0 ? value : value[..end];
-        return path.Length > 0;
-    }
-
-    // The .cs files a path or glob (*, ? and **, as MSBuild matches them) names, relative to baseDirectory.
-    private List<string> MatchFiles(string pattern, string baseDirectory)
-    {
-        var path = _fileSystem.Path.Combine(baseDirectory, pattern).Replace('\\', '/');
-        var wildcard = path.IndexOfAny(['*', '?']);
-        if (wildcard < 0)
-        {
-            var fullPath = _fileSystem.Path.GetFullPath(path);
-            return fullPath.IsCSharpFile() && _fileSystem.File.Exists(fullPath) ? [fullPath] : [];
-        }
-
-        var rootEnd = path.LastIndexOf('/', wildcard);
-        var root = _fileSystem.Path.GetFullPath(rootEnd < 0 ? baseDirectory : path[..(rootEnd + 1)]);
-        var glob = path[(rootEnd + 1)..];
-        if (!_fileSystem.Directory.Exists(root))
-        {
-            return [];
-        }
-
-        var globRegex = GlobRegex(glob);
-        var searchOption = glob.Contains('/') || glob.Contains("**", StringComparison.Ordinal)
-            ? SearchOption.AllDirectories
-            : SearchOption.TopDirectoryOnly;
-
-        try
-        {
-            return [
-                .. _fileSystem.Directory.EnumerateFiles(root, "*", searchOption)
-                    .Where(file => file.IsCSharpFile() && globRegex.IsMatch(_fileSystem.Path.GetRelativePath(root, file).Replace('\\', '/')))
-                    .Select(file => _fileSystem.Path.GetFullPath(file))
-                    .Order(StringComparer.Ordinal)
-            ];
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            // A directory under the glob that can't be read; the build would report it.
-            return [];
-        }
-    }
-
-    private static Regex GlobRegex(string glob)
-    {
-        var builder = new StringBuilder("^");
-        for (var i = 0; i < glob.Length; i++)
-        {
-            switch (glob[i])
-            {
-                case '*' when i + 2 < glob.Length && glob[i + 1] == '*' && glob[i + 2] == '/':
-                    // `**/` matches any number of directories, including none.
-                    builder.Append("(?:.*/)?");
-                    i += 2;
-                    break;
-                case '*' when i + 1 < glob.Length && glob[i + 1] == '*':
-                    builder.Append(".*");
-                    i++;
-                    break;
-                case '*':
-                    builder.Append("[^/]*");
-                    break;
-                case '?':
-                    builder.Append("[^/]");
-                    break;
-                default:
-                    builder.Append(Regex.Escape(glob[i].ToString()));
-                    break;
-            }
-        }
-
-        var options = OperatingSystem.IsWindows() ? RegexOptions.IgnoreCase | RegexOptions.CultureInvariant : RegexOptions.CultureInvariant;
-        return new Regex(builder.Append('$').ToString(), options);
-    }
-
-    // Matches a directive for an id (case-insensitively): group 1 is the directive up to the id, and group 2 its
-    // version, when it has one.
+    // Matches a directive for an id (case-insensitively): group 1 is the directive up to the id, group 2 the separator
+    // (`@`, which whitespace may surround) and group 3 the version, when it has one. A directive whose separator has
+    // no version after it matches without group 3.
     private static Regex DirectiveRegex(string directiveName, string name) =>
-        new($@"(^[ \t]*#:[ \t]*{directiveName}[ \t]+{Regex.Escape(name)})(?:@({VersionTokenPattern}))?(?=\s|$)",
+        new($@"(^[ \t]*#:[ \t]*{directiveName}[ \t]+{Regex.Escape(name)})(?:([ \t]*@[ \t]*)({VersionTokenPattern}))?(?=[\s@]|$)",
             RegexOptions.Multiline | RegexOptions.IgnoreCase);
 
-    // Adds a directive line after the last directive (or shebang) at the top of the file, or as its first line.
-    private static string InsertDirective(string content, string directive)
+    // The id expression of a directive: what comes before its `@`, or its first token when it has no version.
+    private static string NameExpression(string directive)
     {
-        var newLine = content.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
-        var insertAt = 0;
-        var lineStart = 0;
-        while (lineStart < content.Length)
-        {
-            var lineEnd = content.IndexOf('\n', lineStart);
-            var next = lineEnd < 0 ? content.Length : lineEnd + 1;
-            var line = content[lineStart..next].TrimEnd('\r', '\n');
-            if (DirectiveOrShebangLineRegex().IsMatch(line))
-            {
-                insertAt = next;
-            }
-            else if (line.Trim().Length > 0 && !line.TrimStart().StartsWith("//", StringComparison.Ordinal))
-            {
-                // Directives can't follow the first C# token.
-                break;
-            }
-
-            lineStart = next;
-        }
-
-        var prefix = content[..insertAt];
-        if (prefix.Length > 0 && !prefix.EndsWith('\n'))
-        {
-            prefix += newLine;
-        }
-
-        return prefix + directive + newLine + content[insertAt..];
-    }
-
-    // Properties visible to a file-based app from Directory.Build.props and friends (raw values, for chain resolution).
-    private void CollectEvaluatedProperties(string projectFilePath, Dictionary<string, (string Value, string FilePath)> propertyDefinitions)
-    {
-        foreach (var (name, definition) in _evaluator.GetImportedProperties(projectFilePath))
-        {
-            propertyDefinitions[name] = (definition.RawValue, definition.FilePath);
-        }
-    }
-
-    private static void CollectPropertyFromLine(
-        string line,
-        string filePath,
-        Dictionary<string, (string Value, string FilePath)> propertyDefinitions)
-    {
-        var match = PropertyDirectiveLineRegex().Match(line);
-        if (!match.Success)
-        {
-            return;
-        }
-
-        // Later #:property lines in the same file override earlier ones (MSBuild-like semantics).
-        propertyDefinitions[match.Groups[1].Value] = (match.Groups[2].Value, filePath);
+        var text = directive.Trim();
+        var separator = text.IndexOf('@', StringComparison.Ordinal);
+        var name = (separator >= 0 ? text[..separator] : text).Trim();
+        var whitespace = name.IndexOfAny([' ', '\t']);
+        return whitespace < 0 ? name : name[..whitespace];
     }
 
     private static void ScanPackageLine(
@@ -738,7 +497,7 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
         Dictionary<string, PackageVariableInfo> result)
     {
         if (!TryParseDirective(directive, out var packageExpression, out var versionExpression) ||
-            !TryResolveProperties(packageExpression, propertyDefinitions, out var packageName) ||
+            !FileBasedAppSources.TryResolveProperties(packageExpression, propertyDefinitions, out var packageName) ||
             result.ContainsKey(packageName))
         {
             return;
@@ -771,7 +530,7 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
         Dictionary<string, PackageVariableInfo> result)
     {
         if (!TryParseDirective(directive, out var sdkExpression, out var versionExpression) ||
-            !TryResolveProperties(sdkExpression, propertyDefinitions, out var sdkName) ||
+            !FileBasedAppSources.TryResolveProperties(sdkExpression, propertyDefinitions, out var sdkName) ||
             result.ContainsKey(sdkName))
         {
             return;
@@ -848,8 +607,8 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
     {
         reference = null;
         if (!TryParseDirective(directive, out var nameExpression, out var versionExpression) ||
-            !TryResolveProperties(nameExpression, propertyDefinitions, out var name) ||
-            !TryResolveProperties(versionExpression, propertyDefinitions, out var versionString) ||
+            !FileBasedAppSources.TryResolveProperties(nameExpression, propertyDefinitions, out var name) ||
+            !FileBasedAppSources.TryResolveProperties(versionExpression, propertyDefinitions, out var versionString) ||
             !NuGetVersion.TryParse(versionString, out var resolvedVersion))
         {
             return false;
@@ -868,68 +627,35 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
         return true;
     }
 
+    // Splits `Id@Version` (whitespace may surround the `@`) into the id and version expressions; the version is one
+    // token, so a range holding a space doesn't parse.
     private static bool TryParseDirective(string directive, out string packageExpression, out string versionExpression)
     {
         packageExpression = string.Empty;
         versionExpression = string.Empty;
 
-        var token = directive.Trim();
-        var whitespaceIndex = token.IndexOfAny([' ', '\t']);
-        if (whitespaceIndex >= 0)
-        {
-            token = token[..whitespaceIndex];
-        }
-
-        var separatorIndex = token.LastIndexOf('@');
-        if (separatorIndex <= 0 || separatorIndex == token.Length - 1)
+        var text = directive.Trim();
+        var separatorIndex = text.IndexOf('@', StringComparison.Ordinal);
+        if (separatorIndex <= 0)
         {
             return false;
         }
 
-        packageExpression = token[..separatorIndex].Trim();
-        versionExpression = token[(separatorIndex + 1)..].Trim();
-        return !string.IsNullOrEmpty(packageExpression) && !string.IsNullOrEmpty(versionExpression);
-    }
-
-    private static bool TryResolveProperties(string expression, Dictionary<string, (string Value, string FilePath)> propertyDefinitions, out string resolvedValue)
-    {
-        var current = expression;
-        for (var depth = 0; depth < 10; depth++)
-        {
-            var unresolved = false;
-            var changed = false;
-            current = VersionExpression.PropertyReferenceRegex().Replace(current, match =>
-            {
-                if (propertyDefinitions.TryGetValue(match.Groups[1].Value, out var propertyInfo))
-                {
-                    changed = true;
-                    return propertyInfo.Value;
-                }
-
-                unresolved = true;
-                return match.Value;
-            });
-
-            if (unresolved)
-            {
-                resolvedValue = current;
-                return false;
-            }
-
-            if (!changed || !VersionExpression.PropertyReferenceRegex().IsMatch(current))
-            {
-                resolvedValue = current;
-                return true;
-            }
-        }
-
-        resolvedValue = current;
-        return !VersionExpression.PropertyReferenceRegex().IsMatch(current);
+        packageExpression = text[..separatorIndex].Trim();
+        var version = text[(separatorIndex + 1)..].TrimStart();
+        var whitespaceIndex = version.IndexOfAny([' ', '\t']);
+        versionExpression = whitespaceIndex < 0 ? version : version[..whitespaceIndex];
+        return packageExpression.Length > 0 &&
+               !packageExpression.Any(char.IsWhiteSpace) &&
+               versionExpression.Length > 0;
     }
 }
 
-/// <summary>What writing a file-based app's <c>#:package</c> directive did.</summary>
-/// <param name="Changed">Whether a file was changed.</param>
-/// <param name="FilePath">The first file that declares the package, or the one it was added to.</param>
-/// <param name="Failure">Why nothing could be written; <see langword="null"/> when the directive was written.</param>
-internal sealed record PackageDirectiveWrite(bool Changed, string FilePath, string? Failure);
+/// <summary>What writing a file-based app's <c>#:package</c> or <c>#:sdk</c> directives did.</summary>
+/// <param name="DeclaringFiles">The files that declare the reference, including one a directive was added to.</param>
+/// <param name="ChangedFiles">The files that were changed.</param>
+/// <param name="Failure">Why nothing could be written; <see langword="null"/> when the directives were written.</param>
+internal sealed record DirectiveWrite(IReadOnlyList<string> DeclaringFiles, IReadOnlyList<string> ChangedFiles, string? Failure)
+{
+    public static DirectiveWrite Failed(string failure) => new([], [], failure);
+}
