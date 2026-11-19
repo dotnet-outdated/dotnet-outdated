@@ -114,6 +114,8 @@ When `--recursive --include-file-based-apps` is used, **dotnet-outdated** also d
 
 File-based apps can declare NuGet packages with `#:package` and MSBuild SDK packages with `#:sdk` (for example `#:sdk Cake.Sdk@6.0.0`). Variable-backed versions use `#:property` the same way as for packages.
 
+Directives in files the app pulls in with `#:include` (.NET SDK 11 or later) belong to the app too: **dotnet-outdated** follows `#:include` and `#:exclude` directives, including globs and nested includes, and upgrades a reference in the file that declares it.
+
 Versioned MSBuild project SDKs declared in a project file, as `<Project Sdk="Aspire.AppHost.Sdk/13.0.0">`, as `<Sdk Name="Aspire.AppHost.Sdk" Version="13.0.0" />` or as `<Import Project="Sdk.props" Sdk="Aspire.AppHost.Sdk" Version="13.0.0" />`, are reported and upgraded like packages. SDKs inside XML comments are ignored. SDK versions pinned in `global.json` (`msbuild-sdks`) or through MSBuild properties are not supported.
 
 ## Upgrading packages
@@ -337,7 +339,7 @@ Add the following to your `.vscode/mcp.json`:
 
 ### Why are unrelated changes made to .csproj files when running with `-u`?
 
-`dotnet-outdated` does not make changes to .csproj files directly, except for versioned MSBuild project SDKs, which `dotnet add package` cannot update. Instead, it runs `dotnet add package` to update packages, so that command is responsible for those changes. For file-based apps that use variable-backed `#:package` or `#:sdk` directives, `dotnet-outdated` updates the referenced `#:property` value directly so the variable reference is preserved. Literal `#:package` and `#:sdk` directives are updated in the `.cs` source file. To track issues related to the .NET CLI command, head over to the [.NET SDK repo](https://github.com/dotnet/sdk)
+`dotnet-outdated` does not make changes to .csproj files directly, except for versioned MSBuild project SDKs, which `dotnet add package` cannot update. Instead, it runs `dotnet add package` to update packages, so that command is responsible for those changes. For file-based apps that use variable-backed `#:package` or `#:sdk` directives, `dotnet-outdated` updates the referenced `#:property` value directly so the variable reference is preserved. Literal `#:package` and `#:sdk` directives are updated in the `.cs` source file. For a file-based app that uses `#:include`, `dotnet-outdated` writes `#:package` directives directly too, in each file that declares the package, because `dotnet package add` would copy the directives of every included file into the app's entry point. To track issues related to the .NET CLI command, head over to the [.NET SDK repo](https://github.com/dotnet/sdk)
 
 For version-only updates in `Directory.Packages.props`, `dotnet-outdated` preserves the original blank lines, indentation, line endings, trailing whitespace and UTF-8/UTF-16 byte order mark. If `dotnet add package` makes other XML changes, such as adding an entry, its output is kept as written, including its formatting. This also applies when a package has several `PackageVersion` entries in one file (for example per-target-framework entries under different `Condition`s) and only one of them is updated, so those files still lose their formatting.
 

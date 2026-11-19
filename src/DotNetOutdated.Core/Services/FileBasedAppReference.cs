@@ -41,6 +41,12 @@ internal sealed class FileBasedAppReference
     public string VersionExpression { get; init; } = string.Empty;
 
     /// <summary>
+    /// Gets the full path of the file that declares the reference: the app's entry point, or a file it includes with
+    /// <c>#:include</c>. When several files declare it, the first one the app compiles.
+    /// </summary>
+    public string FilePath { get; init; } = string.Empty;
+
+    /// <summary>
     /// Gets variable-tracking metadata when the directive uses a <c>#:property</c>-backed version; otherwise <see langword="null"/>.
     /// </summary>
     internal PackageVariableInfo? VariableInfo { get; init; }

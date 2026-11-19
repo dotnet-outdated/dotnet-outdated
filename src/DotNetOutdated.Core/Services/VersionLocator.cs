@@ -62,6 +62,16 @@ internal sealed record ProjectSdkVersion(ProjectSdkReference Sdk) : VersionLocat
 /// <summary>A literal <c>#:sdk Id@Version</c> directive in a file-based app.</summary>
 internal sealed record FileBasedDirectiveVersion(FileBasedAppReference Reference) : VersionLocation;
 
+/// <summary>
+/// The <c>#:package</c> directives of a file-based app that includes other files, which are written directly:
+/// <c>dotnet package add</c> would copy the directives of every included file into the entry point. When no file
+/// declares the package, a directive is added to the entry point. <see cref="Declared"/> is the range they declare.
+/// </summary>
+internal sealed record FileBasedPackageDirectiveVersion(VersionRange? Declared) : VersionLocation
+{
+    public override VersionRange? DeclaredRange => Declared;
+}
+
 /// <summary>A property behind a file-based app's <c>#:package</c> or <c>#:sdk</c> directive.</summary>
 internal sealed record FileBasedVariableVersion(PackageVariableInfo Variable) : VersionLocation;
 
@@ -138,8 +148,25 @@ internal sealed class VersionLocator(IFileSystem fileSystem, IProjectEvaluator e
                     $"The file declares {name} with #:sdk, not #:package; upgrade it as an SDK.");
             }
 
-            // `dotnet add package` rewrites a literal #:package directive.
-            return new LiteralVersion(Declared: _fileBasedAppDirectives.DeclaredPackageRange(projectPath, name));
+            var declared = _fileBasedAppDirectives.DeclaredPackageRange(projectPath, name);
+            if (!_fileBasedAppDirectives.IncludesFiles(projectPath))
+            {
+                // `dotnet add package` rewrites a literal #:package directive.
+                return new LiteralVersion(Declared: declared);
+            }
+
+            if (_fileBasedAppDirectives.References(projectPath).Any(reference =>
+                    reference.Kind == ReferenceKind.Package &&
+                    reference.UsesPropertyReferences &&
+                    string.Equals(reference.Name, name, StringComparison.OrdinalIgnoreCase)))
+            {
+                return FileBasedAppNotEditable(
+                    projectPath,
+                    name,
+                    "Its #:package directive names the package through a property; change the version by hand.");
+            }
+
+            return new FileBasedPackageDirectiveVersion(declared);
         }
 
         var reference = _fileBasedAppDirectives.References(projectPath)

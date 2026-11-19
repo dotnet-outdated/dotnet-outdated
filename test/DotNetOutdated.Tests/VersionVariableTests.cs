@@ -50,7 +50,7 @@ namespace DotNetOutdated.Tests
 
             public bool TryUpdatePackageVariable(PackageVariableInfo variableInfo, VersionRange newVersionRange) =>
                 variableInfo.IsFileBasedDirective
-                    ? Directives.TryUpdateVariable(variableInfo, newVersionRange.MinVersion)
+                    ? Directives.TryUpdateVariable(variableInfo.PackageReferenceFilePath, variableInfo, newVersionRange.MinVersion)
                     : _writer.TryUpdate(variableInfo, newVersionRange);
 
             public void UpdatePackageVariable(PackageVariableInfo variableInfo, NuGetVersion newVersion) =>

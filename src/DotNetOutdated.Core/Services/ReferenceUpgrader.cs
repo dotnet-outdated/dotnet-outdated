@@ -214,6 +214,7 @@ namespace DotNetOutdated.Core.Services
                 NotEditable notEditable => new WriteFailed(notEditable.Message),
                 FileBasedVariableVersion l => UpdateFileBasedVariable(context, l.Variable),
                 FileBasedDirectiveVersion l => UpdateFileBasedDirective(context, l.Reference),
+                FileBasedPackageDirectiveVersion => UpdateFileBasedPackageDirective(context, range),
                 ProjectSdkVersion l => UpdateProjectSdk(context, l.Sdk),
                 MSBuildVariableVersion l when upgrade.NoRestore || !l.DotNetAddCanUpdate => UpdateVariable(context, l.Variable, range),
                 MSBuildVariableVersion l => AddWithDotNet(context, range, l.Variable, targetFramework),
@@ -308,7 +309,7 @@ namespace DotNetOutdated.Core.Services
         {
             var version = context.Upgrade.Version;
             var location = VariableLocation(variableInfo);
-            if (context.Directives.TryUpdateVariable(variableInfo, version))
+            if (context.Directives.TryUpdateVariable(context.ProjectPath, variableInfo, version))
             {
                 return new Written(true, location, version.ToString());
             }
@@ -323,7 +324,8 @@ namespace DotNetOutdated.Core.Services
         private Write UpdateFileBasedDirective(Context context, FileBasedAppReference reference)
         {
             var version = context.Upgrade.Version;
-            var location = $"{_fileSystem.Path.GetFullPath(context.ProjectPath)}|#:{reference.Kind} {reference.Name}";
+            // Keyed by the declaring file, which apps that include it share.
+            var location = $"{reference.FilePath}|#:{reference.Kind} {reference.Name}";
             if (context.Directives.TryUpdateDirectReference(context.ProjectPath, reference.Name, reference.Kind, version))
             {
                 return new Written(true, location, version.ToString());
@@ -334,6 +336,15 @@ namespace DotNetOutdated.Core.Services
                 : new WriteFailed(
                     $"Failed to update file-based app '{context.ProjectPath}' for '{context.Name}'. " +
                     $"Expected a literal #:sdk {context.Name}@<version> directive (id match is case-insensitive; trailing comments are preserved).");
+        }
+
+        private Write UpdateFileBasedPackageDirective(Context context, VersionRange range)
+        {
+            var versionText = range.ToVersionString();
+            var write = context.Directives.WritePackageDirective(context.ProjectPath, context.Name, versionText);
+            return write.Failure != null
+                ? new WriteFailed(write.Failure)
+                : new Written(write.Changed, $"{write.FilePath}|#:{ReferenceKind.Package} {context.Name}", versionText);
         }
 
         // `dotnet add package` cannot update an MSBuild project SDK, so rewrite its version in the project file.
