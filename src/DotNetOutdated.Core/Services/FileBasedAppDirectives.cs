@@ -201,8 +201,8 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
     /// <paramref name="name"/> in the files the app compiles: the SDK rejects the same id declared with different
     /// versions, so a directive repeated in several files is changed in each. When no file declares a package, a
     /// directive for it is added to the entry point. Nothing is written when a directive for it can't be rewritten (it
-    /// has no version, or names the id through a property), or when none was found but an <c>#:include</c> could not
-    /// be followed (it may be declared in a file that wasn't read).
+    /// has no version, or names the id through a property), or when an <c>#:include</c> could not be followed (a file
+    /// that wasn't read may declare it too).
     /// </summary>
     public DirectiveWrite WriteDirective(string projectFilePath, ReferenceKind kind, string name, string versionText)
     {
@@ -213,6 +213,11 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
         }
 
         var sources = ReadSources(projectFilePath);
+        if (UnreadIncludes(sources) is { } unread)
+        {
+            return DirectiveWrite.Failed($"{failure}: {unread}");
+        }
+
         var directiveName = kind == ReferenceKind.Sdk ? "sdk" : "package";
         var lineRegex = kind == ReferenceKind.Sdk ? SdkDirectiveLineRegex() : PackageDirectiveLineRegex();
         foreach (var source in sources.Files)
@@ -277,13 +282,6 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
                     $"{failure}. Expected a literal #:sdk {name}@<version> directive (id match is case-insensitive; trailing comments are preserved).");
             }
 
-            if (sources.UnresolvedIncludes.Count > 0)
-            {
-                return DirectiveWrite.Failed(
-                    $"{failure}: no #:package directive for it was found, and " +
-                    $"{string.Join(", ", sources.UnresolvedIncludes)} could not be followed to look for one.");
-            }
-
             var entryPoint = sources.Files[0].Path;
             var file = EncodedText.Read(_fileSystem, entryPoint);
             edits.Add((entryPoint, file, FileBasedAppSources.InsertDirective(file.Content, $"#:package {name}@{directiveVersion}")));
@@ -299,8 +297,42 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
     }
 
     /// <summary>
-    /// Sets the property behind a property-backed directive (a <c>#:property</c> line or a Directory.* property) to
-    /// <paramref name="newVersion"/>, and makes the directive read it again.
+    /// The full paths of the files that hold a property-backed directive's version: each file the app compiles with a
+    /// <c>#:property</c> line for the property (the SDK rejects the same property declared with different values, so
+    /// each is changed together), or the Directory.* file that defines it. For an SDK named through a property with a
+    /// literal version, the files with its directive.
+    /// </summary>
+    /// <param name="projectFilePath">The app's entry point.</param>
+    public IReadOnlyList<string> VariableFiles(string projectFilePath, PackageVariableInfo variableInfo)
+    {
+        if (string.IsNullOrEmpty(variableInfo.VariableName))
+        {
+            return DeclaringFiles(projectFilePath, variableInfo.ReferenceKind, variableInfo.PackageName);
+        }
+
+        if (!variableInfo.FilePath.IsCSharpFile() || !projectFilePath.IsCSharpFile() || !_fileSystem.File.Exists(projectFilePath))
+        {
+            return [variableInfo.FilePath];
+        }
+
+        return PropertyFiles(ReadSources(projectFilePath), variableInfo);
+    }
+
+    // The files with a #:property line for the variable, or the file it was found in when none has one.
+    private static List<string> PropertyFiles(FileBasedAppSources sources, PackageVariableInfo variableInfo)
+    {
+        var propertyRegex = PropertyDirectiveRegex(variableInfo.VariableName);
+        var files = sources.Files
+            .Where(file => file.Directives.Any(propertyRegex.IsMatch))
+            .Select(file => file.Path)
+            .ToList();
+        return files.Count > 0 ? files : [variableInfo.FilePath];
+    }
+
+    /// <summary>
+    /// Sets the property behind a property-backed directive (each <c>#:property</c> line for it, or a Directory.*
+    /// property) to <paramref name="newVersion"/>, and makes the directive read it again. Nothing is written when an
+    /// <c>#:include</c> could not be followed, as a file that wasn't read may declare the property too.
     /// </summary>
     /// <param name="projectFilePath">The app's entry point, whose files and imported properties are in effect.</param>
     /// <returns><see langword="true"/> when any file was changed.</returns>
@@ -328,21 +360,33 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
             ? SdkDirectiveReplaceRegex()
             : PackageDirectiveReplaceRegex();
 
+        var isApp = projectFilePath.IsCSharpFile() && _fileSystem.File.Exists(projectFilePath);
+        var sourcesBefore = isApp ? ReadSources(projectFilePath) : null;
+        if (sourcesBefore != null && UnreadIncludes(sourcesBefore) is { } unread)
+        {
+            _onWarning?.Invoke($"Not updating '{variableInfo.PackageName}' in file-based app '{projectFilePath}': {unread}");
+            return;
+        }
+
         if (_fileSystem.File.Exists(variableInfo.FilePath) && !string.IsNullOrEmpty(variableInfo.VariableName))
         {
             if (variableInfo.FilePath.IsCSharpFile())
             {
-                var propertyFile = EncodedText.Read(_fileSystem, variableInfo.FilePath);
-                var propertyContent = propertyFile.Content;
-                var propertyPattern = $@"(^[ \t]*#:[ \t]*property[ \t]+{Regex.Escape(variableInfo.VariableName)}[ \t]*=[ \t]*)([^\r\n]*)(\r?\n|$)";
-                var newPropertyContent = FileBasedAppSources.ReplaceInDirectives(
-                    propertyContent,
-                    new Regex(propertyPattern, RegexOptions.Multiline | RegexOptions.IgnoreCase),
-                    match => match.Groups[1].Value + newVersion + match.Groups[3].Value);
-                if (!string.Equals(propertyContent, newPropertyContent, StringComparison.Ordinal))
+                var propertyRegex = PropertyDirectiveRegex(variableInfo.VariableName);
+                var propertyFiles = sourcesBefore != null ? PropertyFiles(sourcesBefore, variableInfo) : [variableInfo.FilePath];
+                foreach (var propertyFilePath in propertyFiles)
                 {
-                    propertyFile.Write(_fileSystem, variableInfo.FilePath, newPropertyContent);
-                    updated = true;
+                    var propertyFile = EncodedText.Read(_fileSystem, propertyFilePath);
+                    var propertyContent = propertyFile.Content;
+                    var newPropertyContent = FileBasedAppSources.ReplaceInDirectives(
+                        propertyContent,
+                        propertyRegex,
+                        match => match.Groups[1].Value + newVersion);
+                    if (!string.Equals(propertyContent, newPropertyContent, StringComparison.Ordinal))
+                    {
+                        propertyFile.Write(_fileSystem, propertyFilePath, newPropertyContent);
+                        updated = true;
+                    }
                 }
             }
             else if (TryUpdateXmlPropertyFile(projectFilePath, variableInfo.FilePath, variableInfo.VariableName, newVersion.ToString()))
@@ -351,7 +395,7 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
             }
         }
 
-        if (!projectFilePath.IsCSharpFile() || !_fileSystem.File.Exists(projectFilePath))
+        if (!isApp)
         {
             return;
         }
@@ -472,6 +516,17 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
 
     private FileBasedAppSources ReadSources(string projectFilePath) =>
         FileBasedAppSources.Read(_fileSystem, _evaluator, projectFilePath);
+
+    // Why the app's directives can't all be known, or null when they can.
+    private static string? UnreadIncludes(FileBasedAppSources sources) =>
+        sources.UnresolvedIncludes.Count == 0
+            ? null
+            : $"{string.Join(", ", sources.UnresolvedIncludes)} could not be followed, and the files it names may declare it too.";
+
+    // Matches a #:property line for a property (case-insensitively): group 1 is the line up to its value, which runs to
+    // the end of the line.
+    private static Regex PropertyDirectiveRegex(string propertyName) =>
+        new($@"(^[ \t]*#:[ \t]*property[ \t]+{Regex.Escape(propertyName)}[ \t]*=[ \t]*)[^\r\n]*", RegexOptions.Multiline | RegexOptions.IgnoreCase);
 
     // Matches a directive for an id (case-insensitively): group 1 is the directive up to the id, group 2 the separator
     // (`@`, which whitespace may surround) and group 3 the version, when it has one. A directive whose separator has

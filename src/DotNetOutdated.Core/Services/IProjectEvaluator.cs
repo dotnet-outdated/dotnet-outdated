@@ -53,6 +53,9 @@ internal interface IProjectEvaluator
 
 /// <summary>A property defined by a file that MSBuild imports for a project, and where its definition in effect is.</summary>
 /// <param name="RawValue">The trimmed, unexpanded text of the property element.</param>
+/// <param name="Value">
+/// <paramref name="RawValue"/> with its property references expanded, or <see langword="null"/> when that isn't possible.
+/// </param>
 /// <param name="FilePath">The full path of the file whose definition is in effect.</param>
 /// <param name="ElementIndex">
 /// The index of that definition among the same-named property elements under any <c>PropertyGroup</c> in
@@ -62,7 +65,7 @@ internal interface IProjectEvaluator
 /// Whether the definition is assigned under a condition that couldn't be evaluated, or derives from such a property,
 /// so the value in effect isn't certain.
 /// </param>
-internal sealed record ImportedProperty(string Name, string RawValue, string FilePath, int ElementIndex, bool Ambiguous);
+internal sealed record ImportedProperty(string Name, string RawValue, string? Value, string FilePath, int ElementIndex, bool Ambiguous);
 
 /// <summary>The item that sets a package's version for a project.</summary>
 /// <param name="ElementType"><c>PackageReference</c>, <c>GlobalPackageReference</c> or <c>PackageVersion</c>.</param>

@@ -251,7 +251,11 @@ namespace DotNetOutdated.Tests
             var fileSystem = FileSystem(app);
             var variableInfo = Directives(fileSystem).PackageVariables(AppPath, ReferenceKind.Package)["Foo"];
             var evaluator = Substitute.For<IProjectEvaluator>();
-            evaluator.GetImportedProperties(Arg.Any<string>()).Returns(_ => throw new InvalidOperationException("boom"));
+
+            // The app's files are read before the property is written, and again for the directive pass.
+            evaluator.GetImportedProperties(Arg.Any<string>()).Returns(
+                _ => new Dictionary<string, ImportedProperty>(),
+                _ => throw new InvalidOperationException("boom"));
 
             Assert.True(Directives(fileSystem, evaluator).TryUpdateVariable(AppPath, variableInfo, new NuGetVersion("2.0.0")));
 
@@ -336,6 +340,12 @@ namespace DotNetOutdated.Tests
         [InlineData("#:include \"my lib/c.cs\" CopyToOutputDirectory=PreserveNewest", "my lib/c.cs")]
         [InlineData("#:property LibDir=lib\n#:include $(LibDir)/a.cs", "lib/a.cs")]
         [InlineData("#:include $(Undefined)/a.cs", "")]
+        // A quoted property value is a C# string literal; one the SDK rejects defines nothing.
+        [InlineData("#:property LibDir=\"lib\"\n#:include $(LibDir)/a.cs", "lib/a.cs")]
+        [InlineData("#:property LibDir = \"my lib\"\n#:include \"$(LibDir)/c.cs\"", "my lib/c.cs")]
+        [InlineData("#:property LibDir=\"l\\x69\\u0062\"\n#:include $(LibDir)/a.cs", "lib/a.cs")]
+        [InlineData("#:property LibDir=\"l\\qb\"\n#:include $(LibDir)/a.cs", "")]
+        [InlineData("#:property LibDir=\"lib\n#:include $(LibDir)/a.cs", "")]
         public void SourceFiles_AreTheEntryPointAndTheCSharpFilesItsIncludesMatch(string app, string expected)
         {
             var fileSystem = FileSystem(app + "\n", new()
@@ -377,6 +387,29 @@ namespace DotNetOutdated.Tests
 
             Assert.Equal(AppPath, sourceFiles[0]);
             Assert.Equal(expected, string.Join(", ", sourceFiles.Skip(1).Select(Relative)));
+        }
+
+        [Fact]
+        public void SourceFiles_IncludedThroughAnImportedProperty_UseItsEvaluatedValue()
+        {
+            // The SDK expands the include through MSBuild, so $(MSBuildThisFileDirectory) is the props file's directory.
+            var fileSystem = FileSystem("#:include $(LibDir)/shared.cs\n", new()
+            {
+                [RootPropsPath] = "<Project><PropertyGroup><LibDir>$(MSBuildThisFileDirectory)lib</LibDir></PropertyGroup></Project>",
+                [SharedPath] = "#:package Bar@2.0.0\n",
+            });
+            var directives = Directives(fileSystem);
+
+            Assert.Equal([AppPath, SharedPath], directives.SourceFiles(AppPath));
+            Assert.Equal("Package Bar@2.0.0", Summary(directives.References(AppPath)));
+        }
+
+        [Fact]
+        public void References_WithAQuotedPropertyVersion_ResolveTheDecodedValue()
+        {
+            var fileSystem = FileSystem("#:property FooVersion=\"1.2.3\"\n#:package Foo@$(FooVersion)\n");
+
+            Assert.Equal("Package Foo@1.2.3", Summary(Directives(fileSystem).References(AppPath)));
         }
 
         [Fact]
@@ -580,6 +613,8 @@ namespace DotNetOutdated.Tests
         [Theory]
         [InlineData("#:include lib/shared.cs\n", "#:package Foo\n", "'#:package Foo' in '")]
         [InlineData("#:include $(SharedDir)/shared.cs\n", "#:package Foo@1.0.0\n", "'#:include $(SharedDir)/shared.cs'")]
+        // A file that wasn't read may declare it too, even when another file does.
+        [InlineData("#:include lib/shared.cs\n#:include $(OtherDir)/other.cs\n#:package Foo@1.0.0\n", "#:package Foo@1.0.0\n", "'#:include $(OtherDir)/other.cs'")]
         [InlineData("#:include lib/shared.cs\n", "#:package Foo@ ExcludeAssets=runtime\n", "has no version")]
         // References skip a range that holds no single version, so only the directives show the id is a property.
         [InlineData("#:include lib/shared.cs\n#:property FooId=Foo\n", "#:package $(FooId)@[1.0.0,3.0.0)\n", "names it through a property")]
@@ -609,6 +644,37 @@ namespace DotNetOutdated.Tests
 
             Assert.Equal(app, fileSystem.File.ReadAllText(AppPath));
             Assert.Equal("#:property FooVersion=2.0.0\n", fileSystem.File.ReadAllText(SharedPath));
+        }
+
+        [Fact]
+        public void TryUpdateVariable_DefinedInSeveralFiles_UpdatesEachDefinition()
+        {
+            // The SDK rejects the same property declared with different values, so every declaration moves together.
+            const string app = "#:include lib/shared.cs\n#:property FooVersion=1.0.0\n#:package Foo@$(FooVersion)\n";
+            const string shared = "#:property fooversion = \"1.0.0\"\n#:property FooVersionSuffix=1.0.0\n";
+            var fileSystem = FileSystem(app, new() { [SharedPath] = shared });
+            var directives = Directives(fileSystem);
+            var variableInfo = directives.PackageVariables(AppPath, ReferenceKind.Package)["Foo"];
+
+            Assert.Equal([AppPath, SharedPath], directives.VariableFiles(AppPath, variableInfo));
+            Assert.True(directives.TryUpdateVariable(AppPath, variableInfo, new NuGetVersion("2.0.0")));
+
+            Assert.Equal(app.Replace("1.0.0", "2.0.0"), fileSystem.File.ReadAllText(AppPath));
+            Assert.Equal("#:property fooversion = 2.0.0\n#:property FooVersionSuffix=1.0.0\n", fileSystem.File.ReadAllText(SharedPath));
+        }
+
+        [Fact]
+        public void TryUpdateVariable_WhenAnIncludeCannotBeFollowed_WarnsAndChangesNothing()
+        {
+            const string app = "#:include $(OtherDir)/other.cs\n#:property FooVersion=1.0.0\n#:package Foo@$(FooVersion)\n";
+            var fileSystem = FileSystem(app);
+            var directives = Directives(fileSystem);
+            var variableInfo = directives.PackageVariables(AppPath, ReferenceKind.Package)["Foo"];
+
+            Assert.False(directives.TryUpdateVariable(AppPath, variableInfo, new NuGetVersion("2.0.0")));
+
+            Assert.Equal(app, fileSystem.File.ReadAllText(AppPath));
+            Assert.Contains(_warnings, w => w.Contains("'#:include $(OtherDir)/other.cs'"));
         }
 
         [Fact]

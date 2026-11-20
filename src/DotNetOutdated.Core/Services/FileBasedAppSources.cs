@@ -20,7 +20,10 @@ internal sealed record FileBasedAppSourceFile(string Path, IReadOnlyList<string>
 /// <param name="Files">The entry point, then the included files in the order they were found.</param>
 /// <param name="Properties">The imported properties, overridden by the files' <c>#:property</c> lines.</param>
 /// <param name="HasIncludes">Whether any of the files has an <c>#:include</c> directive.</param>
-/// <param name="UnresolvedIncludes">The include and exclude directives whose path uses a property that isn't defined.</param>
+/// <param name="UnresolvedIncludes">
+/// The include and exclude directives whose path uses a property that isn't defined, or whose imported value isn't
+/// certain: the files they name weren't read.
+/// </param>
 internal sealed partial record FileBasedAppSources(
     IReadOnlyList<FileBasedAppSourceFile> Files,
     Dictionary<string, (string Value, string FilePath)> Properties,
@@ -41,10 +44,18 @@ internal sealed partial record FileBasedAppSources(
 
     public static FileBasedAppSources Read(IFileSystem fileSystem, IProjectEvaluator evaluator, string projectFilePath)
     {
+        // Versions are edited where they are written, so a property keeps its unexpanded value. Include paths are
+        // expanded as MSBuild expands them, so they see an imported property's evaluated value (which can use
+        // $(MSBuildThisFileDirectory), say); one whose value isn't certain is left undefined for them.
         var properties = new Dictionary<string, (string Value, string FilePath)>(StringComparer.OrdinalIgnoreCase);
+        var pathProperties = new Dictionary<string, (string Value, string FilePath)>(StringComparer.OrdinalIgnoreCase);
         foreach (var (name, definition) in evaluator.GetImportedProperties(projectFilePath))
         {
             properties[name] = (definition.RawValue, definition.FilePath);
+            if (definition is { Ambiguous: false, Value: { } value })
+            {
+                pathProperties[name] = (value, definition.FilePath);
+            }
         }
 
         var entryPoint = fileSystem.Path.GetFullPath(projectFilePath);
@@ -64,7 +75,12 @@ internal sealed partial record FileBasedAppSources(
             files.Add(file);
             foreach (var line in file.Directives)
             {
-                CollectProperty(line, path, properties);
+                if (TryParseProperty(line, out var name, out var value))
+                {
+                    // A later #:property line overrides an earlier one, as in MSBuild.
+                    properties[name] = (value, path);
+                    pathProperties[name] = (value, path);
+                }
             }
 
             var directory = fileSystem.Path.GetDirectoryName(path)!;
@@ -83,7 +99,7 @@ internal sealed partial record FileBasedAppSources(
                     continue;
                 }
 
-                if (!TryResolveProperties(pattern, properties, out var resolvedPattern))
+                if (!TryResolveProperties(pattern, pathProperties, out var resolvedPattern))
                 {
                     unresolved.Add($"'#:{match.Groups[1].Value} {pattern}' in '{path}'");
                     continue;
@@ -184,14 +200,24 @@ internal sealed partial record FileBasedAppSources(
         return !VersionExpression.PropertyReferenceRegex().IsMatch(current);
     }
 
-    private static void CollectProperty(string line, string filePath, Dictionary<string, (string Value, string FilePath)> properties)
+    // A #:property line's name and value. A value wholly in double quotes is a C# string literal, whose escapes are
+    // decoded; one the SDK would reject (an unterminated quote or an unknown escape) defines nothing.
+    private static bool TryParseProperty(string line, out string name, out string value)
     {
         var match = PropertyDirectiveLineRegex().Match(line);
-        if (match.Success)
+        name = match.Groups[1].Value;
+        value = match.Groups[2].Value;
+        if (!match.Success)
         {
-            // Later #:property lines override earlier ones (MSBuild-like semantics).
-            properties[match.Groups[1].Value] = (match.Groups[2].Value, filePath);
+            return false;
         }
+
+        if (!value.StartsWith('"'))
+        {
+            return true;
+        }
+
+        return TryReadQuoted(value, out value, out var end) && end == match.Groups[2].Value.Length;
     }
 
     private static List<string> DirectiveLines(string content) =>
@@ -279,30 +305,82 @@ internal sealed partial record FileBasedAppSources(
         value = value.Trim();
         if (value.StartsWith('"'))
         {
-            var builder = new StringBuilder();
-            for (var i = 1; i < value.Length; i++)
-            {
-                if (value[i] == '"')
-                {
-                    path = builder.ToString();
-                    return path.Length > 0;
-                }
-
-                if (value[i] == '\\' && i + 1 < value.Length)
-                {
-                    i++;
-                }
-
-                builder.Append(value[i]);
-            }
-
-            path = string.Empty;
-            return false;
+            return TryReadQuoted(value, out path, out _) && path.Length > 0;
         }
 
         var end = value.IndexOfAny([' ', '\t']);
         path = end < 0 ? value : value[..end];
         return path.Length > 0;
+    }
+
+    // Reads the C# string literal at the start of text (which starts with a double quote), as the SDK lexes a quoted
+    // directive value: its escapes are decoded, and end is the index after its closing quote. False when the quote
+    // isn't closed or an escape isn't valid.
+    private static bool TryReadQuoted(string text, out string value, out int end)
+    {
+        var builder = new StringBuilder();
+        value = string.Empty;
+        end = -1;
+        for (var i = 1; i < text.Length; i++)
+        {
+            var c = text[i];
+            if (c == '"')
+            {
+                value = builder.ToString();
+                end = i + 1;
+                return true;
+            }
+
+            if (c != '\\')
+            {
+                builder.Append(c);
+                continue;
+            }
+
+            if (++i >= text.Length)
+            {
+                return false;
+            }
+
+            switch (text[i])
+            {
+                case '\'': builder.Append('\''); break;
+                case '"': builder.Append('"'); break;
+                case '\\': builder.Append('\\'); break;
+                case '0': builder.Append('\0'); break;
+                case 'a': builder.Append('\a'); break;
+                case 'b': builder.Append('\b'); break;
+                case 'e': builder.Append('\u001b'); break;
+                case 'f': builder.Append('\f'); break;
+                case 'n': builder.Append('\n'); break;
+                case 'r': builder.Append('\r'); break;
+                case 't': builder.Append('\t'); break;
+                case 'v': builder.Append('\v'); break;
+                case 'x' or 'u' or 'U':
+                    // \x takes one to four hex digits, \u exactly four and \U exactly eight.
+                    var (min, max) = text[i] switch { 'x' => (1, 4), 'u' => (4, 4), _ => (8, 8) };
+                    var digits = 0;
+                    while (digits < max && i + 1 + digits < text.Length && char.IsAsciiHexDigit(text[i + 1 + digits]))
+                    {
+                        digits++;
+                    }
+
+                    if (digits < min ||
+                        !int.TryParse(text.AsSpan(i + 1, digits), System.Globalization.NumberStyles.HexNumber, null, out var code) ||
+                        code > 0x10FFFF)
+                    {
+                        return false;
+                    }
+
+                    builder.Append(code <= char.MaxValue ? ((char)code).ToString() : char.ConvertFromUtf32(code));
+                    i += digits;
+                    break;
+                default:
+                    return false;
+            }
+        }
+
+        return false;
     }
 
     // The .cs files a path or glob (*, ? and **, as MSBuild matches them) names, relative to baseDirectory.

@@ -1216,6 +1216,8 @@ Console.WriteLine();")
         [Theory]
         [InlineData(ReferenceKind.Package, "#:package Humanizer@3.0.10", "#:package Humanizer@3.0.11", "3.0.11")]
         [InlineData(ReferenceKind.Sdk, "#:sdk Cake.Sdk@6.0.0", "#:sdk Cake.Sdk@6.2.0", "6.2.0")]
+        [InlineData(ReferenceKind.Package, "#:property HumanizerVersion=3.0.10\n#:package Humanizer@$(HumanizerVersion)", "#:property HumanizerVersion=3.0.11\n#:package Humanizer@$(HumanizerVersion)", "3.0.11")]
+        [InlineData(ReferenceKind.Sdk, "#:property SdkId=Cake.Sdk\n#:sdk $(SdkId)@6.0.0", "#:property SdkId=Cake.Sdk\n#:sdk $(SdkId)@6.2.0", "6.2.0")]
         public void FileBasedAppThatDeclaresAReferenceItAlsoIncludes_RestoresEveryAppThatIncludesTheFile(ReferenceKind kind, string directive, string upgraded, string version)
         {
             var name = kind == ReferenceKind.Sdk ? "Cake.Sdk" : "Humanizer";
@@ -1280,6 +1282,44 @@ Console.WriteLine();")
             Assert.All(results, result => Assert.Equal(UpgradeOutcome.Upgraded, result.Outcome));
             Assert.Equal("#:package Humanizer@3.0.10\n", fileSystem.File.ReadAllText(separateAppPath));
             dotNetRunner.Received(1).Run(XFS.Path(@"c:\repo"), Arg.Is<string[]>(a => a[0] == "restore" && a[1] == "heldback.cs"));
+        }
+
+        [Fact]
+        public void FileBasedAppsHeldBack_ThatShareAFileWithAnAppUpgradedWithTheUpgrade_AreUpgradedToo()
+        {
+            // Upgrading the held-back app that shares a.cs writes b.cs, which the other held-back app includes.
+            var upgradedAppPath = XFS.Path(@"c:\repo\upgraded.cs");
+            var bothAppPath = XFS.Path(@"c:\repo\both.cs");
+            var secondAppPath = XFS.Path(@"c:\repo\second.cs");
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                [upgradedAppPath] = new("#:include lib/a.cs\n"),
+                [bothAppPath] = new("#:include lib/a.cs\n#:include lib/b.cs\n"),
+                [secondAppPath] = new("#:include lib/b.cs\n"),
+                [XFS.Path(@"c:\repo\lib\a.cs")] = new("#:package Humanizer@3.0.10\n"),
+                [XFS.Path(@"c:\repo\lib\b.cs")] = new("#:package Humanizer@3.0.10\n"),
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
+            var upgrade = new ReferenceUpgrade
+            {
+                Name = "Humanizer",
+                Kind = ReferenceKind.Package,
+                Version = new NuGetVersion("3.0.11"),
+                Projects = [new UpgradeProject(upgradedAppPath, "net10.0")],
+                HeldBack = [new UpgradeProject(secondAppPath, "net10.0"), new UpgradeProject(bothAppPath, "net10.0")],
+            };
+
+            Assert.Equal(
+                [new UpgradeProject(secondAppPath, "net10.0"), new UpgradeProject(bothAppPath, "net10.0")],
+                service.FindHeldBackSharingVersion(upgrade));
+
+            var results = service.Upgrade(upgrade);
+
+            Assert.All(results, result => Assert.Equal(UpgradeOutcome.Upgraded, result.Outcome));
+            Assert.Equal("#:package Humanizer@3.0.11\n", fileSystem.File.ReadAllText(XFS.Path(@"c:\repo\lib\b.cs")));
+            dotNetRunner.Received(1).Run(XFS.Path(@"c:\repo"), Arg.Is<string[]>(a => a[0] == "restore" && a[1] == "second.cs"));
         }
 
         [Fact]

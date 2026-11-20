@@ -82,7 +82,8 @@ namespace DotNetOutdated.Core.Services
             }
         }
 
-        // The held-back projects whose package version is written where an upgraded project's is.
+        // The held-back projects whose package version is written where an upgraded project's is. Upgrading one writes
+        // all of its locations, so a held-back project sharing another of them with it is upgraded too, and so on.
         private List<UpgradeProject> HeldBackSharingVersion(ReferenceUpgrade upgrade)
         {
             if (upgrade.HeldBack.Count == 0)
@@ -93,10 +94,28 @@ namespace DotNetOutdated.Core.Services
             var directives = new FileBasedAppDirectives(_fileSystem, _evaluator, _ => { });
             var locator = new VersionLocator(_fileSystem, _evaluator, directives);
             bool IsPackage(UpgradeProject project) => locator.ResolveKind(project.Path, upgrade.Name, upgrade.Kind) == ReferenceKind.Package;
-            IEnumerable<string> Locations(UpgradeProject project) => PackageVersionLocations(directives, project.Path, upgrade.Name, project.TargetFramework);
+            IReadOnlyList<string> Locations(UpgradeProject project) => PackageVersionLocations(directives, project.Path, upgrade.Name, project.TargetFramework);
 
-            var upgradedLocations = upgrade.Projects.Where(IsPackage).SelectMany(Locations).ToHashSet(StringComparer.OrdinalIgnoreCase);
-            return [.. upgrade.HeldBack.Where(project => IsPackage(project) && Locations(project).Any(upgradedLocations.Contains)).Distinct()];
+            var writtenLocations = upgrade.Projects.Where(IsPackage).SelectMany(Locations).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var heldBack = upgrade.HeldBack.Distinct().Where(IsPackage).Select(project => (Project: project, Locations: Locations(project))).ToList();
+            var sharing = new HashSet<UpgradeProject>();
+            bool found;
+            do
+            {
+                found = false;
+                foreach (var (project, locations) in heldBack)
+                {
+                    if (!sharing.Contains(project) && locations.Any(writtenLocations.Contains))
+                    {
+                        sharing.Add(project);
+                        writtenLocations.UnionWith(locations);
+                        found = true;
+                    }
+                }
+            }
+            while (found);
+
+            return [.. heldBack.Select(entry => entry.Project).Where(sharing.Contains)];
         }
 
         // Identifies where a package's version is written for a target framework of a project, so that target
@@ -110,7 +129,7 @@ namespace DotNetOutdated.Core.Services
             {
                 if (directives.PackageVariables(projectPath, ReferenceKind.Package).TryGetValue(name, out var directiveVariable))
                 {
-                    return [VariableLocation(directiveVariable)];
+                    return FileBasedVariableLocations(directives, projectPath, directiveVariable);
                 }
 
                 var declaringFiles = directives.DeclaringFiles(projectPath, ReferenceKind.Package, name);
@@ -325,17 +344,19 @@ namespace DotNetOutdated.Core.Services
             HeldBackUpgraded = outcome == UpgradeOutcome.Upgraded ? context.HeldBackUpgraded : [],
         };
 
-        private Write UpdateFileBasedVariable(Context context, PackageVariableInfo variableInfo)
+        // Writes a property-backed version in every file that holds it. Each file is its own location, which apps that
+        // include it share.
+        private static Write UpdateFileBasedVariable(Context context, PackageVariableInfo variableInfo)
         {
             var version = context.Upgrade.Version;
-            var location = VariableLocation(variableInfo);
+            var locations = FileBasedVariableLocations(context.Directives, context.ProjectPath, variableInfo);
             if (context.Directives.TryUpdateVariable(context.ProjectPath, variableInfo, version))
             {
-                return new Written(true, location, version.ToString());
+                return new Written([.. locations.Select(location => (location, true))], version.ToString());
             }
 
             return IsFileBasedAppVariableAtRequestedVersion(variableInfo, version)
-                ? new Written(false, location, version.ToString())
+                ? new Written([.. locations.Select(location => (location, false))], version.ToString())
                 : new WriteFailed(
                     $"Failed to update file-based app '{context.ProjectPath}' for '{context.Name}'. " +
                     "Could not update the matching #:property value or #:package/#:sdk directive.");
@@ -358,6 +379,15 @@ namespace DotNetOutdated.Core.Services
 
         private static string DirectiveLocation(string filePath, ReferenceKind kind, string name) =>
             $"{filePath}|#:{kind} {name}";
+
+        // The locations of a file-based app's property-backed version: each file with the property, or for an SDK named
+        // through a property, each file with its directive.
+        private static IReadOnlyList<string> FileBasedVariableLocations(FileBasedAppDirectives directives, string projectPath, PackageVariableInfo variableInfo) =>
+        [
+            .. directives.VariableFiles(projectPath, variableInfo).Select(file => string.IsNullOrEmpty(variableInfo.VariableName)
+                ? DirectiveLocation(file, variableInfo.ReferenceKind, variableInfo.PackageName)
+                : $"{file}|$({variableInfo.VariableName})")
+        ];
 
         // `dotnet add package` cannot update an MSBuild project SDK, so rewrite its version in the project file.
         private Write UpdateProjectSdk(Context context, ProjectSdkReference sdk)
