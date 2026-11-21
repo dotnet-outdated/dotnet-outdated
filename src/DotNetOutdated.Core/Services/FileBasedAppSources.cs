@@ -53,17 +53,27 @@ internal sealed partial record FileBasedAppSources(
         {
             [ItemMappingProperty] = (DefaultItemMapping, entryPoint),
         };
+        // Directory.Build.targets is imported after the app's #:property lines, so its definitions override them. Its
+        // value was evaluated without them, so for paths it is only certain when it uses no other property.
+        var reserved = ReservedProperties(fileSystem, entryPoint).ToList();
+        var importedLast = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var (name, definition) in evaluator.GetImportedProperties(projectFilePath))
         {
             properties[name] = (definition.RawValue, definition.FilePath);
             pathProperties.Remove(name);
-            if (definition is { Ambiguous: false, Value: { } value })
+            if (definition is { Ambiguous: false, Value: { } value } &&
+                (!definition.AfterProject || !UsesOtherProperties(definition.RawValue, reserved)))
             {
                 pathProperties[name] = (value, definition.FilePath);
             }
+
+            if (definition.AfterProject)
+            {
+                importedLast.Add(name);
+            }
         }
 
-        foreach (var (name, value) in ReservedProperties(fileSystem, entryPoint))
+        foreach (var (name, value) in reserved)
         {
             pathProperties[name] = (value, entryPoint);
         }
@@ -82,7 +92,7 @@ internal sealed partial record FileBasedAppSources(
         {
             var file = new FileBasedAppSourceFile(path, ParseDirectives(fileSystem.File.ReadAllText(path)));
             files.Add(file);
-            foreach (var directive in file.Directives.Where(directive => directive.Kind == "property"))
+            foreach (var directive in file.Directives.Where(directive => directive.Kind == "property" && !importedLast.Contains(directive.Name)))
             {
                 // A later #:property line overrides an earlier one, as in MSBuild. MSBuild expands a property's
                 // value when it is assigned, so for paths it takes the values in effect then; one using a property
@@ -144,6 +154,27 @@ internal sealed partial record FileBasedAppSources(
 
         return new FileBasedAppSources(files, properties, hasIncludes, unresolved);
     }
+
+    // Whether an imported value uses a property other than the project's reserved ones, or any other expression.
+    private static bool UsesOtherProperties(string rawValue, List<(string Name, string Value)> reserved)
+    {
+        var withoutReserved = VersionExpression.PropertyReferenceRegex().Replace(
+            rawValue,
+            match => reserved.Any(property => string.Equals(property.Name, match.Groups[1].Value, StringComparison.OrdinalIgnoreCase))
+                ? string.Empty
+                : match.Value);
+        return HasExpression(withoutReserved);
+    }
+
+    /// <summary>
+    /// Whether <paramref name="text"/> holds an MSBuild expression: a property reference or function, or an item or
+    /// metadata reference.
+    /// </summary>
+    public static bool HasExpression(string? text) =>
+        text != null &&
+        (text.Contains("$(", StringComparison.Ordinal) ||
+         text.Contains("@(", StringComparison.Ordinal) ||
+         text.Contains("%(", StringComparison.Ordinal));
 
     // The item type the mapping (`.ext=ItemType;...`, its first entry for the path's extension) gives a path.
     private static string? ItemType(string mapping, string path)
@@ -217,7 +248,8 @@ internal sealed partial record FileBasedAppSources(
 
     /// <summary>
     /// The value of <paramref name="expression"/> with its <c>$(Name)</c> references expanded; <see langword="false"/>
-    /// when one isn't defined (or the expansion doesn't finish).
+    /// when one isn't defined, the expansion doesn't finish, or it leaves an expression this can't evaluate (a property
+    /// function such as <c>$([System.String]::Copy('a'))</c>, or an item or metadata reference).
     /// </summary>
     public static bool TryResolveProperties(string expression, Dictionary<string, (string Value, string FilePath)> propertyDefinitions, out string resolvedValue)
     {
@@ -247,12 +279,12 @@ internal sealed partial record FileBasedAppSources(
             if (!changed || !VersionExpression.PropertyReferenceRegex().IsMatch(current))
             {
                 resolvedValue = current;
-                return true;
+                return !HasExpression(current);
             }
         }
 
         resolvedValue = current;
-        return !VersionExpression.PropertyReferenceRegex().IsMatch(current);
+        return !HasExpression(current);
     }
 
     private static List<FileBasedAppDirective> ParseDirectives(string content) =>

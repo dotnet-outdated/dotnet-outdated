@@ -65,7 +65,11 @@ internal interface IProjectEvaluator
 /// Whether the definition is assigned under a condition that couldn't be evaluated, or derives from such a property,
 /// so the value in effect isn't certain.
 /// </param>
-internal sealed record ImportedProperty(string Name, string RawValue, string? Value, string FilePath, int ElementIndex, bool Ambiguous);
+/// <param name="AfterProject">
+/// Whether the definition is in a file imported after the project's own properties (Directory.Build.targets), so it
+/// overrides a file-based app's <c>#:property</c> lines.
+/// </param>
+internal sealed record ImportedProperty(string Name, string RawValue, string? Value, string FilePath, int ElementIndex, bool Ambiguous, bool AfterProject = false);
 
 /// <summary>The item that sets a package's version for a project.</summary>
 /// <param name="ElementType"><c>PackageReference</c>, <c>GlobalPackageReference</c> or <c>PackageVersion</c>.</param>

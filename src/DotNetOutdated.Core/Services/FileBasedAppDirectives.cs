@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.IO;
 using System.IO.Abstractions;
 using System.Linq;
 using System.Text.RegularExpressions;
@@ -174,8 +175,9 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
     /// <paramref name="name"/> in the files the app compiles: the SDK rejects the same id declared with different
     /// versions, so a directive repeated in several files is changed in each. When no file declares a package, a
     /// directive for it is added to the entry point. Nothing is written when a directive for it can't be rewritten (it
-    /// has no version, or names the id through a property), or when an <c>#:include</c> could not be followed (a file
-    /// that wasn't read may declare it too).
+    /// has no version, or names the id or version through a property), or when an <c>#:include</c> could not be
+    /// followed (a file that wasn't read may declare it too). If writing one file fails, the files already written are
+    /// changed back.
     /// </summary>
     public DirectiveWrite WriteDirective(string projectFilePath, ReferenceKind kind, string name, string versionText)
     {
@@ -194,12 +196,21 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
         var directiveKind = DirectiveKind(kind);
         foreach (var source in sources.Files)
         {
-            // Rewriting the literal id below would miss this directive, and adding one would declare the id twice.
-            if (source.Directives.FirstOrDefault(directive =>
-                    VersionExpression.ContainsPropertyReference(directive.Name) && Declares(directive, sources, kind, name)) is { } named)
+            foreach (var directive in source.Directives.Where(directive => Declares(directive, sources, kind, name)))
             {
-                return DirectiveWrite.Failed(
-                    $"{failure}: '{named.Line.Trim()}' in '{source.Path}' names it through a property; change the version by hand.");
+                // Rewriting the literal id below would miss this directive, and adding one would declare the id twice.
+                if (FileBasedAppSources.HasExpression(directive.Name))
+                {
+                    return DirectiveWrite.Failed(
+                        $"{failure}: '{directive.Line.Trim()}' in '{source.Path}' names it through a property; change the version by hand.");
+                }
+
+                // A literal written over it would stop the version following the property.
+                if (FileBasedAppSources.HasExpression(directive.Value))
+                {
+                    return DirectiveWrite.Failed(
+                        $"{failure}: '{directive.Line.Trim()}' in '{source.Path}' takes its version from a property that could not be updated; change the version by hand.");
+                }
             }
         }
 
@@ -257,12 +268,46 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
             declaringFiles.Add(entryPoint);
         }
 
+        return WriteAll(edits, failure) is { } writeFailure
+            ? DirectiveWrite.Failed(writeFailure)
+            : new DirectiveWrite(declaringFiles, [.. edits.Select(edit => edit.Path)], null);
+    }
+
+    // Writes each edit; if one fails, changes back the files already written, as the SDK rejects a reference left at
+    // different versions. Returns why it failed, naming any file that couldn't be changed back, or null.
+    private string? WriteAll(List<(string Path, EncodedText File, string Content)> edits, string failure)
+    {
+        var written = new List<(string Path, EncodedText File, string Content)>();
         foreach (var edit in edits)
         {
-            edit.File.Write(_fileSystem, edit.Path, edit.Content);
+            try
+            {
+                edit.File.Write(_fileSystem, edit.Path, edit.Content);
+                written.Add(edit);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                var notRestored = new List<string>();
+                foreach (var done in written)
+                {
+                    try
+                    {
+                        done.File.Write(_fileSystem, done.Path, done.File.Content);
+                    }
+                    catch (Exception restoreEx) when (restoreEx is IOException or UnauthorizedAccessException)
+                    {
+                        notRestored.Add(done.Path);
+                    }
+                }
+
+                var outcome = notRestored.Count == 0
+                    ? "No file was changed."
+                    : $"The version was already written in {string.Join(", ", notRestored.Select(path => $"'{path}'"))}, which could not be changed back; set it there to the version the other files declare.";
+                return $"{failure}: '{edit.Path}' could not be written ({ex.Message}). {outcome}";
+            }
         }
 
-        return new DirectiveWrite(declaringFiles, [.. edits.Select(edit => edit.Path)], null);
+        return null;
     }
 
     /// <summary>
@@ -335,6 +380,16 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
         if (sourcesBefore != null && UnreadIncludes(sourcesBefore) is { } unread)
         {
             _onWarning?.Invoke($"Not updating '{variableInfo.PackageName}' in file-based app '{projectFilePath}': {unread}");
+            return;
+        }
+
+        // Changing a property an include path uses can change the files the app compiles, which may declare it too.
+        if (sourcesBefore != null && !string.IsNullOrEmpty(variableInfo.VariableName) &&
+            IncludeUsing(sourcesBefore, variableInfo.VariableName) is { } include)
+        {
+            _onWarning?.Invoke(
+                $"Not updating '{variableInfo.PackageName}' in file-based app '{projectFilePath}': {include} uses $({variableInfo.VariableName}), " +
+                "so changing it can change the files the app compiles; change the version by hand.");
             return;
         }
 
@@ -478,6 +533,36 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
 
     private FileBasedAppSources ReadSources(string projectFilePath) =>
         FileBasedAppSources.Read(_fileSystem, _evaluator, projectFilePath);
+
+    // The first include or exclude directive whose path (or the item mapping it is matched against) uses the property,
+    // directly or through other properties, or null.
+    private static string? IncludeUsing(FileBasedAppSources sources, string propertyName)
+    {
+        var dependents = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { propertyName };
+        bool UsesDependent(string expression) =>
+            VersionExpression.PropertyReferenceRegex().Matches(expression).Any(match => dependents.Contains(match.Groups[1].Value));
+
+        bool added;
+        do
+        {
+            added = false;
+            foreach (var (name, definition) in sources.Properties)
+            {
+                if (!dependents.Contains(name) && UsesDependent(definition.Value))
+                {
+                    added |= dependents.Add(name);
+                }
+            }
+        }
+        while (added);
+
+        var mappingUses = dependents.Contains("FileBasedProgramsItemMapping");
+        return sources.Files
+            .SelectMany(file => file.Directives
+                .Where(directive => directive.Kind is "include" or "exclude" && (mappingUses || UsesDependent(directive.Name)))
+                .Select(directive => $"'{directive.Line.Trim()}' in '{file.Path}'"))
+            .FirstOrDefault();
+    }
 
     // Why the app's directives can't all be known, or null when they can.
     private static string? UnreadIncludes(FileBasedAppSources sources) =>

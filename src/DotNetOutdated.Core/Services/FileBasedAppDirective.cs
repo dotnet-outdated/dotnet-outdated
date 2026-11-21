@@ -108,19 +108,26 @@ internal sealed record FileBasedAppDirective(
         return true;
     }
 
-    /// <summary>The line with its value replaced by <paramref name="value"/>, quoted if it needs to be.</summary>
-    public string WithValue(string value) =>
-        Line[..ValueSpan.Start] + QuoteIfNeeded(value) + Line[ValueSpan.End..];
+    /// <summary>
+    /// The line with its value replaced by <paramref name="value"/>: quoted if the value was, since without quotes
+    /// the SDK can read the line in its legacy form (taking the metadata after it as part of the value), and otherwise
+    /// quoted if it needs to be.
+    /// </summary>
+    public string WithValue(string value)
+    {
+        var quoted = ValueSpan.End > ValueSpan.Start && Line[ValueSpan.Start] == '"';
+        return Line[..ValueSpan.Start] + (quoted ? Quote(value) : QuoteIfNeeded(value)) + Line[ValueSpan.End..];
+    }
 
     /// <summary>
     /// The value as a directive writes it: bare, or as a C# string literal when it holds whitespace or a quote.
     /// </summary>
-    public static string QuoteIfNeeded(string value)
+    public static string QuoteIfNeeded(string value) =>
+        value.Any(c => char.IsWhiteSpace(c) || c == '"') ? Quote(value) : value;
+
+    // The value as a C# string literal.
+    private static string Quote(string value)
     {
-        if (!value.Any(c => char.IsWhiteSpace(c) || c == '"'))
-        {
-            return value;
-        }
 
         var builder = new StringBuilder("\"");
         foreach (var c in value)

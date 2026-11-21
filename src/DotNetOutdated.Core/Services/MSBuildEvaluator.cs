@@ -36,6 +36,9 @@ internal sealed class MSBuildEvaluator(IFileSystem fileSystem)
         /// <summary>Assigned under a condition that couldn't be evaluated, or derived from such a property.</summary>
         public bool Ambiguous { get; init; }
 
+        /// <summary>Assigned by a file imported after the project's own properties (Directory.Build.targets).</summary>
+        public bool AfterProject { get; init; }
+
         /// <summary>When <see cref="RawValue"/> is exactly <c>$(Other)</c>, the name of that property.</summary>
         public string? LinkName { get; init; }
 
@@ -71,6 +74,9 @@ internal sealed class MSBuildEvaluator(IFileSystem fileSystem)
         public string ProjectDirectory { get; } = projectDirectory;
         public Dictionary<string, PropertyDefinition> Properties { get; } = new(StringComparer.OrdinalIgnoreCase);
         public HashSet<string> ImportedFiles { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>Whether the files being evaluated are imported after the project's own properties.</summary>
+        public bool AfterProject { get; set; }
 
         // Last version-setting item per package, per item type.
         public Dictionary<string, PackageItem> PackageReferences { get; } = new(StringComparer.OrdinalIgnoreCase);
@@ -180,6 +186,7 @@ internal sealed class MSBuildEvaluator(IFileSystem fileSystem)
             EvaluateFileIfPresent(projectFullPath, state);
         }
 
+        state.AfterProject = true;
         EvaluateFileIfPresent(FindFileAbove(projectDirectory, "Directory.Build.targets"), state);
         EvaluateItems(state);
         return state;
@@ -394,6 +401,7 @@ internal sealed class MSBuildEvaluator(IFileSystem fileSystem)
             FilePath = filePath,
             ElementIndex = elementIndexes.TryGetValue(property, out var index) ? index : -1,
             Ambiguous = ambiguous,
+            AfterProject = state.AfterProject,
             LinkName = linkName,
             Link = link,
         };

@@ -37,6 +37,6 @@ internal sealed class DotNetProjectEvaluator(IDependencyGraphService dependencyG
         _evaluator.Evaluate(appPath + ".csproj", includeProjectFile: false).Properties
             .ToDictionary(
                 pair => pair.Key,
-                pair => new ImportedProperty(pair.Value.Name, pair.Value.RawValue, pair.Value.Value, pair.Value.FilePath, pair.Value.ElementIndex, pair.Value.Ambiguous),
+                pair => new ImportedProperty(pair.Value.Name, pair.Value.RawValue, pair.Value.Value, pair.Value.FilePath, pair.Value.ElementIndex, pair.Value.Ambiguous, pair.Value.AfterProject),
                 StringComparer.OrdinalIgnoreCase);
 }

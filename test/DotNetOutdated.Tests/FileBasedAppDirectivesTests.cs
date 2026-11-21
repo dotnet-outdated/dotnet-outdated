@@ -20,6 +20,7 @@ namespace DotNetOutdated.Tests
     {
         private static readonly string AppPath = XFS.Path(@"c:\repo\app.cs");
         private static readonly string RootPropsPath = XFS.Path(@"c:\repo\Directory.Build.props");
+        private static readonly string TargetsPath = XFS.Path(@"c:\repo\Directory.Build.targets");
 
         private readonly List<string> _warnings = [];
 
@@ -429,6 +430,35 @@ namespace DotNetOutdated.Tests
         }
 
         [Fact]
+        public void SourceFiles_IncludedThroughAPropertyThatDirectoryBuildTargetsSets_UseItsValue()
+        {
+            // Directory.Build.targets is imported after the app's #:property lines, so its value wins, as for the SDK.
+            var fileSystem = FileSystem("#:property Lib=first.cs\n#:include $(Lib)\n", new()
+            {
+                [TargetsPath] = "<Project><PropertyGroup><Lib>second.cs</Lib></PropertyGroup></Project>",
+                [XFS.Path(@"c:\repo\first.cs")] = string.Empty,
+                [XFS.Path(@"c:\repo\second.cs")] = string.Empty,
+            });
+
+            Assert.Equal([AppPath, XFS.Path(@"c:\repo\second.cs")], Directives(fileSystem).SourceFiles(AppPath));
+        }
+
+        [Fact]
+        public void SourceFiles_IncludedThroughADirectoryBuildTargetsPropertyThatUsesAnother_AreNotFollowed()
+        {
+            // Its value was evaluated without the app's #:property lines, so the file it names isn't certain.
+            var fileSystem = FileSystem("#:property Name=second\n#:include $(Lib)\n#:package Foo@1.0.0\n", new()
+            {
+                [TargetsPath] = "<Project><PropertyGroup><Lib>$(Name).cs</Lib></PropertyGroup></Project>",
+                [XFS.Path(@"c:\repo\second.cs")] = "#:package Foo@1.0.0\n",
+            });
+            var directives = Directives(fileSystem);
+
+            Assert.Equal([AppPath], directives.SourceFiles(AppPath));
+            Assert.Contains("could not be followed", directives.WriteDirective(AppPath, ReferenceKind.Package, "Foo", "2.0.0").Failure);
+        }
+
+        [Fact]
         public void SourceFiles_IncludedThroughAProperty_UseItsValueWhenItWasAssigned()
         {
             // As in MSBuild, LibDir takes the value Root has when LibDir is assigned, not Root's later value.
@@ -593,7 +623,9 @@ namespace DotNetOutdated.Tests
         [InlineData("#:package Foo @ 1.0.0", "#:package Foo @ 2.0.0")]
         [InlineData("#:package Foo @ 1.0.0 Note = \"a b\"", "#:package Foo @ 2.0.0 Note = \"a b\"")]
         [InlineData("#:package \"Foo\"@1.0.0", "#:package \"Foo\"@2.0.0")]
-        [InlineData("#:package Foo@\"1.0.0\" PrivateAssets=all", "#:package Foo@2.0.0 PrivateAssets=all")]
+        // A quoted value stays quoted: unquoted, the SDK would read the version and the metadata after it as one value.
+        [InlineData("#:package Foo@\"1.0.0\" PrivateAssets=all", "#:package Foo@\"2.0.0\" PrivateAssets=all")]
+        [InlineData("#:package Foo @ \"1.0.0\" PrivateAssets=all", "#:package Foo @ \"2.0.0\" PrivateAssets=all")]
         [InlineData("#:package Foo\t@1.0.0", "#:package Foo\t@2.0.0")]
         public void WriteDirective_WithWhitespaceAroundTheSeparator_RewritesTheDirective(string directive, string expected)
         {
@@ -675,6 +707,10 @@ namespace DotNetOutdated.Tests
         // References skip a range that holds no single version, so only the directives show the id is a property.
         [InlineData("#:include lib/shared.cs\n#:property FooId=Foo\n", "#:package $(FooId)@[1.0.0,3.0.0)\n", "names it through a property")]
         [InlineData("#:include lib/shared.cs\n#:property FooId=Foo\n", "#:package $(FooId) @ 1.0.0\n", "names it through a property")]
+        // A literal version would stop it following the property, which may be defined where this can't read it.
+        [InlineData("#:include lib/shared.cs\n#:package Foo@1.0.0\n", "#:package Foo@$(FOO_VERSION)\n", "takes its version from a property")]
+        // A property function isn't evaluated, so the file it names isn't known.
+        [InlineData("#:include \"$([System.String]::Copy('lib/shared.cs'))\"\n#:package Foo@1.0.0\n", "#:package Foo@1.0.0\n", "could not be followed")]
         public void WriteDirective_ThatCannotBeWrittenSafely_FailsWithoutWriting(string app, string shared, string expectedFailure)
         {
             var fileSystem = FileSystem(app, new() { [SharedPath] = shared });
@@ -685,6 +721,40 @@ namespace DotNetOutdated.Tests
             Assert.Contains(expectedFailure, write.Failure);
             Assert.Equal(app, fileSystem.File.ReadAllText(AppPath));
             Assert.Equal(shared, fileSystem.File.ReadAllText(SharedPath));
+        }
+
+        [Fact]
+        public void WriteDirective_WhenALaterFileCannotBeWritten_ChangesBackTheFilesAlreadyWritten()
+        {
+            const string app = "#:include lib/shared.cs\n#:package Foo@1.0.0\n";
+            const string shared = "#:package Foo@1.0.0\n";
+            var fileSystem = FileSystem(app, new() { [SharedPath] = shared });
+            fileSystem.File.SetAttributes(SharedPath, System.IO.FileAttributes.ReadOnly);
+
+            var write = Directives(fileSystem).WriteDirective(AppPath, ReferenceKind.Package, "Foo", "2.0.0");
+
+            Assert.Contains($"'{SharedPath}' could not be written", write.Failure);
+            Assert.Contains("No file was changed.", write.Failure);
+            Assert.Empty(write.ChangedFiles);
+            Assert.Equal(app, fileSystem.File.ReadAllText(AppPath));
+            Assert.Equal(shared, fileSystem.File.ReadAllText(SharedPath));
+        }
+
+        [Fact]
+        public void TryUpdateVariable_UsedByAnIncludePath_WarnsAndChangesNothing()
+        {
+            // A new value would include another file, which may define the property or declare the package too.
+            const string app = "#:property V=1.0.0\n#:property LibDir=lib/$(V)\n#:include $(LibDir)/shared.cs\n#:package Foo@$(V)\n";
+            var included = XFS.Path(@"c:\repo\lib\1.0.0\shared.cs");
+            var fileSystem = FileSystem(app, new() { [included] = "#:property V=1.0.0\n" });
+            var directives = Directives(fileSystem);
+            var variableInfo = directives.PackageVariables(AppPath, ReferenceKind.Package)["Foo"];
+
+            Assert.False(directives.TryUpdateVariable(AppPath, variableInfo, new NuGetVersion("2.0.0")));
+
+            Assert.Equal(app, fileSystem.File.ReadAllText(AppPath));
+            Assert.Equal("#:property V=1.0.0\n", fileSystem.File.ReadAllText(included));
+            Assert.Contains(_warnings, w => w.Contains("'#:include $(LibDir)/shared.cs'") && w.Contains("uses $(V)"));
         }
 
         [Fact]
@@ -811,7 +881,7 @@ namespace DotNetOutdated.Tests
             Assert.True(directives.TryUpdateVariable(AppPath, variableInfo, new NuGetVersion("2.0.0")));
 
             Assert.Equal(app.Replace("1.0.0", "2.0.0"), fileSystem.File.ReadAllText(AppPath));
-            Assert.Equal("#:property fooversion = 2.0.0\n#:property FooVersionSuffix=1.0.0\n", fileSystem.File.ReadAllText(SharedPath));
+            Assert.Equal("#:property fooversion = \"2.0.0\"\n#:property FooVersionSuffix=1.0.0\n", fileSystem.File.ReadAllText(SharedPath));
         }
 
         [Fact]
