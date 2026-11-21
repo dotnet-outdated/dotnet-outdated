@@ -77,69 +77,79 @@ public class DotNetRunnerTests
     [Fact]
     public void WhenTheIdleTimeoutExpires_TheProcessIsKilled()
     {
-        // The process prints its id and then stays silent, so the runner times out on a process the test can look up.
-        // The timeout leaves room for a slow shell start (PowerShell on a loaded CI agent) before the id is printed.
+        // The process writes its id to a file and then stays silent, so the runner times out on a process the test can
+        // look up. The id goes to a file rather than to the output, so the test doesn't depend on how soon the runner
+        // reads the output: its readers run on the thread pool, and PowerShell can be slow to start on a CI agent. The
+        // timeout leaves room for that start, so the process is usually stopped after writing its id.
+        string idFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
         (string fileName, string[] arguments) = OperatingSystem.IsWindows()
-            ? ("powershell", new[] { "-NoProfile", "-NonInteractive", "-Command", "Write-Output $PID; Start-Sleep -Seconds 60" })
-            : ("sh", new[] { "-c", "echo $$; exec sleep 60" });
+            ? ("powershell", new[] { "-NoProfile", "-NonInteractive", "-Command", $"Set-Content -LiteralPath '{idFile}' -Value $PID; Start-Sleep -Seconds 60" })
+            : ("sh", new[] { "-c", $"echo $$ > '{idFile}'; exec sleep 60" });
         var runner = new DotNetRunner(new DotNetRunnerOptions { IdleTimeout = TimeSpan.FromSeconds(3), FileName = fileName });
 
-        RunStatus status = runner.Run(Path.GetTempPath(), arguments);
-
-        Assert.Equal(-1, status.ExitCode);
-        if (!int.TryParse(status.Output.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out int processId))
-        {
-            // TEMPORARY DIAGNOSTIC: tells a starved thread pool apart from a slow or silent shell.
-            ThreadPool.GetAvailableThreads(out int availableWorkers, out _);
-            ThreadPool.GetMaxThreads(out int maxWorkers, out _);
-            var pool = $"{ThreadPool.ThreadCount} threads, {maxWorkers - availableWorkers} busy workers, {ThreadPool.PendingWorkItemCount} pending items";
-            var probe = Stopwatch.StartNew();
-            using var direct = Process.Start(new ProcessStartInfo(fileName, arguments) { RedirectStandardOutput = true, UseShellExecute = false, CreateNoWindow = true })!;
-            // Read on a dedicated thread, off the thread pool, and give up after 30 seconds rather than hang the run.
-            string firstLine = "(nothing)";
-            TimeSpan probeTime = TimeSpan.Zero;
-            var reader = new Thread(() =>
-            {
-                // An exception escaping a thread of our own would take down the test process.
-                try
-                {
-                    firstLine = direct.StandardOutput.ReadLine();
-                }
-                catch (Exception e)
-                {
-                    firstLine = $"({e.GetType().Name}: {e.Message})";
-                }
-
-                probeTime = probe.Elapsed;
-            }) { IsBackground = true };
-            reader.Start();
-            bool read = reader.Join(TimeSpan.FromSeconds(30));
-            direct.Kill(entireProcessTree: true);
-            Assert.Fail(
-                $"No process id in the output. Output: '{status.Output}'. Errors: '{status.Errors}'. Thread pool: {pool}. " +
-                (read
-                    ? $"A second {fileName}, read on its own thread, printed '{firstLine}' after {probeTime.TotalMilliseconds:0} ms."
-                    : $"A second {fileName}, read on its own thread, printed nothing in 30 seconds."));
-        }
-        Process process;
         try
         {
-            process = Process.GetProcessById(processId);
-        }
-        catch (ArgumentException)
-        {
-            return; // Already gone.
-        }
+            RunStatus status = runner.Run(Path.GetTempPath(), arguments);
 
-        using (process)
-        {
-            bool exited = process.WaitForExit(TimeSpan.FromSeconds(10));
-            if (!exited)
+            Assert.Equal(-1, status.ExitCode);
+
+            // A process the runner left running writes its id in the end, so wait for it. A process stopped before it
+            // got that far never writes one.
+            if (!TryReadProcessId(idFile, TimeSpan.FromSeconds(10), out int processId))
             {
-                process.Kill();
+                return;
             }
 
-            Assert.True(exited, "The hung process was left running.");
+            Process process;
+            try
+            {
+                process = Process.GetProcessById(processId);
+            }
+            catch (ArgumentException)
+            {
+                return; // Already gone.
+            }
+
+            using (process)
+            {
+                bool exited = process.WaitForExit(TimeSpan.FromSeconds(10));
+                if (!exited)
+                {
+                    process.Kill();
+                }
+
+                Assert.True(exited, "The hung process was left running.");
+            }
         }
+        finally
+        {
+            File.Delete(idFile);
+        }
+    }
+
+    private static bool TryReadProcessId(string path, TimeSpan timeout, out int processId)
+    {
+        var waited = Stopwatch.StartNew();
+        do
+        {
+            try
+            {
+                // The file can be there before its content is.
+                if (int.TryParse(File.ReadAllText(path).Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out processId))
+                {
+                    return true;
+                }
+            }
+            catch (IOException)
+            {
+                // Not written yet, or still being written.
+            }
+
+            Thread.Sleep(100);
+        }
+        while (waited.Elapsed < timeout);
+
+        processId = 0;
+        return false;
     }
 }
