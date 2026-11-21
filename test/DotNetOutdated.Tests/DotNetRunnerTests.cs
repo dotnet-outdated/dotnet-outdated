@@ -100,7 +100,16 @@ public class DotNetRunnerTests
             TimeSpan probeTime = TimeSpan.Zero;
             var reader = new Thread(() =>
             {
-                firstLine = direct.StandardOutput.ReadLine();
+                // An exception escaping a thread of our own would take down the test process.
+                try
+                {
+                    firstLine = direct.StandardOutput.ReadLine();
+                }
+                catch (Exception e)
+                {
+                    firstLine = $"({e.GetType().Name}: {e.Message})";
+                }
+
                 probeTime = probe.Elapsed;
             }) { IsBackground = true };
             reader.Start();
