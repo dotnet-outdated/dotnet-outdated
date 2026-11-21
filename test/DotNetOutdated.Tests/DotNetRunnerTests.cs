@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.Threading;
 using DotNetOutdated.Core.Services;
 using Xunit;
 
@@ -86,7 +87,21 @@ public class DotNetRunnerTests
         RunStatus status = runner.Run(Path.GetTempPath(), arguments);
 
         Assert.Equal(-1, status.ExitCode);
-        int processId = int.Parse(status.Output.Trim(), CultureInfo.InvariantCulture);
+        if (!int.TryParse(status.Output.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out int processId))
+        {
+            // TEMPORARY DIAGNOSTIC: tells a starved thread pool apart from a slow or silent shell.
+            ThreadPool.GetAvailableThreads(out int availableWorkers, out _);
+            ThreadPool.GetMaxThreads(out int maxWorkers, out _);
+            var pool = $"{ThreadPool.ThreadCount} threads, {maxWorkers - availableWorkers} busy workers, {ThreadPool.PendingWorkItemCount} pending items";
+            var probe = Stopwatch.StartNew();
+            using var direct = Process.Start(new ProcessStartInfo(fileName, arguments) { RedirectStandardOutput = true, UseShellExecute = false, CreateNoWindow = true })!;
+            string firstLine = direct.StandardOutput.ReadLine();
+            var probeTime = probe.Elapsed;
+            direct.Kill();
+            Assert.Fail(
+                $"No process id in the output. Output: '{status.Output}'. Errors: '{status.Errors}'. Thread pool: {pool}. " +
+                $"A second {fileName}, read synchronously, printed '{firstLine}' after {probeTime.TotalMilliseconds:0} ms.");
+        }
         Process process;
         try
         {
