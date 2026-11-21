@@ -1528,6 +1528,39 @@ Console.WriteLine();")
         }
 
         [Fact]
+        public void FileBasedAppWhoseIncludedFileCannotBeRead_FailsAloneAndTheOthersAreUpgraded()
+        {
+            // broken.cs's included file can no longer be read; good.cs, upgraded with it, is unaffected.
+            var brokenAppPath = XFS.Path(@"c:\repo\broken.cs");
+            var goodAppPath = XFS.Path(@"c:\repo\good.cs");
+            var secretPath = XFS.Path(@"c:\repo\lib\secret.cs");
+            var fileSystem = new FaultyFileSystem { Unreadable = path => path == secretPath };
+            fileSystem.AddFile(brokenAppPath, new MockFileData("#:include lib/secret.cs\n#:package Humanizer@3.0.10\n"));
+            fileSystem.AddFile(goodAppPath, new MockFileData("#:include lib/good.cs\n"));
+            fileSystem.AddFile(secretPath, new MockFileData("#:package Humanizer@3.0.10\n"));
+            fileSystem.AddFile(XFS.Path(@"c:\repo\lib\good.cs"), new MockFileData("#:package Humanizer@3.0.10\n"));
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
+            var upgrade = new ReferenceUpgrade
+            {
+                Name = "Humanizer",
+                Kind = ReferenceKind.Package,
+                Version = new NuGetVersion("3.0.11"),
+                Projects = [new UpgradeProject(brokenAppPath, "net10.0"), new UpgradeProject(goodAppPath, "net10.0")],
+                HeldBack = [new UpgradeProject(XFS.Path(@"c:\repo\other.cs"), "net10.0")],
+            };
+
+            var results = service.Upgrade(upgrade);
+
+            var broken = results.Single(result => result.ProjectPath == brokenAppPath);
+            Assert.Equal(UpgradeOutcome.Failed, broken.Outcome);
+            Assert.Contains("is denied", broken.FailureDetails);
+            Assert.Equal(UpgradeOutcome.Upgraded, results.Single(result => result.ProjectPath == goodAppPath).Outcome);
+            Assert.Equal("#:package Humanizer@3.0.11\n", fileSystem.File.ReadAllText(XFS.Path(@"c:\repo\lib\good.cs")));
+        }
+
+        [Fact]
         public void FileBasedAppWithAPropertyBackedVersion_RestoresAnAppThatSharesALiteralDeclarationItWrote()
         {
             // first.cs writes the literal in shared.cs along with its property, so second.cs, which declares the

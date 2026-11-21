@@ -142,11 +142,18 @@ namespace DotNetOutdated.Core.Services
                 bool Reached(IGrouping<string, UpgradeProject> projects)
                 {
                     var directives = new FileBasedAppDirectives(_fileSystem, _evaluator, _ => { });
-                    return projects
-                        .SelectMany(project => project.Path.IsCSharpFile()
-                            ? PackageVersionLocations(directives, project.Path, upgrade.Name, project.TargetFramework)
-                            : plan.Locations.GetValueOrDefault(project, []))
-                        .Any(_reachedLocations!.Contains);
+                    try
+                    {
+                        return projects
+                            .SelectMany(project => project.Path.IsCSharpFile()
+                                ? PackageVersionLocations(directives, project.Path, upgrade.Name, project.TargetFramework)
+                                : plan.Locations.GetValueOrDefault(project, []))
+                            .Any(_reachedLocations!.Contains);
+                    }
+                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                    {
+                        return false;
+                    }
                 }
 
                 ProjectUpgradeResult Run(IGrouping<string, UpgradeProject> projects)
@@ -211,8 +218,32 @@ namespace DotNetOutdated.Core.Services
 
             var directives = new FileBasedAppDirectives(_fileSystem, _evaluator, _ => { });
             var locator = new VersionLocator(_fileSystem, _evaluator, directives);
-            bool IsPackage(UpgradeProject project) => locator.ResolveKind(project.Path, upgrade.Name, upgrade.Kind) == ReferenceKind.Package;
-            IReadOnlyList<string> Locations(UpgradeProject project) => PackageVersionLocations(directives, project.Path, upgrade.Name, project.TargetFramework);
+
+            // A project whose files can't be read shares nothing that is known: it fails when it is upgraded, and a
+            // held-back one isn't upgraded with the others.
+            bool IsPackage(UpgradeProject project)
+            {
+                try
+                {
+                    return locator.ResolveKind(project.Path, upgrade.Name, upgrade.Kind) == ReferenceKind.Package;
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    return false;
+                }
+            }
+
+            IReadOnlyList<string> Locations(UpgradeProject project)
+            {
+                try
+                {
+                    return PackageVersionLocations(directives, project.Path, upgrade.Name, project.TargetFramework);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    return [];
+                }
+            }
 
             var projectLocations = new Dictionary<UpgradeProject, IReadOnlyList<string>>();
             foreach (var project in upgrade.Projects.Distinct().Where(IsPackage))
@@ -325,41 +356,49 @@ namespace DotNetOutdated.Core.Services
             {
                 HeldBackUpgraded = heldBackUpgraded,
             };
-            var locator = new VersionLocator(_fileSystem, _evaluator, directives);
-            var kind = locator.ResolveKind(projectPath, upgrade.Name, upgrade.Kind);
-
-            VersionRange? removedRange = null;
-            if (kind == ReferenceKind.Package && !IsSdkStyleProject(projectPath))
+            // A file the project reads (an included file, say) that can no longer be read fails this project alone.
+            try
             {
-                // Removing the reference takes its declared range with it, so read that first.
-                removedRange = locator.Locate(projectPath, upgrade.Name, kind, targetFrameworks.FirstOrDefault()).DeclaredRange;
-                warnings.Add(
-                    $"'{projectPath}' isn't an SDK-style project, so {upgrade.Name} was removed and added back at the new version.");
-                var removal = RemovePackage(projectPath, upgrade.Name);
-                if (!removal.IsSuccess)
-                {
-                    return Result(context, UpgradeOutcome.Failed, removal.FailureDetails);
-                }
-            }
+                var locator = new VersionLocator(_fileSystem, _evaluator, directives);
+                var kind = locator.ResolveKind(projectPath, upgrade.Name, upgrade.Kind);
 
-            // `dotnet add package -f` changes one target framework's reference, and a pin in an imported file is
-            // written on the item that target framework uses, so both run for each target framework the project is
-            // listed with (a file-based app takes no -f). Any other location is written once.
-            var writes = new List<Write> { WriteLocation(context, locator, kind, removedRange, targetFrameworks.FirstOrDefault()) };
-            if (!projectPath.IsCSharpFile())
-            {
-                foreach (var targetFramework in targetFrameworks.Skip(1))
+                VersionRange? removedRange = null;
+                if (kind == ReferenceKind.Package && !IsSdkStyleProject(projectPath))
                 {
-                    if (writes[^1] is not (AddedWithDotNet { Status.IsSuccess: true } or Written { PerTargetFramework: true }))
+                    // Removing the reference takes its declared range with it, so read that first.
+                    removedRange = locator.Locate(projectPath, upgrade.Name, kind, targetFrameworks.FirstOrDefault()).DeclaredRange;
+                    warnings.Add(
+                        $"'{projectPath}' isn't an SDK-style project, so {upgrade.Name} was removed and added back at the new version.");
+                    var removal = RemovePackage(projectPath, upgrade.Name);
+                    if (!removal.IsSuccess)
                     {
-                        break;
+                        return Result(context, UpgradeOutcome.Failed, removal.FailureDetails);
                     }
-
-                    writes.Add(WriteLocation(context, locator, kind, removedRange, targetFramework));
                 }
-            }
 
-            return Finish(context, writes);
+                // `dotnet add package -f` changes one target framework's reference, and a pin in an imported file is
+                // written on the item that target framework uses, so both run for each target framework the project is
+                // listed with (a file-based app takes no -f). Any other location is written once.
+                var writes = new List<Write> { WriteLocation(context, locator, kind, removedRange, targetFrameworks.FirstOrDefault()) };
+                if (!projectPath.IsCSharpFile())
+                {
+                    foreach (var targetFramework in targetFrameworks.Skip(1))
+                    {
+                        if (writes[^1] is not (AddedWithDotNet { Status.IsSuccess: true } or Written { PerTargetFramework: true }))
+                        {
+                            break;
+                        }
+
+                        writes.Add(WriteLocation(context, locator, kind, removedRange, targetFramework));
+                    }
+                }
+
+                return Finish(context, writes);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return Result(context, UpgradeOutcome.Failed, $"Failed to upgrade '{projectPath}' for '{upgrade.Name}': {ex.Message}");
+            }
         }
 
         // Finds the version location as it is now (an earlier target framework's `dotnet add package` may have changed
