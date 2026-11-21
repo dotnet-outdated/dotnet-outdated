@@ -23,7 +23,7 @@ An MSBuild property (or `#:property`) whose value is a reference's version, read
 _Avoid_: Package variable
 
 **File-based app**:
-A single `.cs` file run with `dotnet run`, whose references are declared with `#:package`, `#:sdk` and `#:property` directives.
+A `.cs` file run with `dotnet run` (its entry point), together with the `.cs` files it pulls in with `#:include`. Its references are declared with `#:package`, `#:sdk` and `#:property` directives in any of those files, and belong to the app whichever file declares them.
 
 **Upgrade**:
 Changing a reference's version at its version location to a newer version, keeping version variables, the file's formatting, and a declared upper bound the new version still satisfies.

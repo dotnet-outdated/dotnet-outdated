@@ -50,7 +50,7 @@ namespace DotNetOutdated.Tests
 
             public bool TryUpdatePackageVariable(PackageVariableInfo variableInfo, VersionRange newVersionRange) =>
                 variableInfo.IsFileBasedDirective
-                    ? Directives.TryUpdateVariable(variableInfo, newVersionRange.MinVersion)
+                    ? Directives.TryUpdateVariable(variableInfo.PackageReferenceFilePath, variableInfo, newVersionRange.MinVersion)
                     : _writer.TryUpdate(variableInfo, newVersionRange);
 
             public void UpdatePackageVariable(PackageVariableInfo variableInfo, NuGetVersion newVersion) =>
@@ -60,7 +60,7 @@ namespace DotNetOutdated.Tests
                 TryUpdatePackageVariable(variableInfo, newVersionRange);
 
             public bool UpdateFileBasedAppDirectReference(string projectFilePath, string name, ReferenceKind kind, NuGetVersion newVersion) =>
-                Directives.TryUpdateDirectReference(projectFilePath, name, kind, newVersion);
+                Directives.WriteDirective(projectFilePath, kind, name, newVersion.ToString()).ChangedFiles.Count > 0;
         }
 
         [Theory]

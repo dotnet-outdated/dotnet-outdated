@@ -53,6 +53,9 @@ internal interface IProjectEvaluator
 
 /// <summary>A property defined by a file that MSBuild imports for a project, and where its definition in effect is.</summary>
 /// <param name="RawValue">The trimmed, unexpanded text of the property element.</param>
+/// <param name="Value">
+/// <paramref name="RawValue"/> with its property references expanded, or <see langword="null"/> when that isn't possible.
+/// </param>
 /// <param name="FilePath">The full path of the file whose definition is in effect.</param>
 /// <param name="ElementIndex">
 /// The index of that definition among the same-named property elements under any <c>PropertyGroup</c> in
@@ -62,7 +65,23 @@ internal interface IProjectEvaluator
 /// Whether the definition is assigned under a condition that couldn't be evaluated, or derives from such a property,
 /// so the value in effect isn't certain.
 /// </param>
-internal sealed record ImportedProperty(string Name, string RawValue, string FilePath, int ElementIndex, bool Ambiguous);
+/// <param name="AfterProject">
+/// Whether the definition is in a file imported after the project's own properties (Directory.Build.targets), so it
+/// overrides a file-based app's <c>#:property</c> lines.
+/// </param>
+/// <param name="AssumedUndefined">
+/// The undefined properties the definition's condition took to be empty. A file-based app's <c>#:property</c> line
+/// may define one of them before a definition in Directory.Build.targets is evaluated.
+/// </param>
+internal sealed record ImportedProperty(
+    string Name,
+    string RawValue,
+    string? Value,
+    string FilePath,
+    int ElementIndex,
+    bool Ambiguous,
+    bool AfterProject = false,
+    IReadOnlyCollection<string>? AssumedUndefined = null);
 
 /// <summary>The item that sets a package's version for a project.</summary>
 /// <param name="ElementType"><c>PackageReference</c>, <c>GlobalPackageReference</c> or <c>PackageVersion</c>.</param>

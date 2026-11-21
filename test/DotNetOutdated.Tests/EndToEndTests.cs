@@ -36,6 +36,24 @@ public sealed class RequiresFileBasedAppSdkAttribute : FactAttribute
     }
 }
 
+/// <summary>
+/// Skips the test when the installed .NET SDK is older than the first one whose file-based apps support
+/// <c>#:include</c>.
+/// </summary>
+[AttributeUsage(AttributeTargets.Method)]
+public sealed class RequiresFileBasedAppIncludeSdkAttribute : FactAttribute
+{
+    private static readonly Version MinimumSdkVersion = new(11, 0, 100);
+
+    public RequiresFileBasedAppIncludeSdkAttribute()
+    {
+        if (!DotNetSdkDetector.HasSdkVersionAtLeast(MinimumSdkVersion))
+        {
+            Skip = $"Requires .NET SDK {MinimumSdkVersion} or newer.";
+        }
+    }
+}
+
 internal static class DotNetSdkDetector
 {
     public static bool HasSdkVersionAtLeast(Version minimumVersion)
@@ -195,6 +213,40 @@ public static class EndToEndTests
         var content = File.ReadAllText(appPath);
 
         Assert.Contains("#:package DotNetOutdated.Fake.Json@13.0.4", content);
+    }
+
+    // The package is declared in a file app.cs includes, so it is upgraded there and app.cs is left alone (#843).
+    [RequiresFileBasedAppIncludeSdk]
+    public static void Can_Analyze_And_Upgrade_File_Based_App_With_Package_In_Included_File()
+    {
+        using var project = TestSetup("file-based-app-include");
+
+        var appPath = Path.Combine(project.Path, "app.cs");
+        var includedPath = Path.Combine(project.Path, "lib", "json.cs");
+        var outputPath = Path.Combine(project.Path, "output.json");
+        var originalApp = File.ReadAllText(appPath);
+
+        Assert.Equal(0, Program.Main([appPath, "--output", outputPath, "--output-format:json"]));
+
+        using (var output = JsonDocument.Parse(File.ReadAllText(outputPath)))
+        {
+            var analyzedProject = Assert.Single(output.RootElement.GetProperty("Projects").EnumerateArray());
+            var analyzedDependency = Assert.Single(
+                analyzedProject
+                    .GetProperty("TargetFrameworks")
+                    .EnumerateArray()
+                    .SelectMany(targetFramework => targetFramework.GetProperty("Dependencies").EnumerateArray()),
+                dependency => dependency.GetProperty("Name").GetString() == "DotNetOutdated.Fake.Json");
+
+            Assert.Equal("11.0.1", analyzedDependency.GetProperty("ResolvedVersion").GetString());
+            Assert.Equal("13.0.4", analyzedDependency.GetProperty("LatestVersion").GetString());
+        }
+
+        Assert.Equal(0, Program.Main([appPath, "--upgrade"]));
+
+        Assert.Equal(originalApp, File.ReadAllText(appPath));
+        // Git may check the project out with CRLF line endings, so compare the line.
+        Assert.Equal("#:package DotNetOutdated.Fake.Json@13.0.4", File.ReadLines(includedPath).First());
     }
 
     [RequiresFileBasedAppSdk]

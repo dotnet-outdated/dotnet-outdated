@@ -27,12 +27,20 @@ namespace DotNetOutdated.Core.Services
         // there, and the projects restored since. A location shared by several projects, or written by an earlier
         // upgrade (another target framework's), is written once and restores each project once. Writing it again
         // forgets those restores, so a location that was changed back in between restores its projects again.
-        private readonly Dictionary<string, WrittenLocation> _writtenLocations = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, WrittenLocation> _writtenLocations = new(LocationComparer);
 
         private sealed record WrittenLocation(string Value)
         {
-            public HashSet<string> RestoredProjects { get; } = new(StringComparer.OrdinalIgnoreCase);
+            public HashSet<string> RestoredProjects { get; } = new(LocationComparer);
         }
+
+        // Locations (see Location) and project paths spell each file's path as the file system stores it, so they
+        // compare ordinally: two paths that differ only in case are one file where the volume ignores case, and two
+        // where it doesn't.
+        private static readonly StringComparer LocationComparer = StringComparer.Ordinal;
+
+        // A version location: the file, and what in it holds the version. Ids and property names are case-insensitive.
+        private string Location(string filePath, string what) => $"{PathCase.OnDisk(_fileSystem, filePath)}|{what.ToUpperInvariant()}";
 
         public ReferenceUpgrader(IDotNetRunner dotNetRunner, IFileSystem fileSystem)
             : this(dotNetRunner, fileSystem, new DotNetProjectEvaluator(dotNetRunner, fileSystem))
@@ -57,18 +65,119 @@ namespace DotNetOutdated.Core.Services
                 // restored) with the others: leaving both behind instead could leave a package upgraded for the other
                 // target framework depending on a newer version than the one kept, which restore rejects as a
                 // downgrade (NU1605).
-                var heldBackSharing = HeldBackSharingVersion(upgrade);
+                var plan = PlanSharing(upgrade);
+                var heldBackSharing = plan.HeldBack.Select(entry => entry.Project).ToHashSet();
+                var requested = upgrade.Projects.ToHashSet();
+
+                // A held-back file-based app the plan left out can come to share a location once an earlier write
+                // changes the files an app includes, so it is a candidate too, unless it is a target framework of an
+                // upgraded project (which keeps the version only for itself).
+                var upgradedPaths = upgrade.Projects.Select(project => PathCase.OnDisk(_fileSystem, project.Path)).ToHashSet(StringComparer.Ordinal);
+                var lateCandidates = plan.Candidates.Where(project =>
+                    project.Path.IsCSharpFile() &&
+                    !heldBackSharing.Contains(project) &&
+                    !upgradedPaths.Contains(PathCase.OnDisk(_fileSystem, project.Path)));
 
                 // A project listed once per target framework is upgraded once, for all of those target frameworks.
-                return upgrade.Projects
-                    .Concat(heldBackSharing)
-                    .GroupBy(project => _fileSystem.Path.GetFullPath(project.Path), StringComparer.OrdinalIgnoreCase)
-                    .Select(projects => UpgradeProject(
+                // Projects are told apart by the path the file system stores, so two whose paths differ only in case
+                // are one project where the volume ignores case and two where it doesn't. Held-back projects come
+                // after the upgraded ones, those planned first, in the order they were found.
+                var results = new List<ProjectUpgradeResult>();
+                _reachedLocations = new HashSet<string>(LocationComparer);
+                try
+                {
+                    var deferred = new List<IGrouping<string, UpgradeProject>>();
+                    foreach (var projects in upgrade.Projects
+                        .Concat(plan.HeldBack.Select(entry => entry.Project))
+                        .Concat(lateCandidates)
+                        .GroupBy(project => PathCase.OnDisk(_fileSystem, project.Path), StringComparer.Ordinal))
+                    {
+                        if (projects.Any(requested.Contains))
+                        {
+                            results.Add(Run(projects));
+                        }
+                        else
+                        {
+                            deferred.Add(projects);
+                        }
+                    }
+
+                    // A held-back project is upgraded because another writes a location it shares, as its locations
+                    // are now (an earlier write can change the files a file-based app includes). One whose locations
+                    // nothing has reached yet waits until another project's write reaches one; if none does (the
+                    // writes were refused, say), it keeps its version.
+                    bool ran;
+                    do
+                    {
+                        ran = false;
+                        foreach (var projects in deferred.ToList())
+                        {
+                            if (Reached(projects))
+                            {
+                                deferred.Remove(projects);
+                                results.Add(Run(projects));
+                                ran = true;
+                            }
+                        }
+                    }
+                    while (ran);
+
+                    // One that was planned to be upgraded is reported; one that only might have been stays held back.
+                    results.AddRange(deferred.Where(projects => projects.Any(heldBackSharing.Contains)).Select(projects => new ProjectUpgradeResult
+                    {
+                        ProjectPath = projects.First().Path,
+                        Outcome = UpgradeOutcome.Failed,
+                        FailureDetails =
+                            $"'{projects.First().Path}' was held back but shares the version of {upgrade.Name} with a project that couldn't be " +
+                            "upgraded, so neither was changed.",
+                    }));
+                }
+                finally
+                {
+                    _reachedLocations = null;
+                }
+
+                // A file-based app's locations are found again, as earlier writes may have changed the files it
+                // includes; a project file's are as planned.
+                bool Reached(IGrouping<string, UpgradeProject> projects)
+                {
+                    var directives = new FileBasedAppDirectives(_fileSystem, _evaluator, _ => { });
+                    try
+                    {
+                        return projects
+                            .SelectMany(project => project.Path.IsCSharpFile()
+                                ? PackageVersionLocations(directives, project.Path, upgrade.Name, project.TargetFramework)
+                                : plan.Locations.GetValueOrDefault(project, []))
+                            .Any(_reachedLocations!.Contains);
+                    }
+                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                    {
+                        return false;
+                    }
+                }
+
+                ProjectUpgradeResult Run(IGrouping<string, UpgradeProject> projects)
+                {
+                    _wroteDirectly = false;
+                    var result = UpgradeProject(
                         upgrade,
                         projects.First().Path,
                         [.. projects.Select(p => p.TargetFramework).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase)],
-                        [.. projects.Where(heldBackSharing.Contains)]))
-                    .ToList();
+                        [.. projects.Where(project => !requested.Contains(project))]);
+
+                    // A file-based app's direct write records the locations it wrote, which can differ from the planned
+                    // ones (an earlier write can change the files it includes). `dotnet add package` doesn't say, and
+                    // a project file's writes record locations by other names, so the planned locations of those
+                    // projects are taken as reached.
+                    if (result.Outcome != UpgradeOutcome.Failed && !(_wroteDirectly && projects.Key.IsCSharpFile()))
+                    {
+                        _reachedLocations!.UnionWith(projects.SelectMany(project => plan.Locations.GetValueOrDefault(project, [])));
+                    }
+
+                    return result;
+                }
+
+                return results;
             }
         }
 
@@ -78,46 +187,121 @@ namespace DotNetOutdated.Core.Services
 
             lock (_gate)
             {
-                return HeldBackSharingVersion(upgrade);
+                var sharing = PlanSharing(upgrade).HeldBack.Select(entry => entry.Project).ToHashSet();
+                return [.. upgrade.HeldBack.Distinct().Where(sharing.Contains)];
             }
         }
 
-        // The held-back projects whose package version is written where an upgraded project's is.
-        private List<UpgradeProject> HeldBackSharingVersion(ReferenceUpgrade upgrade)
+        // The held-back projects whose package version is written where an upgraded project's is, in the order they
+        // were found, each project's version locations, and every held-back project that references the package.
+        private sealed record SharingPlan(
+            IReadOnlyList<(UpgradeProject Project, IReadOnlyList<string> Locations)> HeldBack,
+            IReadOnlyDictionary<UpgradeProject, IReadOnlyList<string>> Locations,
+            IReadOnlyList<UpgradeProject> Candidates);
+
+        // The locations the projects upgraded so far in Upgrade wrote (or found already at the new value), or null
+        // outside Upgrade.
+        private HashSet<string>? _reachedLocations;
+
+        // Whether the project being upgraded wrote a location directly, which records it in _reachedLocations (by the
+        // names the plan uses, for a file-based app).
+        private bool _wroteDirectly;
+
+        // Upgrading a project writes all of its locations, so a held-back project sharing one of them is upgraded
+        // too, and so is one sharing another of that one's, and so on.
+        private SharingPlan PlanSharing(ReferenceUpgrade upgrade)
         {
             if (upgrade.HeldBack.Count == 0)
             {
-                return [];
+                return new SharingPlan([], new Dictionary<UpgradeProject, IReadOnlyList<string>>(), []);
             }
 
             var directives = new FileBasedAppDirectives(_fileSystem, _evaluator, _ => { });
             var locator = new VersionLocator(_fileSystem, _evaluator, directives);
-            bool IsPackage(UpgradeProject project) => locator.ResolveKind(project.Path, upgrade.Name, upgrade.Kind) == ReferenceKind.Package;
-            string Location(UpgradeProject project) => PackageVersionLocation(project.Path, upgrade.Name, project.TargetFramework);
 
-            var upgradedLocations = upgrade.Projects.Where(IsPackage).Select(Location).ToHashSet(StringComparer.OrdinalIgnoreCase);
-            return [.. upgrade.HeldBack.Where(project => IsPackage(project) && upgradedLocations.Contains(Location(project))).Distinct()];
+            // A project whose files can't be read shares nothing that is known: it fails when it is upgraded, and a
+            // held-back one isn't upgraded with the others.
+            bool IsPackage(UpgradeProject project)
+            {
+                try
+                {
+                    return locator.ResolveKind(project.Path, upgrade.Name, upgrade.Kind) == ReferenceKind.Package;
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    return false;
+                }
+            }
+
+            IReadOnlyList<string> Locations(UpgradeProject project)
+            {
+                try
+                {
+                    return PackageVersionLocations(directives, project.Path, upgrade.Name, project.TargetFramework);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    return [];
+                }
+            }
+
+            var projectLocations = new Dictionary<UpgradeProject, IReadOnlyList<string>>();
+            foreach (var project in upgrade.Projects.Distinct().Where(IsPackage))
+            {
+                projectLocations[project] = Locations(project);
+            }
+
+            var writtenLocations = projectLocations.Values.SelectMany(locations => locations).ToHashSet(LocationComparer);
+            var heldBack = upgrade.HeldBack.Distinct().Where(IsPackage).Select(project => (Project: project, Locations: Locations(project))).ToList();
+            var sharing = new List<(UpgradeProject Project, IReadOnlyList<string> Locations)>();
+            bool found;
+            do
+            {
+                found = false;
+                foreach (var entry in heldBack)
+                {
+                    if (!sharing.Contains(entry) && entry.Locations.Any(writtenLocations.Contains))
+                    {
+                        sharing.Add(entry);
+                        projectLocations.TryAdd(entry.Project, entry.Locations);
+                        writtenLocations.UnionWith(entry.Locations);
+                        found = true;
+                    }
+                }
+            }
+            while (found);
+
+            return new SharingPlan(sharing, projectLocations, [.. heldBack.Select(entry => entry.Project)]);
         }
 
         // Identifies where a package's version is written for a target framework of a project, so that target
         // frameworks and projects that share it can be told apart from those that don't. A package the project gives
-        // no version is added for that target framework alone.
-        private string PackageVersionLocation(string projectPath, string name, string? targetFramework)
+        // no version is added for that target framework alone. A file-based app can declare it in several of the files
+        // it compiles, which other apps may include too.
+        private IReadOnlyList<string> PackageVersionLocations(FileBasedAppDirectives directives, string projectPath, string name, string? targetFramework)
         {
             var fullPath = _fileSystem.Path.GetFullPath(projectPath);
             if (projectPath.IsCSharpFile())
             {
-                return fullPath;
+                if (directives.PackageVariables(projectPath, ReferenceKind.Package).TryGetValue(name, out var directiveVariable))
+                {
+                    return [.. FileBasedVariableLocations(directives, projectPath, directiveVariable).Select(location => location.Location)];
+                }
+
+                var declaringFiles = directives.DeclaringFiles(projectPath, ReferenceKind.Package, name);
+                return declaringFiles.Count > 0
+                    ? [.. declaringFiles.Select(file => DirectiveLocation(file, ReferenceKind.Package, name))]
+                    : [fullPath];
             }
 
             if (!_evaluator.GetPackageVersions(projectPath, targetFramework).TryGetValue(name, out var declaration))
             {
-                return $"{fullPath}|{targetFramework}";
+                return [Location(fullPath, targetFramework ?? string.Empty)];
             }
 
             return declaration.Variable is { UnsupportedReason: null } variable
-                ? VariableLocation(variable)
-                : $"{_fileSystem.Path.GetFullPath(declaration.FilePath)}|{declaration.ElementType}|{declaration.ElementIndex}";
+                ? [VariableLocation(variable)]
+                : [Location(_fileSystem.Path.GetFullPath(declaration.FilePath), $"{declaration.ElementType}|{declaration.ElementIndex}")];
         }
 
         /// <summary>
@@ -147,10 +331,17 @@ namespace DotNetOutdated.Core.Services
 
         private sealed record WriteFailed(string Message) : Write;
 
-        // The location was written directly with Value; Changed is false when it already held that value.
-        // PerTargetFramework is set when another target framework may declare the reference somewhere else (a pin
-        // under its own condition), so each target framework's location is written.
-        private sealed record Written(bool Changed, string Location, string Value, bool PerTargetFramework = false) : Write;
+        // The locations were written directly with Value; a location's Changed is false when it already held that
+        // value. A reference declared in several files (an app's directive repeated in a file it includes) has a
+        // location for each. PerTargetFramework is set when another target framework may declare the reference
+        // somewhere else (a pin under its own condition), so each target framework's location is written.
+        private sealed record Written(IReadOnlyList<(string Location, bool Changed)> Locations, string Value, bool PerTargetFramework = false) : Write
+        {
+            public Written(bool changed, string location, string value, bool perTargetFramework = false)
+                : this([(location, changed)], value, perTargetFramework)
+            {
+            }
+        }
 
         // `dotnet add package` changed the version, and restored the project unless --no-restore was set.
         private sealed record AddedWithDotNet(RunStatus Status) : Write;
@@ -165,41 +356,49 @@ namespace DotNetOutdated.Core.Services
             {
                 HeldBackUpgraded = heldBackUpgraded,
             };
-            var locator = new VersionLocator(_fileSystem, _evaluator, directives);
-            var kind = locator.ResolveKind(projectPath, upgrade.Name, upgrade.Kind);
-
-            VersionRange? removedRange = null;
-            if (kind == ReferenceKind.Package && !IsSdkStyleProject(projectPath))
+            // A file the project reads (an included file, say) that can no longer be read fails this project alone.
+            try
             {
-                // Removing the reference takes its declared range with it, so read that first.
-                removedRange = locator.Locate(projectPath, upgrade.Name, kind, targetFrameworks.FirstOrDefault()).DeclaredRange;
-                warnings.Add(
-                    $"'{projectPath}' isn't an SDK-style project, so {upgrade.Name} was removed and added back at the new version.");
-                var removal = RemovePackage(projectPath, upgrade.Name);
-                if (!removal.IsSuccess)
-                {
-                    return Result(context, UpgradeOutcome.Failed, removal.FailureDetails);
-                }
-            }
+                var locator = new VersionLocator(_fileSystem, _evaluator, directives);
+                var kind = locator.ResolveKind(projectPath, upgrade.Name, upgrade.Kind);
 
-            // `dotnet add package -f` changes one target framework's reference, and a pin in an imported file is
-            // written on the item that target framework uses, so both run for each target framework the project is
-            // listed with (a file-based app takes no -f). Any other location is written once.
-            var writes = new List<Write> { WriteLocation(context, locator, kind, removedRange, targetFrameworks.FirstOrDefault()) };
-            if (!projectPath.IsCSharpFile())
-            {
-                foreach (var targetFramework in targetFrameworks.Skip(1))
+                VersionRange? removedRange = null;
+                if (kind == ReferenceKind.Package && !IsSdkStyleProject(projectPath))
                 {
-                    if (writes[^1] is not (AddedWithDotNet { Status.IsSuccess: true } or Written { PerTargetFramework: true }))
+                    // Removing the reference takes its declared range with it, so read that first.
+                    removedRange = locator.Locate(projectPath, upgrade.Name, kind, targetFrameworks.FirstOrDefault()).DeclaredRange;
+                    warnings.Add(
+                        $"'{projectPath}' isn't an SDK-style project, so {upgrade.Name} was removed and added back at the new version.");
+                    var removal = RemovePackage(projectPath, upgrade.Name);
+                    if (!removal.IsSuccess)
                     {
-                        break;
+                        return Result(context, UpgradeOutcome.Failed, removal.FailureDetails);
                     }
-
-                    writes.Add(WriteLocation(context, locator, kind, removedRange, targetFramework));
                 }
-            }
 
-            return Finish(context, writes);
+                // `dotnet add package -f` changes one target framework's reference, and a pin in an imported file is
+                // written on the item that target framework uses, so both run for each target framework the project is
+                // listed with (a file-based app takes no -f). Any other location is written once.
+                var writes = new List<Write> { WriteLocation(context, locator, kind, removedRange, targetFrameworks.FirstOrDefault()) };
+                if (!projectPath.IsCSharpFile())
+                {
+                    foreach (var targetFramework in targetFrameworks.Skip(1))
+                    {
+                        if (writes[^1] is not (AddedWithDotNet { Status.IsSuccess: true } or Written { PerTargetFramework: true }))
+                        {
+                            break;
+                        }
+
+                        writes.Add(WriteLocation(context, locator, kind, removedRange, targetFramework));
+                    }
+                }
+
+                return Finish(context, writes);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return Result(context, UpgradeOutcome.Failed, $"Failed to upgrade '{projectPath}' for '{upgrade.Name}': {ex.Message}");
+            }
         }
 
         // Finds the version location as it is now (an earlier target framework's `dotnet add package` may have changed
@@ -213,7 +412,8 @@ namespace DotNetOutdated.Core.Services
             {
                 NotEditable notEditable => new WriteFailed(notEditable.Message),
                 FileBasedVariableVersion l => UpdateFileBasedVariable(context, l.Variable),
-                FileBasedDirectiveVersion l => UpdateFileBasedDirective(context, l.Reference),
+                FileBasedDirectiveVersion => UpdateFileBasedDirectives(context, ReferenceKind.Sdk, upgrade.Version.ToString()),
+                FileBasedPackageDirectiveVersion => UpdateFileBasedDirectives(context, ReferenceKind.Package, range.ToVersionString()),
                 ProjectSdkVersion l => UpdateProjectSdk(context, l.Sdk),
                 MSBuildVariableVersion l when upgrade.NoRestore || !l.DotNetAddCanUpdate => UpdateVariable(context, l.Variable, range),
                 MSBuildVariableVersion l => AddWithDotNet(context, range, l.Variable, targetFramework),
@@ -245,17 +445,23 @@ namespace DotNetOutdated.Core.Services
                     case AddedWithDotNet:
                         break;
 
-                    case Written { Changed: true } written:
-                        // No project has been restored since this write, whatever was restored at the value before.
-                        _writtenLocations[written.Location] = new WrittenLocation(written.Value);
-                        upgraded.Add(_writtenLocations[written.Location]);
-                        break;
+                    case Written written:
+                        _wroteDirectly = true;
+                        foreach (var (location, changed) in written.Locations)
+                        {
+                            _reachedLocations?.Add(location);
+                            if (changed)
+                            {
+                                // No project has been restored since this write, whatever was restored at the value before.
+                                _writtenLocations[location] = new WrittenLocation(written.Value);
+                                upgraded.Add(_writtenLocations[location]);
+                            }
+                            else if (WroteValue(location, written.Value))
+                            {
+                                upgraded.Add(_writtenLocations[location]);
+                            }
+                        }
 
-                    case Written written when WroteValue(written.Location, written.Value):
-                        upgraded.Add(_writtenLocations[written.Location]);
-                        break;
-
-                    case Written:
                         break;
 
                     default:
@@ -270,7 +476,7 @@ namespace DotNetOutdated.Core.Services
                     : Result(context, UpgradeOutcome.AlreadyCurrent);
             }
 
-            var projectFullPath = _fileSystem.Path.GetFullPath(context.ProjectPath);
+            var projectFullPath = PathCase.OnDisk(_fileSystem, context.ProjectPath);
             if (context.Upgrade.NoRestore || upgraded.All(location => location.RestoredProjects.Contains(projectFullPath)))
             {
                 return Result(context, UpgradeOutcome.Upgraded);
@@ -304,43 +510,68 @@ namespace DotNetOutdated.Core.Services
             HeldBackUpgraded = outcome == UpgradeOutcome.Upgraded ? context.HeldBackUpgraded : [],
         };
 
+        // Writes a property-backed version in every file that holds it. Each file is its own location, which apps that
+        // include it share.
         private Write UpdateFileBasedVariable(Context context, PackageVariableInfo variableInfo)
         {
             var version = context.Upgrade.Version;
-            var location = VariableLocation(variableInfo);
-            if (context.Directives.TryUpdateVariable(variableInfo, version))
+            var locations = FileBasedVariableLocations(context.Directives, context.ProjectPath, variableInfo);
+            var write = context.Directives.UpdateVariable(context.ProjectPath, variableInfo, version);
+            if (write.Failure != null)
             {
-                return new Written(true, location, version.ToString());
+                return new WriteFailed(write.Failure);
             }
 
-            return IsFileBasedAppVariableAtRequestedVersion(variableInfo, version)
-                ? new Written(false, location, version.ToString())
+            bool Changed(string file) => write.ChangedFiles.Contains(file, FileBasedAppSources.PathComparer);
+            return write.ChangedFiles.Count > 0 || IsFileBasedAppVariableAtRequestedVersion(variableInfo, version)
+                ? new Written([.. locations.Select(location => (location.Location, Changed(location.File)))], version.ToString())
                 : new WriteFailed(
                     $"Failed to update file-based app '{context.ProjectPath}' for '{context.Name}'. " +
                     "Could not update the matching #:property value or #:package/#:sdk directive.");
         }
 
-        private Write UpdateFileBasedDirective(Context context, FileBasedAppReference reference)
+        // Writes the directives for the reference in every file of the app that declares it. Each file is its own
+        // location, which apps that include it share.
+        private Write UpdateFileBasedDirectives(Context context, ReferenceKind kind, string versionText)
         {
-            var version = context.Upgrade.Version;
-            var location = $"{_fileSystem.Path.GetFullPath(context.ProjectPath)}|#:{reference.Kind} {reference.Name}";
-            if (context.Directives.TryUpdateDirectReference(context.ProjectPath, reference.Name, reference.Kind, version))
+            var write = context.Directives.WriteDirective(context.ProjectPath, kind, context.Name, versionText);
+            if (write.Failure != null)
             {
-                return new Written(true, location, version.ToString());
+                return new WriteFailed(write.Failure);
             }
 
-            return reference.ResolvedVersion == version
-                ? new Written(false, location, version.ToString())
-                : new WriteFailed(
-                    $"Failed to update file-based app '{context.ProjectPath}' for '{context.Name}'. " +
-                    $"Expected a literal #:sdk {context.Name}@<version> directive (id match is case-insensitive; trailing comments are preserved).");
+            return new Written(
+                [.. write.DeclaringFiles.Select(file => (DirectiveLocation(file, kind, context.Name), write.ChangedFiles.Contains(file)))],
+                versionText);
+        }
+
+        private string DirectiveLocation(string filePath, ReferenceKind kind, string name) =>
+            Location(filePath, $"#:{kind} {name}");
+
+        // The locations of a file-based app's property-backed version, with the file each is in: each file with the
+        // property and each with a literal-version directive for the reference (which the upgrade writes too), or for
+        // an SDK named through a property, each file with its directive.
+        private IReadOnlyList<(string File, string Location)> FileBasedVariableLocations(FileBasedAppDirectives directives, string projectPath, PackageVariableInfo variableInfo)
+        {
+            var files = directives.VariableFiles(projectPath, variableInfo);
+            if (string.IsNullOrEmpty(variableInfo.VariableName))
+            {
+                return [.. files.Select(file => (file, DirectiveLocation(file, variableInfo.ReferenceKind, variableInfo.PackageName)))];
+            }
+
+            return
+            [
+                .. files.Select(file => (file, Location(file, $"$({variableInfo.VariableName})"))),
+                .. directives.LiteralDeclaringFiles(projectPath, variableInfo.ReferenceKind, variableInfo.PackageName)
+                    .Select(file => (file, DirectiveLocation(file, variableInfo.ReferenceKind, variableInfo.PackageName))),
+            ];
         }
 
         // `dotnet add package` cannot update an MSBuild project SDK, so rewrite its version in the project file.
         private Write UpdateProjectSdk(Context context, ProjectSdkReference sdk)
         {
             var version = context.Upgrade.Version;
-            var location = $"{_fileSystem.Path.GetFullPath(context.ProjectPath)}|Sdk {context.Name}";
+            var location = Location(_fileSystem.Path.GetFullPath(context.ProjectPath), $"Sdk {context.Name}");
             bool updated;
             try
             {
@@ -363,7 +594,7 @@ namespace DotNetOutdated.Core.Services
 
         // Writes the variable directly: with --no-restore (avoiding NuGet/Home#12552), or where `dotnet add package`
         // can't edit the reference.
-        private static Write UpdateVariable(Context context, PackageVariableInfo variableInfo, VersionRange range)
+        private Write UpdateVariable(Context context, PackageVariableInfo variableInfo, VersionRange range)
         {
             var location = VariableLocation(variableInfo);
             var versionText = range.ToVersionString();
@@ -379,8 +610,8 @@ namespace DotNetOutdated.Core.Services
                     $"$({variableInfo.VariableName}) property in '{variableInfo.FilePath}'.");
         }
 
-        private static string VariableLocation(PackageVariableInfo variableInfo) =>
-            $"{variableInfo.FilePath}|$({variableInfo.VariableName})";
+        private string VariableLocation(PackageVariableInfo variableInfo) =>
+            Location(variableInfo.FilePath, $"$({variableInfo.VariableName})");
 
         // Writes a literal version directly in the file that declares it: for a GlobalPackageReference `dotnet add package`
         // would add a PackageReference instead, which central package management rejects; for a PackageReference in an
@@ -411,8 +642,8 @@ namespace DotNetOutdated.Core.Services
             }
 
             return elementIndex >= 0
-                ? new Written(updated, $"{filePath}|{context.Name}|{elementIndex}", versionText, PerTargetFramework: true)
-                : new Written(updated, $"{filePath}|{context.Name}", versionText);
+                ? new Written(updated, Location(filePath, $"{context.Name}|{elementIndex}"), versionText, perTargetFramework: true)
+                : new Written(updated, Location(filePath, context.Name), versionText);
         }
 
         private Write UpdateLiteral(Context context, LiteralVersion location, VersionRange range, string? targetFramework)
@@ -456,7 +687,7 @@ namespace DotNetOutdated.Core.Services
                 file.Write(_fileSystem, centralPackagesPath, newContent);
             }
 
-            return new Written(updated, $"{centralPackagesPath}|{context.Name}", versionText);
+            return new Written(updated, Location(centralPackagesPath, context.Name), versionText);
         }
 
         // Runs `dotnet add package`, then puts back what it loses: the Directory.Packages.props layout and, when the

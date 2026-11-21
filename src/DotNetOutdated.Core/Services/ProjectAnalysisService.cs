@@ -198,16 +198,24 @@ namespace DotNetOutdated.Core.Services
             }
 
             // The directives are the authoritative source of direct dependencies for a file-based app: replace every
-            // non-transitive graph dependency with the directive references.
-            targetFramework.RemoveDirectDependencies();
+            // non-transitive graph dependency with the directive references. A package declared without a version the
+            // directives give (a range, say) keeps the one the graph resolved. When the declarations can't all be
+            // known (an include couldn't be followed), the graph's packages are kept, as one may be declared where
+            // the directives weren't read.
+            var declaredPackages = _fileBasedAppDirectives.DeclaredPackages(projectPath);
+            targetFramework.RemoveDirectDependencies(keep: dependency =>
+                dependency.Kind == ReferenceKind.Package && (declaredPackages == null || declaredPackages.Contains(dependency.Name)));
 
             foreach (var reference in fileBasedReferences)
             {
+                // The version restore resolved, when it found one: it can be higher than the declared version, when
+                // that one isn't available.
+                var restored = targetFramework.Find(reference.Name, reference.Kind)?.ResolvedVersion;
                 targetFramework.Set(new Dependency
                 {
                     Name = reference.Name,
                     VersionRange = reference.VersionRange,
-                    ResolvedVersion = reference.ResolvedVersion,
+                    ResolvedVersion = restored ?? reference.ResolvedVersion,
                     Kind = reference.Kind,
                 });
             }
@@ -265,26 +273,40 @@ namespace DotNetOutdated.Core.Services
 
         /// <summary>
         /// The dependencies of a target framework while its project is analyzed, keyed by name and kind, since a project
-        /// can reference a package and an SDK with the same id.
+        /// can reference a package and an SDK with the same id. Ids are case-insensitive, as for NuGet, so the restore
+        /// graph's entry and a directive's for one package are one dependency whatever their casing.
         /// </summary>
         private sealed class TargetFrameworkBuilder(NuGetFramework name, string? targetAlias)
         {
-            private readonly Dictionary<(string Name, ReferenceKind Kind), Dependency> _dependencies = [];
+            private readonly Dictionary<(string Name, ReferenceKind Kind), Dependency> _dependencies = new(DependencyKeyComparer.Instance);
 
             public IReadOnlyList<Dependency> Dependencies => [.. _dependencies.Values];
 
             public bool ContainsPackage(string name) => _dependencies.ContainsKey((name, ReferenceKind.Package));
 
+            public Dependency? Find(string name, ReferenceKind kind) => _dependencies.GetValueOrDefault((name, kind));
+
             public void TryAdd(Dependency dependency) => _dependencies.TryAdd((dependency.Name, dependency.Kind), dependency);
 
             public void Set(Dependency dependency) => _dependencies[(dependency.Name, dependency.Kind)] = dependency;
 
-            public void RemoveDirectDependencies()
+            public void RemoveDirectDependencies(Func<Dependency, bool> keep)
             {
-                foreach (var key in _dependencies.Where(pair => !pair.Value.IsTransitive).Select(pair => pair.Key).ToList())
+                foreach (var key in _dependencies.Where(pair => !pair.Value.IsTransitive && !keep(pair.Value)).Select(pair => pair.Key).ToList())
                 {
                     _dependencies.Remove(key);
                 }
+            }
+
+            private sealed class DependencyKeyComparer : IEqualityComparer<(string Name, ReferenceKind Kind)>
+            {
+                public static readonly DependencyKeyComparer Instance = new();
+
+                public bool Equals((string Name, ReferenceKind Kind) x, (string Name, ReferenceKind Kind) y) =>
+                    x.Kind == y.Kind && StringComparer.OrdinalIgnoreCase.Equals(x.Name, y.Name);
+
+                public int GetHashCode((string Name, ReferenceKind Kind) key) =>
+                    HashCode.Combine(StringComparer.OrdinalIgnoreCase.GetHashCode(key.Name), key.Kind);
             }
 
             public void ReplaceAll(IEnumerable<Dependency> dependencies)
