@@ -1102,7 +1102,7 @@ namespace DotNetOutdated.Tests
             var directives = Directives(fileSystem);
 
             Assert.Equal("Package Bar@1.0.0, Sdk Cake.Sdk@6.0.0", Summary(directives.References(AppPath)));
-            Assert.Equal(["Bar", "Baz", "Foo"], directives.DeclaredPackages(AppPath).Order());
+            Assert.Equal(["Bar", "Baz", "Foo"], directives.DeclaredPackages(AppPath)!.Order());
         }
 
         [Fact]

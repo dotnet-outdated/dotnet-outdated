@@ -124,6 +124,41 @@ namespace DotNetOutdated.Tests
         }
 
         [Fact]
+        public async Task AFileBasedAppWithAnIncludeThatCannotBeFollowed_KeepsTheGraphsDirectDependencies()
+        {
+            // Foo may be declared in the file the include names, so it isn't dropped as undeclared.
+            using var project = new TemporaryProject("<Project />");
+            var appPath = Path.Combine(project.Directory, "app.cs");
+            File.WriteAllText(appPath, "#:include $(Undefined)/shared.cs\n#:package Bar@1.0.0\n");
+            project.Target.Libraries.Add(Library("Foo", "1.0.0"));
+            project.Target.Libraries.Add(Library("Bar", "1.0.0"));
+            project.Evaluator.GetImportedProperties(Arg.Any<string>()).Returns(new Dictionary<string, ImportedProperty>());
+            project.Write(directDependencies: ["Foo", "Bar"]);
+
+            var analyzed = await project.AnalyzeAsync(new ProjectAnalysisOptions(), appPath);
+
+            Assert.Equal(["Bar", "Foo"], Assert.Single(analyzed.TargetFrameworks).Dependencies.Select(dependency => dependency.Name).Order());
+        }
+
+        [Fact]
+        public async Task AFileBasedAppsPackage_HasTheVersionRestoreResolved()
+        {
+            // Restore resolves a higher version when the one declared isn't available.
+            using var project = new TemporaryProject("<Project />");
+            var appPath = Path.Combine(project.Directory, "app.cs");
+            File.WriteAllText(appPath, "#:package Foo@1.0.0\n");
+            project.Target.Libraries.Add(Library("Foo", "1.1.0"));
+            project.Evaluator.GetImportedProperties(Arg.Any<string>()).Returns(new Dictionary<string, ImportedProperty>());
+            project.Write(directDependencies: ["Foo"]);
+
+            var analyzed = await project.AnalyzeAsync(new ProjectAnalysisOptions(), appPath);
+
+            var dependency = Assert.Single(Assert.Single(analyzed.TargetFrameworks).Dependencies);
+            Assert.Equal(new NuGetVersion("1.1.0"), dependency.ResolvedVersion);
+            Assert.Equal(VersionRange.Parse("1.0.0"), dependency.VersionRange);
+        }
+
+        [Fact]
         public async Task AFileBasedAppsPackageNamedInOtherCaseThanTheGraph_IsOneDependency()
         {
             // Package ids are case-insensitive, so the directive's entry replaces the graph's.

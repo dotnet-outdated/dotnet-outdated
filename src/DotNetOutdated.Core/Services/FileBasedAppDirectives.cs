@@ -66,9 +66,11 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
 
     /// <summary>
     /// The ids of every package the app's <c>#:package</c> directives declare, whatever their version: those
-    /// <see cref="References"/> leaves out, as their version is a range or there is none, too.
+    /// <see cref="References"/> leaves out, as their version is a range or there is none, too. <see langword="null"/>
+    /// when they can't all be known: an <c>#:include</c> couldn't be followed, or an id uses a property that isn't
+    /// defined.
     /// </summary>
-    public IReadOnlySet<string> DeclaredPackages(string projectFilePath)
+    public IReadOnlySet<string>? DeclaredPackages(string projectFilePath)
     {
         var declared = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (!projectFilePath.IsCSharpFile() || !_fileSystem.File.Exists(projectFilePath))
@@ -77,12 +79,19 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
         }
 
         var sources = ReadSources(projectFilePath);
+        if (sources.UnresolvedIncludes.Count > 0)
+        {
+            return null;
+        }
+
         foreach (var directive in sources.Files.SelectMany(file => file.Directives).Where(directive => directive.Kind == "package"))
         {
-            if (FileBasedAppSources.TryResolveProperties(directive.Name, sources.Properties, out var name))
+            if (!FileBasedAppSources.TryResolveProperties(directive.Name, sources.Properties, out var name))
             {
-                declared.Add(name);
+                return null;
             }
+
+            declared.Add(name);
         }
 
         return declared;

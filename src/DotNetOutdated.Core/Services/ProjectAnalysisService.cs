@@ -199,18 +199,23 @@ namespace DotNetOutdated.Core.Services
 
             // The directives are the authoritative source of direct dependencies for a file-based app: replace every
             // non-transitive graph dependency with the directive references. A package declared without a version the
-            // directives give (a range, say) keeps the one the graph resolved.
+            // directives give (a range, say) keeps the one the graph resolved. When the declarations can't all be
+            // known (an include couldn't be followed), the graph's packages are kept, as one may be declared where
+            // the directives weren't read.
             var declaredPackages = _fileBasedAppDirectives.DeclaredPackages(projectPath);
             targetFramework.RemoveDirectDependencies(keep: dependency =>
-                dependency.Kind == ReferenceKind.Package && declaredPackages.Contains(dependency.Name));
+                dependency.Kind == ReferenceKind.Package && (declaredPackages == null || declaredPackages.Contains(dependency.Name)));
 
             foreach (var reference in fileBasedReferences)
             {
+                // The version restore resolved, when it found one: it can be higher than the declared version, when
+                // that one isn't available.
+                var restored = targetFramework.Find(reference.Name, reference.Kind)?.ResolvedVersion;
                 targetFramework.Set(new Dependency
                 {
                     Name = reference.Name,
                     VersionRange = reference.VersionRange,
-                    ResolvedVersion = reference.ResolvedVersion,
+                    ResolvedVersion = restored ?? reference.ResolvedVersion,
                     Kind = reference.Kind,
                 });
             }
@@ -278,6 +283,8 @@ namespace DotNetOutdated.Core.Services
             public IReadOnlyList<Dependency> Dependencies => [.. _dependencies.Values];
 
             public bool ContainsPackage(string name) => _dependencies.ContainsKey((name, ReferenceKind.Package));
+
+            public Dependency? Find(string name, ReferenceKind kind) => _dependencies.GetValueOrDefault((name, kind));
 
             public void TryAdd(Dependency dependency) => _dependencies.TryAdd((dependency.Name, dependency.Kind), dependency);
 
