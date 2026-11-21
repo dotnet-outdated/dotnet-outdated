@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="dotnet-outdated logo">
+<defs><mask id="ko" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64"><rect width="64" height="64" fill="#FFFFFF"/><circle cx="37" cy="53.5" r="2.4" fill="#000000"/><circle cx="42.4" cy="47" r="3.2" fill="#000000"/></mask></defs>
+<g mask="url(#ko)"><path d="M32 28 48 37 32 46 16 37Z" fill="#4B32C3" opacity="0.5"/><path d="M16 37 32 46v16L16 53Z" fill="#4B32C3"/><path d="M32 46 48 37v16L32 62Z" fill="#4B32C3" opacity="0.78"/></g>
+<path d="M16 26 32 17l16 9" stroke="#F2A33A" stroke-width="4.5" opacity="0.55"/><path d="M16 15 32 6l16 9" stroke="#F2A33A" stroke-width="4.5"/>
+</svg>

@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.svg">
+    <img src="assets/logo.svg" alt="dotnet-outdated logo" width="160">
+  </picture>
+</p>
+
 [![Build Status](https://github.com/dotnet-outdated/dotnet-outdated/workflows/Release/badge.svg)](https://github.com/dotnet-outdated/dotnet-outdated/actions?workflow=Release)
 [![License](https://img.shields.io/badge/license-MIT-brightgreen.svg)](LICENSE)
 [![NuGet Version](https://img.shields.io/nuget/v/dotnet-outdated-tool.svg)](https://www.nuget.org/packages/dotnet-outdated-tool/)
