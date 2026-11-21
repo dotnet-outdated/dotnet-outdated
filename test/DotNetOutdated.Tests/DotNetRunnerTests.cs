@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.Threading;
 using DotNetOutdated.Core.Services;
 using Xunit;
 
@@ -76,35 +77,79 @@ public class DotNetRunnerTests
     [Fact]
     public void WhenTheIdleTimeoutExpires_TheProcessIsKilled()
     {
-        // The process prints its id and then stays silent, so the runner times out on a process the test can look up.
+        // The process writes its id to a file and then stays silent, so the runner times out on a process the test can
+        // look up. The id goes to a file rather than to the output, so the test doesn't depend on how soon the runner
+        // reads the output: its readers run on the thread pool, and PowerShell can be slow to start on a CI agent. The
+        // timeout leaves room for that start, so the process is usually stopped after writing its id.
+        string idFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
         (string fileName, string[] arguments) = OperatingSystem.IsWindows()
-            ? ("powershell", new[] { "-NoProfile", "-NonInteractive", "-Command", "Write-Output $PID; Start-Sleep -Seconds 60" })
-            : ("sh", new[] { "-c", "echo $$; exec sleep 60" });
-        var runner = new DotNetRunner(new DotNetRunnerOptions { IdleTimeout = TimeSpan.FromSeconds(1), FileName = fileName });
+            ? ("powershell", new[] { "-NoProfile", "-NonInteractive", "-Command", $"Set-Content -LiteralPath '{idFile}' -Value $PID; Start-Sleep -Seconds 60" })
+            : ("sh", new[] { "-c", $"echo $$ > '{idFile}'; exec sleep 60" });
+        var runner = new DotNetRunner(new DotNetRunnerOptions { IdleTimeout = TimeSpan.FromSeconds(3), FileName = fileName });
 
-        RunStatus status = runner.Run(Path.GetTempPath(), arguments);
-
-        Assert.Equal(-1, status.ExitCode);
-        int processId = int.Parse(status.Output.Trim(), CultureInfo.InvariantCulture);
-        Process process;
         try
         {
-            process = Process.GetProcessById(processId);
-        }
-        catch (ArgumentException)
-        {
-            return; // Already gone.
-        }
+            RunStatus status = runner.Run(Path.GetTempPath(), arguments);
 
-        using (process)
-        {
-            bool exited = process.WaitForExit(TimeSpan.FromSeconds(10));
-            if (!exited)
+            Assert.Equal(-1, status.ExitCode);
+
+            // A process the runner left running writes its id in the end, so wait for it. A process stopped before it
+            // got that far never writes one.
+            if (!TryReadProcessId(idFile, TimeSpan.FromSeconds(10), out int processId))
             {
-                process.Kill();
+                return;
             }
 
-            Assert.True(exited, "The hung process was left running.");
+            Process process;
+            try
+            {
+                process = Process.GetProcessById(processId);
+            }
+            catch (ArgumentException)
+            {
+                return; // Already gone.
+            }
+
+            using (process)
+            {
+                bool exited = process.WaitForExit(TimeSpan.FromSeconds(10));
+                if (!exited)
+                {
+                    process.Kill();
+                }
+
+                Assert.True(exited, "The hung process was left running.");
+            }
         }
+        finally
+        {
+            File.Delete(idFile);
+        }
+    }
+
+    private static bool TryReadProcessId(string path, TimeSpan timeout, out int processId)
+    {
+        var waited = Stopwatch.StartNew();
+        do
+        {
+            try
+            {
+                // The file can be there before its content is.
+                if (int.TryParse(File.ReadAllText(path).Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out processId))
+                {
+                    return true;
+                }
+            }
+            catch (IOException)
+            {
+                // Not written yet, or still being written.
+            }
+
+            Thread.Sleep(100);
+        }
+        while (waited.Elapsed < timeout);
+
+        processId = 0;
+        return false;
     }
 }

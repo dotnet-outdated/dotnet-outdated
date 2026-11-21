@@ -240,7 +240,9 @@ public class CommandLineTests
 
 #if NET10_0_OR_GREATER
     /// <summary>
-    /// The root command is named after the running executable: dotnet-outdated for the tool, testhost here.
+    /// The root command is named after the running executable, less what looks like an extension: dotnet-outdated for
+    /// the tool, and here the test app host: DotNetOutdated.Tests on Windows (DotNetOutdated.Tests.exe), DotNetOutdated
+    /// elsewhere.
     /// The nushell script lists no options; it asks the tool for them, see <see cref="SuggestDirective_CompletesOptionsAndValues"/>.
     /// </summary>
     [Theory]

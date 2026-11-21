@@ -36,7 +36,7 @@ namespace DotNetOutdated.Tests
                 },
                 cancellation.Token);
 
-            var finished = await Task.WhenAny(lookup, Task.Delay(TimeSpan.FromSeconds(30)));
+            var finished = await Task.WhenAny(lookup, Task.Delay(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken));
             Assert.Same(lookup, finished);
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => lookup);
         }
@@ -61,7 +61,7 @@ namespace DotNetOutdated.Tests
                 Sources = [feed.Uri],
                 TargetFramework = NuGetFramework.Parse("net9.0"),
                 OlderThanDays = olderThanDays,
-            });
+            }, TestContext.Current.CancellationToken);
 
             Assert.Equal(expected, versions.Select(v => v.ToNormalizedString()).Order(StringComparer.Ordinal));
         }
@@ -83,7 +83,7 @@ namespace DotNetOutdated.Tests
                 Sources = [feed.Uri],
                 TargetFramework = NuGetFramework.Parse("net9.0"),
                 IsDevelopmentDependency = isDevelopmentDependency,
-            });
+            }, TestContext.Current.CancellationToken);
 
             Assert.Equal(expected, versions.Select(v => v.ToNormalizedString()).Order(StringComparer.Ordinal));
         }
@@ -129,7 +129,7 @@ namespace DotNetOutdated.Tests
                 Sources = [new Uri(feedA.Path), new Uri(feedB.Path)],
                 TargetFramework = NuGetFramework.Parse("net9.0"),
                 ProjectFilePath = System.IO.Path.Combine(project.Path, "App.csproj"),
-            });
+            }, TestContext.Current.CancellationToken);
 
             Assert.Equal(expected, versions.Select(v => v.ToNormalizedString()).Order(StringComparer.Ordinal));
         }
@@ -151,11 +151,11 @@ namespace DotNetOutdated.Tests
             };
 
             // Like `dotnet restore --ignore-failed-sources`: the broken source is skipped and the others still answer.
-            var versions = await service.GetAllVersionsAsync(Query(ignoreFailedSources: true));
+            var versions = await service.GetAllVersionsAsync(Query(ignoreFailedSources: true), TestContext.Current.CancellationToken);
             Assert.Equal(["1.0.0"], versions.Select(v => v.ToNormalizedString()));
 
             // Without it, the failure is reported rather than giving an incomplete list of versions.
-            await Assert.ThrowsAnyAsync<Exception>(() => service.GetAllVersionsAsync(Query(ignoreFailedSources: false)));
+            await Assert.ThrowsAnyAsync<Exception>(() => service.GetAllVersionsAsync(Query(ignoreFailedSources: false), TestContext.Current.CancellationToken));
         }
 
         // Modeled on the .NET runtime packages (Microsoft.Extensions.*): a netstandard fallback for older frameworks,
@@ -199,7 +199,7 @@ namespace DotNetOutdated.Tests
                 files: [("build/netcoreapp2.0/Contoso.Widgets.targets", CompatError)]);
             using var service = new NuGetPackageInfoService();
 
-            var unsupported = await service.DeclaresTargetFrameworkUnsupportedAsync(SupportQuery(feed, "Contoso.Widgets", version, targetFramework));
+            var unsupported = await service.DeclaresTargetFrameworkUnsupportedAsync(SupportQuery(feed, "Contoso.Widgets", version, targetFramework), TestContext.Current.CancellationToken);
 
             Assert.Equal(expected, unsupported);
         }
@@ -223,7 +223,7 @@ namespace DotNetOutdated.Tests
                 dependencies: [(dependencyId, dependencyVersion)]);
             using var service = new NuGetPackageInfoService();
 
-            var unsupported = await service.DeclaresTargetFrameworkUnsupportedAsync(SupportQuery(feed, "Contoso.Gadgets", "1.0.0", "net8.0"));
+            var unsupported = await service.DeclaresTargetFrameworkUnsupportedAsync(SupportQuery(feed, "Contoso.Gadgets", "1.0.0", "net8.0"), TestContext.Current.CancellationToken);
 
             Assert.Equal(expected, unsupported);
         }
@@ -239,7 +239,7 @@ namespace DotNetOutdated.Tests
             using var service = new NuGetPackageInfoService();
 
             var unsupported = await service.DeclaresTargetFrameworkUnsupportedAsync(
-                SupportQuery(working, "Contoso.Widgets", "2.0.0", "net8.0") with { Sources = [broken.Uri, working.Uri] });
+                SupportQuery(working, "Contoso.Widgets", "2.0.0", "net8.0") with { Sources = [broken.Uri, working.Uri] }, TestContext.Current.CancellationToken);
 
             Assert.True(unsupported);
         }

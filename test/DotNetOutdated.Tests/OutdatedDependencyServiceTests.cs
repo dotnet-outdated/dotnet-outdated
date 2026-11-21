@@ -53,7 +53,7 @@ namespace DotNetOutdated.Tests
             _latestVersions["Alpha"] = "1.1.0";
             var project = Project("App", Dependency("Zeta", "1.0.0"), Dependency("Current", "1.0.0"), Dependency("Alpha", "1.0.0"));
 
-            var result = await Find([project]);
+            var result = await Find([project], cancellationToken: TestContext.Current.CancellationToken);
 
             var dependencies = Assert.Single(Assert.Single(result).TargetFrameworks).Dependencies;
             Assert.Equal(["Alpha", "Zeta"], dependencies.Select(d => d.Dependency.Name));
@@ -73,7 +73,7 @@ namespace DotNetOutdated.Tests
                 ],
             };
 
-            var result = await Find([project]);
+            var result = await Find([project], cancellationToken: TestContext.Current.CancellationToken);
 
             var reported = Assert.Single(result);
             Assert.Equal(["net9.0", "netstandard2.0"], reported.TargetFrameworks.Select(f => f.TargetAlias));
@@ -85,7 +85,7 @@ namespace DotNetOutdated.Tests
         {
             Uri[] sources = [new("https://api.nuget.org/v3/index.json"), new("https://pkgs.contoso.com/v3/index.json")];
 
-            var result = await Find([Project("App", Dependency("Package", "1.0.0")) with { Sources = sources }]);
+            var result = await Find([Project("App", Dependency("Package", "1.0.0")) with { Sources = sources }], cancellationToken: TestContext.Current.CancellationToken);
 
             Assert.Equal(sources, Assert.Single(result).Sources);
         }
@@ -98,7 +98,7 @@ namespace DotNetOutdated.Tests
             var app = Project("App", Dependency("Package", "1.0.0"));
             var tool = Project("tool", Dependency("Package", "1.0.0")) with { FilePath = XFS.Path(@"c:\src\tools\tool.cs") };
 
-            var result = await Find([app, tool], new OutdatedOptions { IncludeFileBasedApps = includeFileBasedApps });
+            var result = await Find([app, tool], new OutdatedOptions { IncludeFileBasedApps = includeFileBasedApps }, cancellationToken: TestContext.Current.CancellationToken);
 
             Assert.Equal(expected, result.Select(p => p.Name));
         }
@@ -111,7 +111,7 @@ namespace DotNetOutdated.Tests
                 IncludeTransitiveDependencies = true,
                 TransitiveDepth = 3,
                 Runtime = "linux-x64",
-            });
+            }, cancellationToken: TestContext.Current.CancellationToken);
 
             await _analysis.Received(1).AnalyzeProjectAsync(
                 XFS.Path(@"c:\src\App\App.csproj"),
@@ -131,7 +131,7 @@ namespace DotNetOutdated.Tests
             _analyzed[app.FilePath] = [app, lib];
             _analyzed[lib.FilePath] = [lib];
 
-            var report = await Service().FindOutdatedAsync(Root, new OutdatedOptions { Recursive = true });
+            var report = await Service().FindOutdatedAsync(Root, new OutdatedOptions { Recursive = true }, cancellationToken: TestContext.Current.CancellationToken);
 
             Assert.Equal(["App", "Lib"], report.Projects.Select(p => p.Name));
         }
@@ -150,7 +150,7 @@ namespace DotNetOutdated.Tests
             _analyzed[app.FilePath] = [app, lib with { FilePath = XFS.Path(@"c:\linked\Lib\Lib.csproj") }];
             _analyzed[lib.FilePath] = [lib];
 
-            var report = await Service().FindOutdatedAsync(Root, new OutdatedOptions { Recursive = true });
+            var report = await Service().FindOutdatedAsync(Root, new OutdatedOptions { Recursive = true }, cancellationToken: TestContext.Current.CancellationToken);
 
             Assert.Equal(["App", "Lib"], report.Projects.Select(p => p.Name));
         }
@@ -173,7 +173,7 @@ namespace DotNetOutdated.Tests
                     return call.Arg<LatestVersionQuery>().CurrentVersion;
                 });
 
-            await Service().FindOutdatedAsync(Root, new OutdatedOptions { Recursive = true }, new SynchronousProgress(stage => events.Add(stage.ToString())));
+            await Service().FindOutdatedAsync(Root, new OutdatedOptions { Recursive = true }, new SynchronousProgress(stage => events.Add(stage.ToString())), TestContext.Current.CancellationToken);
 
             Assert.Equal(["DiscoveringProjects", "AnalyzingProjects", "analysis", "FindingLatestVersions", "lookup"], events);
         }
@@ -181,9 +181,9 @@ namespace DotNetOutdated.Tests
         [Fact]
         public async Task AMissingPath_IsAValidationError_AndNothingIsAnalyzed()
         {
-            await Assert.ThrowsAsync<CommandValidationException>(() => Service().FindOutdatedAsync(XFS.Path(@"c:\missing")));
+            await Assert.ThrowsAsync<CommandValidationException>(() => Service().FindOutdatedAsync(XFS.Path(@"c:\missing"), cancellationToken: TestContext.Current.CancellationToken));
 
-            await _analysis.DidNotReceiveWithAnyArgs().AnalyzeProjectAsync(default!, default, default);
+            await _analysis.DidNotReceiveWithAnyArgs().AnalyzeProjectAsync(default!, default, TestContext.Current.CancellationToken);
         }
 
         [Fact]
@@ -191,7 +191,7 @@ namespace DotNetOutdated.Tests
         {
             var result = await Find(
                 [Project("App", Dependency("Current", "1.0.0"))],
-                new OutdatedOptions { IncludeUpToDate = true });
+                new OutdatedOptions { IncludeUpToDate = true }, cancellationToken: TestContext.Current.CancellationToken);
 
             var dependency = Assert.Single(Assert.Single(Assert.Single(result).TargetFrameworks).Dependencies);
             Assert.Equal(DependencyUpgradeSeverity.None, dependency.UpgradeSeverity);
@@ -205,7 +205,7 @@ namespace DotNetOutdated.Tests
             _latestVersions["Implicit"] = "2.0.0";
             var project = Project("App", Dependency("Implicit", "1.0.0", isAutoReferenced: true));
 
-            var result = await Find([project], new OutdatedOptions { IncludeAutoReferences = includeAutoReferences });
+            var result = await Find([project], new OutdatedOptions { IncludeAutoReferences = includeAutoReferences }, cancellationToken: TestContext.Current.CancellationToken);
 
             Assert.Equal(expected, result.SelectMany(p => p.TargetFrameworks).SelectMany(f => f.Dependencies).Select(d => d.Dependency.Name));
         }
@@ -224,7 +224,7 @@ namespace DotNetOutdated.Tests
             {
                 IncludeFilters = ["contoso"],
                 ExcludeFilters = ["TESTS"],
-            });
+            }, cancellationToken: TestContext.Current.CancellationToken);
 
             Assert.Equal(["Contoso.Core"], result.Single().TargetFrameworks.Single().Dependencies.Select(d => d.Dependency.Name));
         }
@@ -242,7 +242,7 @@ namespace DotNetOutdated.Tests
             var result = await Find([project], new OutdatedOptions
             {
                 IncludeFilters = ["Contoso", "Fabrikam"],
-            });
+            }, cancellationToken: TestContext.Current.CancellationToken);
 
             Assert.Equal(["Contoso.Core", "Fabrikam.Core"], result.Single().TargetFrameworks.Single().Dependencies.Select(d => d.Dependency.Name));
         }
@@ -270,7 +270,7 @@ namespace DotNetOutdated.Tests
                 ProjectAt("Beta", XFS.Path(@"c:\src\a\Beta.csproj"), "net9.0"),
                 ProjectAt("Alpha", XFS.Path(@"c:\src\b\Alpha.csproj"), "net9.0"),
                 ProjectAt("Alpha", XFS.Path(@"c:\src\a\Alpha.csproj"), "netstandard2.0", "net9.0"),
-            ]);
+            ], cancellationToken: TestContext.Current.CancellationToken);
 
             Assert.Equal([XFS.Path(@"c:\src\a\Alpha.csproj"), XFS.Path(@"c:\src\b\Alpha.csproj"), XFS.Path(@"c:\src\a\Beta.csproj")], result.Select(p => p.FilePath));
             Assert.Equal(["net9.0", "netstandard2.0"], result[0].TargetFrameworks.Select(f => f.TargetAlias));
@@ -283,7 +283,7 @@ namespace DotNetOutdated.Tests
             _latestVersions["Bounded"] = "2.0.0";
             var project = Project("App", Dependency("Open", "1.0.0"), Dependency("Bounded", "[1.0.0, 1.5.0)"));
 
-            await Find([project], new OutdatedOptions { MaximumVersion = NuGetVersion.Parse("3.0.0") });
+            await Find([project], new OutdatedOptions { MaximumVersion = NuGetVersion.Parse("3.0.0") }, cancellationToken: TestContext.Current.CancellationToken);
 
             await _resolution.Received(1).ResolveLatestVersionAsync(
                 Arg.Is<LatestVersionQuery>(q => q.PackageId == "Open" && q.AllowedRange.MaxVersion == NuGetVersion.Parse("3.0.0") && q.AllowedRange.IsMaxInclusive),
@@ -305,7 +305,7 @@ namespace DotNetOutdated.Tests
                 PrereleaseLabel = "beta",
                 OlderThanDays = 7,
                 IgnoreFailedSources = true,
-            });
+            }, cancellationToken: TestContext.Current.CancellationToken);
 
             await _resolution.Received(1).ResolveLatestVersionAsync(
                 Arg.Is<LatestVersionQuery>(q =>
@@ -324,13 +324,13 @@ namespace DotNetOutdated.Tests
         {
             var dependency = new Dependency { Name = "Package", VersionRange = VersionRange.Parse(range), ResolvedVersion = resolvedVersion == null ? null : NuGetVersion.Parse(resolvedVersion) };
 
-            var result = await Find([Project("App", dependency)]);
+            var result = await Find([Project("App", dependency)], cancellationToken: TestContext.Current.CancellationToken);
 
             var outdated = Assert.Single(Assert.Single(Assert.Single(result).TargetFrameworks).Dependencies);
             Assert.Null(outdated.LatestVersion);
             Assert.Equal(DependencyUpgradeSeverity.Unknown, outdated.UpgradeSeverity);
             Assert.Equal(reason, outdated.LatestVersionUnknownReason);
-            await _resolution.DidNotReceiveWithAnyArgs().ResolveLatestVersionAsync(default!, default);
+            await _resolution.DidNotReceiveWithAnyArgs().ResolveLatestVersionAsync(default!, TestContext.Current.CancellationToken);
         }
 
         [Fact]
@@ -338,11 +338,11 @@ namespace DotNetOutdated.Tests
         {
             var dependency = new Dependency { Name = "Package", VersionRange = VersionRange.Parse("(, 2.0.0)"), ResolvedVersion = NuGetVersion.Parse("1.0.0") };
 
-            var result = await Find([Project("App", dependency)], new OutdatedOptions { MaximumVersion = NuGetVersion.Parse("1.5.0") });
+            var result = await Find([Project("App", dependency)], new OutdatedOptions { MaximumVersion = NuGetVersion.Parse("1.5.0") }, cancellationToken: TestContext.Current.CancellationToken);
 
             var outdated = Assert.Single(Assert.Single(Assert.Single(result).TargetFrameworks).Dependencies);
             Assert.Equal(LatestVersionUnknownReason.NoLowerBound, outdated.LatestVersionUnknownReason);
-            await _resolution.DidNotReceiveWithAnyArgs().ResolveLatestVersionAsync(default!, default);
+            await _resolution.DidNotReceiveWithAnyArgs().ResolveLatestVersionAsync(default!, TestContext.Current.CancellationToken);
         }
 
         [Fact]
@@ -350,7 +350,7 @@ namespace DotNetOutdated.Tests
         {
             _resolution.ResolveLatestVersionAsync(Arg.Any<LatestVersionQuery>(), Arg.Any<CancellationToken>()).Returns(Task.FromResult<NuGetVersion>(null!));
 
-            var result = await Find([Project("App", Dependency("Package", "1.0.0"))]);
+            var result = await Find([Project("App", Dependency("Package", "1.0.0"))], cancellationToken: TestContext.Current.CancellationToken);
 
             var outdated = Assert.Single(Assert.Single(Assert.Single(result).TargetFrameworks).Dependencies);
             Assert.Null(outdated.LatestVersion);
@@ -378,7 +378,7 @@ namespace DotNetOutdated.Tests
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
                 Find([Project("App", Dependency("Package", "1.0.0"))], cancellationToken: cancellation.Token));
 
-            await _resolution.DidNotReceiveWithAnyArgs().ResolveLatestVersionAsync(default!, default);
+            await _resolution.DidNotReceiveWithAnyArgs().ResolveLatestVersionAsync(default!, TestContext.Current.CancellationToken);
         }
 
         [Fact]
@@ -402,10 +402,10 @@ namespace DotNetOutdated.Tests
                 .Select(index => Project($"App{index}", Dependency($"Package{index}", "1.0.0")))
                 .ToList();
 
-            await Find(projects, resolution: resolution);
+            await Find(projects, resolution: resolution, cancellationToken: TestContext.Current.CancellationToken);
 
             Assert.InRange(maxInFlight, 1, Environment.ProcessorCount);
-            await resolution.ReceivedWithAnyArgs(projects.Count).ResolveLatestVersionAsync(default!, default);
+            await resolution.ReceivedWithAnyArgs(projects.Count).ResolveLatestVersionAsync(default!, TestContext.Current.CancellationToken);
         }
 
         /// <summary>Reports on the caller's thread, unlike <see cref="Progress{T}"/>, so the order is kept.</summary>

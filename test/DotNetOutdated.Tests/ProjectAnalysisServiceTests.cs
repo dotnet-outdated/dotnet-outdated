@@ -45,7 +45,7 @@ namespace DotNetOutdated.Tests
             try
             {
                 var projectPath = Path.Combine(directory, "App.csproj");
-                await File.WriteAllTextAsync(projectPath, "<Project Sdk=\"Cake.Sdk/5.0.0\" />");
+                await File.WriteAllTextAsync(projectPath, "<Project Sdk=\"Cake.Sdk/5.0.0\" />", TestContext.Current.CancellationToken);
 
                 var packageSpec = new PackageSpec(
                 [
@@ -87,7 +87,7 @@ namespace DotNetOutdated.Tests
                 evaluator.GetRestoreGraphAsync(projectPath, Arg.Any<string?>()).Returns(graph);
                 var service = new ProjectAnalysisService(evaluator, Substitute.For<IDotNetRestoreService>(), new FileSystem(), NullLogger.Instance);
 
-                var project = Assert.Single(await service.AnalyzeProjectAsync(projectPath));
+                var project = Assert.Single(await service.AnalyzeProjectAsync(projectPath, cancellationToken: TestContext.Current.CancellationToken));
 
                 var dependencies = Assert.Single(project.TargetFrameworks).Dependencies;
                 Assert.Equal(2, dependencies.Count);

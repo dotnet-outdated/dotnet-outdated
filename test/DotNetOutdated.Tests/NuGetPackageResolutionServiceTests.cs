@@ -85,7 +85,7 @@ namespace DotNetOutdated.Tests
 
             using var cancellation = new CancellationTokenSource();
             var cancelled = service.ResolveLatestVersionAsync(query, cancellation.Token);
-            var waiting = service.ResolveLatestVersionAsync(query);
+            var waiting = service.ResolveLatestVersionAsync(query, TestContext.Current.CancellationToken);
             cancellation.Cancel();
             versions.SetResult([new NuGetVersion("1.0.0"), new NuGetVersion("2.0.0")]);
 
@@ -124,7 +124,7 @@ namespace DotNetOutdated.Tests
         public async Task ResolvesVersionCorrectly(string current, VersionLock versionLock, PrereleaseReporting prerelease, string latest)
         {
             // Act
-            var latestVersion = await _nuGetPackageResolutionService.ResolveLatestVersionAsync(Query(_packageName1, current, versionLock, prerelease, null));
+            var latestVersion = await _nuGetPackageResolutionService.ResolveLatestVersionAsync(Query(_packageName1, current, versionLock, prerelease, null), TestContext.Current.CancellationToken);
 
             // Assert
             Assert.Equal(NuGetVersion.Parse(latest), latestVersion);
@@ -166,7 +166,7 @@ namespace DotNetOutdated.Tests
         public async Task ResolvesVersionCorrectlyWithParts(string current, VersionLock versionLock, PrereleaseReporting prerelease, string prereleaseLabel, string latest)
         {
             // Act
-            var latestVersion = await _nuGetPackageResolutionService.ResolveLatestVersionAsync(Query(_packageName2, current, versionLock, prerelease, prereleaseLabel));
+            var latestVersion = await _nuGetPackageResolutionService.ResolveLatestVersionAsync(Query(_packageName2, current, versionLock, prerelease, prereleaseLabel), TestContext.Current.CancellationToken);
 
             // Assert
             Assert.Equal(NuGetVersion.Parse(latest), latestVersion);
@@ -208,7 +208,7 @@ namespace DotNetOutdated.Tests
         public async Task ResolvesVersionCorrectlyIfPackageIsLatest(string current, VersionLock versionLock, PrereleaseReporting prerelease, string prereleaseLabel)
         {
             // Act
-            var latestVersion = await _nuGetPackageResolutionService.ResolveLatestVersionAsync(Query(_packageName3, current, versionLock, prerelease, prereleaseLabel));
+            var latestVersion = await _nuGetPackageResolutionService.ResolveLatestVersionAsync(Query(_packageName3, current, versionLock, prerelease, prereleaseLabel), TestContext.Current.CancellationToken);
 
             // Assert
             Assert.Equal(NuGetVersion.Parse(current), latestVersion);
