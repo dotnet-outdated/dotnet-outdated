@@ -952,14 +952,28 @@ namespace DotNetOutdated.Tests
             Assert.Equal(app, fileSystem.File.ReadAllText(AppPath));
         }
 
-        [Fact]
-        public void WriteDirective_DeclaredNowhereInAFileWithUnicodeLineSeparators_AddsALineEndedTheSameWay()
+        [Theory]
+        [InlineData("#:include lib/shared.cs\u2028Console.WriteLine();\u2028", "#:include lib/shared.cs\u2028#:package Foo@2.0.0\u2028Console.WriteLine();\u2028")]
+        [InlineData("#:include lib/shared.cs", "#:include lib/shared.cs\n#:package Foo@2.0.0\n")]
+        [InlineData("#:include lib/shared.cs\u0085", "#:include lib/shared.cs\u0085#:package Foo@2.0.0\u0085")]
+        public void WriteDirective_DeclaredNowhereInAFileWithUnicodeLineSeparators_AddsALineEndedTheSameWay(string app, string expected)
         {
-            var fileSystem = FileSystem("#:include lib/shared.cs\u2028Console.WriteLine();\u2028", new() { [SharedPath] = string.Empty });
+            var fileSystem = FileSystem(app, new() { [SharedPath] = string.Empty });
 
             Directives(fileSystem).WriteDirective(AppPath, ReferenceKind.Package, "Foo", "2.0.0");
 
-            Assert.Equal("#:include lib/shared.cs\u2028#:package Foo@2.0.0\u2028Console.WriteLine();\u2028", fileSystem.File.ReadAllText(AppPath));
+            Assert.Equal(expected, fileSystem.File.ReadAllText(AppPath));
+        }
+
+        [Theory]
+        [InlineData("\u2028")]
+        [InlineData("\u2029")]
+        [InlineData("\r")]
+        public void InsertDirective_IntoAFileWithoutDirectives_EndsTheLineAsTheFilesLinesEnd(string lineBreak)
+        {
+            var content = $"Console.WriteLine();{lineBreak}Console.WriteLine();{lineBreak}";
+
+            Assert.Equal($"#:package Foo@2.0.0{lineBreak}{content}", FileBasedAppSources.InsertDirective(content, "#:package Foo@2.0.0"));
         }
 
         [Fact]

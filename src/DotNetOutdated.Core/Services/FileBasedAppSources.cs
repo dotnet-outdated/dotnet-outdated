@@ -304,9 +304,9 @@ internal sealed partial record FileBasedAppSources(
     /// <summary>Adds a directive line after the file's last directive (or shebang), or as its first line.</summary>
     public static string InsertDirective(string content, string directive)
     {
-        var newLine = content.Contains("\r\n", StringComparison.Ordinal) ? "\r\n"
-            : content.Contains('\r') && !content.Contains('\n') ? "\r"
-            : "\n";
+        // A line ends as the file's lines do: as the first of them, unless the line it follows ends otherwise.
+        var firstBreak = content.IndexOfAny(LineBreaks);
+        var newLine = firstBreak < 0 ? "\n" : content[firstBreak..NextLineStart(content, firstBreak)];
         var spans = DirectiveLineSpans(content);
         if (spans.Count == 0)
         {
