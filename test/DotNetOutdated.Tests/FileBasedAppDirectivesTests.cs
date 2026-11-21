@@ -861,6 +861,21 @@ namespace DotNetOutdated.Tests
         }
 
         [Fact]
+        public void WriteDirective_WhenNoDirectoryUpToTheRootCanBeFound_FailsWithoutWriting()
+        {
+            // As for an unavailable share: the glob's root may hold files that declare the package.
+            const string app = "#:include lib/*.cs\n#:package Foo@1.0.0\n";
+            var fileSystem = new FaultyFileSystem { Unreachable = _ => true };
+            fileSystem.AddFile(AppPath, new MockFileData(app));
+            fileSystem.AddFile(SharedPath, new MockFileData("#:package Foo@1.0.0\n"));
+
+            var write = Directives(fileSystem).WriteDirective(AppPath, ReferenceKind.Package, "Foo", "2.0.0");
+
+            Assert.Contains("could not be read", write.Failure);
+            Assert.Equal(app, fileSystem.File.ReadAllText(AppPath));
+        }
+
+        [Fact]
         public void WriteDirective_DeclaredNowhereInAFileWithCarriageReturns_AddsALineEndedTheSameWay()
         {
             var fileSystem = FileSystem("#:include lib/shared.cs\rConsole.WriteLine();\r", new() { [SharedPath] = string.Empty });

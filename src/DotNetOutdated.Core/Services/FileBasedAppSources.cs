@@ -500,7 +500,8 @@ internal sealed partial record FileBasedAppSources(
     }
 
     // Whether the path is known not to exist: the nearest directory above it that exists lists nothing on the way to
-    // it. A path that exists but can't be reached (a directory on the way can't be read) isn't missing.
+    // it. A path that exists but can't be reached (a directory on the way can't be read), or whose root can't be
+    // found, isn't known to be missing.
     private static bool IsMissing(IFileSystem fileSystem, string path)
     {
         var child = fileSystem.Path.TrimEndingDirectorySeparator(path);
@@ -511,9 +512,10 @@ internal sealed partial record FileBasedAppSources(
             parent = fileSystem.Path.GetDirectoryName(parent);
         }
 
+        // Not even the root was found (an unavailable share, or a drive that isn't mapped), so nothing is known.
         if (parent == null)
         {
-            return true;
+            return false;
         }
 
         try
