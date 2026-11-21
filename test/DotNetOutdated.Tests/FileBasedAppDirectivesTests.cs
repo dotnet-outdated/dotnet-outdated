@@ -350,6 +350,8 @@ namespace DotNetOutdated.Tests
         [InlineData("#:include lib/a.cs\n#:include lib/a.cs\n#:include missing/*.cs\n#:include lib/notes.txt", "lib/a.cs")]
         [InlineData("#:include \"my lib/c.cs\" CopyToOutputDirectory=PreserveNewest", "my lib/c.cs")]
         [InlineData("#:property LibDir=lib\n#:include $(LibDir)/a.cs", "lib/a.cs")]
+        // MSBuild splits an item's Include on ';'.
+        [InlineData("#:property Lib=lib/a.cs;lib/shared.cs\n#:include $(Lib)", "lib/a.cs, lib/shared.cs")]
         [InlineData("#:include $(Undefined)/a.cs", "")]
         // A quoted property value is a C# string literal; one the SDK rejects defines nothing.
         [InlineData("#:property LibDir=\"lib\"\n#:include $(LibDir)/a.cs", "lib/a.cs")]
@@ -478,6 +480,23 @@ namespace DotNetOutdated.Tests
             {
                 Assert.Contains("could not be followed", directives.WriteDirective(AppPath, ReferenceKind.Package, "Foo", "2.0.0").Failure);
             }
+        }
+
+        [Fact]
+        public void SourceFiles_IncludedThroughADirectoryBuildTargetsDefault_KeepAFileThatRedefinesItAfterward()
+        {
+            // shared.cs was included while Lib had its default; its own Lib only affects includes read after it.
+            const string shared = "#:property Lib=another.cs\n#:package Foo@1.0.0\n";
+            var sharedPath = XFS.Path(@"c:\repo\shared.cs");
+            var fileSystem = FileSystem("#:include $(Lib)\n#:package Foo@1.0.0\n", new()
+            {
+                [TargetsPath] = "<Project><PropertyGroup><Lib Condition=\"'$(Lib)' == ''\">shared.cs</Lib></PropertyGroup></Project>",
+                [sharedPath] = shared,
+            });
+            var directives = Directives(fileSystem);
+
+            Assert.Equal([AppPath, sharedPath], directives.SourceFiles(AppPath));
+            Assert.Equal([AppPath, sharedPath], directives.WriteDirective(AppPath, ReferenceKind.Package, "Foo", "2.0.0").ChangedFiles);
         }
 
         [Fact]
@@ -867,6 +886,99 @@ namespace DotNetOutdated.Tests
         }
 
         [Fact]
+        public void WriteDirective_WhenAnIncludedFileCannotBeRead_FailsWithoutWriting()
+        {
+            const string app = "#:include lib/shared.cs\n#:package Foo@1.0.0\n";
+            var fileSystem = new FaultyFileSystem { Unreadable = path => path == SharedPath };
+            fileSystem.AddFile(AppPath, new MockFileData(app));
+            fileSystem.AddFile(SharedPath, new MockFileData("#:package Foo@1.0.0\n"));
+
+            var write = Directives(fileSystem).WriteDirective(AppPath, ReferenceKind.Package, "Foo", "2.0.0");
+
+            Assert.Contains("is denied", write.Failure);
+            Assert.Equal(app, fileSystem.File.ReadAllText(AppPath));
+        }
+
+        [Fact]
+        public void WriteDirective_WhenAFileNowTakesItsVersionFromAProperty_FailsWithoutWriting()
+        {
+            // The file changed after its directives were read, so the text to rewrite is checked too.
+            const string app = "#:include lib/shared.cs\n#:package Foo@1.0.0\n";
+            var fileSystem = new FaultyFileSystem
+            {
+                ChangedContent = path => path == SharedPath ? "#:package Foo@$(V)\n" : null,
+            };
+            fileSystem.AddFile(AppPath, new MockFileData(app));
+            fileSystem.AddFile(SharedPath, new MockFileData("#:package Foo@1.0.0\n"));
+
+            var write = Directives(fileSystem).WriteDirective(AppPath, ReferenceKind.Package, "Foo", "2.0.0");
+
+            Assert.Contains("'#:package Foo@$(V)'", write.Failure);
+            Assert.Contains("takes its version from a property", write.Failure);
+            Assert.Equal(app, fileSystem.File.ReadAllText(AppPath));
+        }
+
+        [Fact]
+        public void WriteDirective_WhenALaterFileCannotBeWritten_RestoresTheBytesOfAFileThatIsNotUtf8()
+        {
+            // The 0xFF in the comment can't be decoded, so only its original bytes restore the file exactly.
+            byte[] app = [.. "#:include lib/shared.cs\n#:package Foo@1.0.0\n// "u8, 0xFF, .. "\n"u8];
+            var fileSystem = new FaultyFileSystem();
+            fileSystem.AddFile(AppPath, new MockFileData(app));
+            fileSystem.AddFile(SharedPath, new MockFileData("#:package Foo@1.0.0\n"));
+            fileSystem.File.SetAttributes(SharedPath, System.IO.FileAttributes.ReadOnly);
+
+            var write = Directives(fileSystem).WriteDirective(AppPath, ReferenceKind.Package, "Foo", "2.0.0");
+
+            Assert.Contains("No file was changed.", write.Failure);
+            Assert.Equal(app, fileSystem.File.ReadAllBytes(AppPath));
+        }
+
+        [Fact]
+        public void WriteDirective_WhenAGlobsRootCannotBeReached_FailsWithoutWriting()
+        {
+            // lib exists, as its parent lists it, but can't be reached, so it isn't taken to be missing.
+            const string app = "#:include lib/*.cs\n#:package Foo@1.0.0\n";
+            var libPath = XFS.Path(@"c:\repo\lib");
+            var fileSystem = new FaultyFileSystem { Unreachable = path => path.TrimEnd('/', '\\') == libPath };
+            fileSystem.AddFile(AppPath, new MockFileData(app));
+            fileSystem.AddFile(SharedPath, new MockFileData("#:package Foo@1.0.0\n"));
+
+            var write = Directives(fileSystem).WriteDirective(AppPath, ReferenceKind.Package, "Foo", "2.0.0");
+
+            Assert.Contains("could not be read", write.Failure);
+            Assert.Equal(app, fileSystem.File.ReadAllText(AppPath));
+        }
+
+        [Fact]
+        public void WriteDirective_DeclaredNowhereInAFileWithUnicodeLineSeparators_AddsALineEndedTheSameWay()
+        {
+            var fileSystem = FileSystem("#:include lib/shared.cs\u2028Console.WriteLine();\u2028", new() { [SharedPath] = string.Empty });
+
+            Directives(fileSystem).WriteDirective(AppPath, ReferenceKind.Package, "Foo", "2.0.0");
+
+            Assert.Equal("#:include lib/shared.cs\u2028#:package Foo@2.0.0\u2028Console.WriteLine();\u2028", fileSystem.File.ReadAllText(AppPath));
+        }
+
+        [Fact]
+        public void References_ThroughAnImportedAliasOfAPropertyTheAppRedefines_AreNotResolved()
+        {
+            // Frozen took V's imported value when Directory.Build.props assigned it, before the app's V, so neither
+            // the app's V nor the alias says which definition holds the version.
+            const string app = "#:include lib/shared.cs\n#:property V=2.0.0\n";
+            var fileSystem = FileSystem(app, new()
+            {
+                [RootPropsPath] = "<Project><PropertyGroup><V>1.0.0</V><Frozen>$(V)</Frozen></PropertyGroup></Project>",
+                [SharedPath] = "#:package Foo@$(Frozen)\n",
+            });
+            var directives = Directives(fileSystem);
+
+            Assert.Equal("", Summary(directives.References(AppPath)));
+            Assert.Empty(directives.PackageVariables(AppPath, ReferenceKind.Package));
+            Assert.Contains("takes its version from a property", directives.WriteDirective(AppPath, ReferenceKind.Package, "Foo", "3.0.0").Failure);
+        }
+
+        [Fact]
         public void TryUpdateVariable_UsedByAnIncludePath_WarnsAndChangesNothing()
         {
             // A new value would include another file, which may define the property or declare the package too.
@@ -1073,6 +1185,53 @@ namespace DotNetOutdated.Tests
                         throw new System.IO.IOException("The disk is full.");
                     }
                 }
+            }
+        }
+
+        // A file system with faults: files that can't be read, files whose content changes once read as text (as if
+        // edited since), and directories that can't be reached though their parent lists them. Text that isn't valid
+        // UTF-8 is read as File.ReadAllText reads it, with replacement characters.
+        private sealed class FaultyFileSystem : MockFileSystem
+        {
+            private FaultyFile? _file;
+            private FaultyDirectory? _directory;
+
+            public Func<string, bool> Unreadable { get; init; } = _ => false;
+
+            public Func<string, string?> ChangedContent { get; init; } = _ => null;
+
+            public Func<string, bool> Unreachable { get; init; } = _ => false;
+
+            public override IFile File => _file ??= new FaultyFile(this);
+
+            public override IDirectory Directory => _directory ??= new FaultyDirectory(this, base.Directory.GetCurrentDirectory());
+
+            private sealed class FaultyFile(FaultyFileSystem fileSystem) : MockFile(fileSystem)
+            {
+                public override string ReadAllText(string path)
+                {
+                    Check(path);
+                    return System.Text.Encoding.UTF8.GetString(base.ReadAllBytes(path));
+                }
+
+                public override byte[] ReadAllBytes(string path)
+                {
+                    Check(path);
+                    return fileSystem.ChangedContent(path) is { } changed ? System.Text.Encoding.UTF8.GetBytes(changed) : base.ReadAllBytes(path);
+                }
+
+                private void Check(string path)
+                {
+                    if (fileSystem.Unreadable(path))
+                    {
+                        throw new UnauthorizedAccessException($"Access to '{path}' is denied.");
+                    }
+                }
+            }
+
+            private sealed class FaultyDirectory(FaultyFileSystem fileSystem, string currentDirectory) : MockDirectory(fileSystem, currentDirectory)
+            {
+                public override bool Exists(string? path) => path != null && !fileSystem.Unreachable(path) && base.Exists(path);
             }
         }
 

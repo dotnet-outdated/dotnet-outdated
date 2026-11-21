@@ -187,7 +187,16 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
             return DirectiveWrite.Failed($"{failure}: the file was not found.");
         }
 
-        var sources = ReadSources(projectFilePath);
+        FileBasedAppSources sources;
+        try
+        {
+            sources = ReadSources(projectFilePath);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return DirectiveWrite.Failed($"{failure}: {ex.Message}");
+        }
+
         if (UnreadIncludes(sources) is { } unread)
         {
             return DirectiveWrite.Failed($"{failure}: {unread}");
@@ -222,6 +231,7 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
             {
                 var file = EncodedText.Read(_fileSystem, source.Path);
                 string? versionless = null;
+                string? propertyVersion = null;
                 var declares = false;
                 var content = FileBasedAppSources.RewriteDirectives(file.Content, directive =>
                 {
@@ -237,12 +247,26 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
                         return null;
                     }
 
+                    // The file may have changed since its directives were read, so its version is checked again in the
+                    // text that is rewritten.
+                    if (FileBasedAppSources.HasExpression(directive.Value))
+                    {
+                        propertyVersion = directive.Line.Trim();
+                        return null;
+                    }
+
                     return string.Equals(directive.Value, versionText, StringComparison.Ordinal) ? null : directive.WithValue(versionText);
                 });
 
                 if (versionless != null)
                 {
                     return DirectiveWrite.Failed($"{failure}: '{versionless}' in '{source.Path}' has no version to update.");
+                }
+
+                if (propertyVersion != null)
+                {
+                    return DirectiveWrite.Failed(
+                        $"{failure}: '{propertyVersion}' in '{source.Path}' takes its version from a property that could not be updated; change the version by hand.");
                 }
 
                 if (declares)
@@ -285,12 +309,14 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
     // that couldn't be changed back, or null.
     private string? WriteAll(List<(string Path, EncodedText File, string Content)> edits, string failure)
     {
-        var written = new List<(string Path, EncodedText File, string Content)>();
+        // Each file's bytes are kept as they were, so changing it back restores them exactly, even text that couldn't
+        // be decoded.
+        var written = new List<(string Path, byte[] Original)>();
         foreach (var edit in edits)
         {
             try
             {
-                written.Add(edit);
+                written.Add((edit.Path, _fileSystem.File.ReadAllBytes(edit.Path)));
                 edit.File.Write(_fileSystem, edit.Path, edit.Content);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -301,9 +327,9 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
                     try
                     {
                         // The file that failed may not have been changed at all (it is read-only, say).
-                        if (!string.Equals(EncodedText.Read(_fileSystem, done.Path).Content, done.File.Content, StringComparison.Ordinal))
+                        if (!_fileSystem.File.ReadAllBytes(done.Path).AsSpan().SequenceEqual(done.Original))
                         {
-                            done.File.Write(_fileSystem, done.Path, done.File.Content);
+                            _fileSystem.File.WriteAllBytes(done.Path, done.Original);
                         }
                     }
                     catch (Exception restoreEx) when (restoreEx is IOException or UnauthorizedAccessException)

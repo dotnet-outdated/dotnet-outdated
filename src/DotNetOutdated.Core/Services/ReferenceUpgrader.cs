@@ -77,42 +77,73 @@ namespace DotNetOutdated.Core.Services
                 _reachedLocations = new HashSet<string>(LocationComparer);
                 try
                 {
+                    var deferred = new List<IGrouping<string, UpgradeProject>>();
                     foreach (var projects in upgrade.Projects
                         .Concat(plan.HeldBack.Select(entry => entry.Project))
                         .GroupBy(project => PathCase.OnDisk(_fileSystem, project.Path), StringComparer.Ordinal))
                     {
-                        // A held-back project is upgraded because an earlier one writes a location it shares; if none
-                        // of those got as far as writing (its write was refused, say), it keeps its version.
-                        var locations = projects.SelectMany(project => plan.Locations.GetValueOrDefault(project, [])).ToList();
-                        if (!projects.Any(requested.Contains) && !locations.Any(_reachedLocations.Contains))
+                        if (projects.Any(requested.Contains) || Reached(projects))
                         {
-                            results.Add(new ProjectUpgradeResult
-                            {
-                                ProjectPath = projects.First().Path,
-                                Outcome = UpgradeOutcome.Failed,
-                                FailureDetails =
-                                    $"'{projects.First().Path}' was held back but shares the version of {upgrade.Name} with a project that couldn't be " +
-                                    "upgraded, so neither was changed.",
-                            });
-                            continue;
+                            results.Add(Run(projects));
                         }
-
-                        var result = UpgradeProject(
-                            upgrade,
-                            projects.First().Path,
-                            [.. projects.Select(p => p.TargetFramework).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase)],
-                            [.. projects.Where(heldBackSharing.Contains)]);
-                        if (result.Outcome != UpgradeOutcome.Failed)
+                        else
                         {
-                            _reachedLocations.UnionWith(locations);
+                            deferred.Add(projects);
                         }
-
-                        results.Add(result);
                     }
+
+                    // A held-back project is upgraded because another writes a location it shares. One whose locations
+                    // nothing has reached yet waits until another project's write reaches one; if none does (the
+                    // writes were refused, say), it keeps its version.
+                    bool ran;
+                    do
+                    {
+                        ran = false;
+                        foreach (var projects in deferred.Where(Reached).ToList())
+                        {
+                            deferred.Remove(projects);
+                            results.Add(Run(projects));
+                            ran = true;
+                        }
+                    }
+                    while (ran);
+
+                    results.AddRange(deferred.Select(projects => new ProjectUpgradeResult
+                    {
+                        ProjectPath = projects.First().Path,
+                        Outcome = UpgradeOutcome.Failed,
+                        FailureDetails =
+                            $"'{projects.First().Path}' was held back but shares the version of {upgrade.Name} with a project that couldn't be " +
+                            "upgraded, so neither was changed.",
+                    }));
                 }
                 finally
                 {
                     _reachedLocations = null;
+                }
+
+                bool Reached(IGrouping<string, UpgradeProject> projects) =>
+                    projects.SelectMany(project => plan.Locations.GetValueOrDefault(project, [])).Any(_reachedLocations!.Contains);
+
+                ProjectUpgradeResult Run(IGrouping<string, UpgradeProject> projects)
+                {
+                    _wroteDirectly = false;
+                    var result = UpgradeProject(
+                        upgrade,
+                        projects.First().Path,
+                        [.. projects.Select(p => p.TargetFramework).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase)],
+                        [.. projects.Where(heldBackSharing.Contains)]);
+
+                    // A file-based app's direct write records the locations it wrote, which can differ from the planned
+                    // ones (an earlier write can change the files it includes). `dotnet add package` doesn't say, and
+                    // a project file's writes record locations by other names, so the planned locations of those
+                    // projects are taken as reached.
+                    if (result.Outcome != UpgradeOutcome.Failed && !(_wroteDirectly && projects.Key.IsCSharpFile()))
+                    {
+                        _reachedLocations!.UnionWith(projects.SelectMany(project => plan.Locations.GetValueOrDefault(project, [])));
+                    }
+
+                    return result;
                 }
 
                 return results;
@@ -139,6 +170,10 @@ namespace DotNetOutdated.Core.Services
         // The locations the projects upgraded so far in Upgrade wrote (or found already at the new value), or null
         // outside Upgrade.
         private HashSet<string>? _reachedLocations;
+
+        // Whether the project being upgraded wrote a location directly, which records it in _reachedLocations (by the
+        // names the plan uses, for a file-based app).
+        private bool _wroteDirectly;
 
         // Upgrading a project writes all of its locations, so a held-back project sharing one of them is upgraded
         // too, and so is one sharing another of that one's, and so on.
@@ -347,6 +382,7 @@ namespace DotNetOutdated.Core.Services
                         break;
 
                     case Written written:
+                        _wroteDirectly = true;
                         foreach (var (location, changed) in written.Locations)
                         {
                             _reachedLocations?.Add(location);
