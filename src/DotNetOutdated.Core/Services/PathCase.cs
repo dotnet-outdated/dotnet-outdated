@@ -24,7 +24,8 @@ internal static class PathCase
             [fileSystem.Path.DirectorySeparatorChar, fileSystem.Path.AltDirectorySeparatorChar],
             StringSplitOptions.RemoveEmptyEntries);
 
-        var current = OperatingSystem.IsWindows() ? root.ToUpperInvariant() : root;
+        // The root is kept as written: a drive letter or share name isn't listed by any directory.
+        var current = root;
         for (var i = 0; i < segments.Length; i++)
         {
             if (StoredName(fileSystem, current, segments[i]) is not { } name)
