@@ -34,13 +34,13 @@ namespace DotNetOutdated.Core.Services
             public HashSet<string> RestoredProjects { get; } = new(LocationComparer);
         }
 
-        // Locations are a file's full path and the name it holds (see Location), so they compare as the file system
-        // compares paths: two files whose paths differ only in case are different files where it is case-sensitive.
-        private static readonly StringComparer LocationComparer =
-            OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        // Locations (see Location) and project paths spell each file's path as the file system stores it, so they
+        // compare ordinally: two paths that differ only in case are one file where the volume ignores case, and two
+        // where it doesn't.
+        private static readonly StringComparer LocationComparer = StringComparer.Ordinal;
 
         // A version location: the file, and what in it holds the version. Ids and property names are case-insensitive.
-        private static string Location(string filePath, string what) => $"{filePath}|{what.ToUpperInvariant()}";
+        private string Location(string filePath, string what) => $"{PathCase.OnDisk(_fileSystem, filePath)}|{what.ToUpperInvariant()}";
 
         public ReferenceUpgrader(IDotNetRunner dotNetRunner, IFileSystem fileSystem)
             : this(dotNetRunner, fileSystem, new DotNetProjectEvaluator(dotNetRunner, fileSystem))
@@ -318,7 +318,7 @@ namespace DotNetOutdated.Core.Services
                     : Result(context, UpgradeOutcome.AlreadyCurrent);
             }
 
-            var projectFullPath = _fileSystem.Path.GetFullPath(context.ProjectPath);
+            var projectFullPath = PathCase.OnDisk(_fileSystem, context.ProjectPath);
             if (context.Upgrade.NoRestore || upgraded.All(location => location.RestoredProjects.Contains(projectFullPath)))
             {
                 return Result(context, UpgradeOutcome.Upgraded);
@@ -354,7 +354,7 @@ namespace DotNetOutdated.Core.Services
 
         // Writes a property-backed version in every file that holds it. Each file is its own location, which apps that
         // include it share.
-        private static Write UpdateFileBasedVariable(Context context, PackageVariableInfo variableInfo)
+        private Write UpdateFileBasedVariable(Context context, PackageVariableInfo variableInfo)
         {
             var version = context.Upgrade.Version;
             var locations = FileBasedVariableLocations(context.Directives, context.ProjectPath, variableInfo);
@@ -372,7 +372,7 @@ namespace DotNetOutdated.Core.Services
 
         // Writes the directives for the reference in every file of the app that declares it. Each file is its own
         // location, which apps that include it share.
-        private static Write UpdateFileBasedDirectives(Context context, ReferenceKind kind, string versionText)
+        private Write UpdateFileBasedDirectives(Context context, ReferenceKind kind, string versionText)
         {
             var write = context.Directives.WriteDirective(context.ProjectPath, kind, context.Name, versionText);
             if (write.Failure != null)
@@ -385,12 +385,12 @@ namespace DotNetOutdated.Core.Services
                 versionText);
         }
 
-        private static string DirectiveLocation(string filePath, ReferenceKind kind, string name) =>
+        private string DirectiveLocation(string filePath, ReferenceKind kind, string name) =>
             Location(filePath, $"#:{kind} {name}");
 
         // The locations of a file-based app's property-backed version: each file with the property, or for an SDK named
         // through a property, each file with its directive.
-        private static IReadOnlyList<string> FileBasedVariableLocations(FileBasedAppDirectives directives, string projectPath, PackageVariableInfo variableInfo) =>
+        private IReadOnlyList<string> FileBasedVariableLocations(FileBasedAppDirectives directives, string projectPath, PackageVariableInfo variableInfo) =>
         [
             .. directives.VariableFiles(projectPath, variableInfo).Select(file => string.IsNullOrEmpty(variableInfo.VariableName)
                 ? DirectiveLocation(file, variableInfo.ReferenceKind, variableInfo.PackageName)
@@ -424,7 +424,7 @@ namespace DotNetOutdated.Core.Services
 
         // Writes the variable directly: with --no-restore (avoiding NuGet/Home#12552), or where `dotnet add package`
         // can't edit the reference.
-        private static Write UpdateVariable(Context context, PackageVariableInfo variableInfo, VersionRange range)
+        private Write UpdateVariable(Context context, PackageVariableInfo variableInfo, VersionRange range)
         {
             var location = VariableLocation(variableInfo);
             var versionText = range.ToVersionString();
@@ -440,7 +440,7 @@ namespace DotNetOutdated.Core.Services
                     $"$({variableInfo.VariableName}) property in '{variableInfo.FilePath}'.");
         }
 
-        private static string VariableLocation(PackageVariableInfo variableInfo) =>
+        private string VariableLocation(PackageVariableInfo variableInfo) =>
             Location(variableInfo.FilePath, $"$({variableInfo.VariableName})");
 
         // Writes a literal version directly in the file that declares it: for a GlobalPackageReference `dotnet add package`

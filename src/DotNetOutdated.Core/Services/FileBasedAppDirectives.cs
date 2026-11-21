@@ -279,7 +279,7 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
             return DeclaringFiles(projectFilePath, variableInfo.ReferenceKind, variableInfo.PackageName);
         }
 
-        if (!variableInfo.FilePath.IsCSharpFile() || !projectFilePath.IsCSharpFile() || !_fileSystem.File.Exists(projectFilePath))
+        if (!projectFilePath.IsCSharpFile() || !_fileSystem.File.Exists(projectFilePath))
         {
             return [variableInfo.FilePath];
         }
@@ -287,9 +287,15 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
         return PropertyFiles(ReadSources(projectFilePath), variableInfo);
     }
 
-    // The files with a #:property line for the variable, or the file it was found in when none has one.
-    private static List<string> PropertyFiles(FileBasedAppSources sources, PackageVariableInfo variableInfo)
+    // The app's files with a #:property line for the variable when it is defined in one of them (whatever its
+    // extension, as the item mapping decides which files are compiled), or else the Directory.* file it was found in.
+    private List<string> PropertyFiles(FileBasedAppSources sources, PackageVariableInfo variableInfo)
     {
+        if (!IsSource(sources, variableInfo.FilePath))
+        {
+            return [variableInfo.FilePath];
+        }
+
         var files = sources.Files
             .Where(file => file.Directives.Any(directive => DefinesProperty(directive, variableInfo.VariableName)))
             .Select(file => file.Path)
@@ -334,9 +340,9 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
 
         if (_fileSystem.File.Exists(variableInfo.FilePath) && !string.IsNullOrEmpty(variableInfo.VariableName))
         {
-            if (variableInfo.FilePath.IsCSharpFile())
+            if (sourcesBefore != null && IsSource(sourcesBefore, variableInfo.FilePath))
             {
-                var propertyFiles = sourcesBefore != null ? PropertyFiles(sourcesBefore, variableInfo) : [variableInfo.FilePath];
+                var propertyFiles = PropertyFiles(sourcesBefore, variableInfo);
                 foreach (var propertyFilePath in propertyFiles)
                 {
                     var propertyFile = EncodedText.Read(_fileSystem, propertyFilePath);
@@ -366,13 +372,12 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
         }
 
         // Read after the property was written, so a directive whose id is a property expression resolves with it. A
-        // directive repeated in several files must keep the same text in each, so every file is rewritten.
+        // directive repeated in several files must keep the same version in each, so every file is rewritten: one
+        // that reads a property already sees the new value, and a literal version is written. Each directive keeps
+        // its own id and version expression, as other apps that include its file may not define the properties
+        // this app's directive uses.
         var sources = ReadSources(projectFilePath);
-        var propertyDefinitions = sources.Properties;
-        var directiveVersion = VersionExpression.ContainsPropertyReference(variableInfo.PackageReferenceVersion)
-            ? variableInfo.PackageReferenceVersion
-            : newVersion.ToString();
-
+        var literalVersion = newVersion.ToString();
         var directiveKind = DirectiveKind(variableInfo.ReferenceKind);
         foreach (var source in sources.Files)
         {
@@ -382,19 +387,15 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
             {
                 if (directive.Kind != directiveKind ||
                     string.IsNullOrEmpty(directive.Value) ||
+                    VersionExpression.ContainsPropertyReference(directive.Value) ||
                     (!string.Equals(directive.Name, variableInfo.PackageReferenceName, StringComparison.OrdinalIgnoreCase) &&
                      !Declares(directive, sources, variableInfo.ReferenceKind, variableInfo.PackageName)))
                 {
                     return null;
                 }
 
-                // Only what differs is rewritten, so the directive keeps its metadata, quoting and spacing.
-                var name = string.Equals(directive.Name, variableInfo.PackageReferenceName, StringComparison.Ordinal)
-                    ? directive.Name
-                    : variableInfo.PackageReferenceName!;
-                return name == directive.Name && directive.Value == directiveVersion
-                    ? null
-                    : directive.With(name, directiveVersion);
+                // Only the version is rewritten, so the directive keeps its metadata, quoting and spacing.
+                return directive.Value == literalVersion ? null : directive.WithValue(literalVersion);
             });
 
             if (!string.Equals(content, newContent, StringComparison.Ordinal))
@@ -484,6 +485,13 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
             ? null
             : $"{string.Join(", ", sources.UnresolvedIncludes)} could not be followed, and the files it names may declare it too.";
 
+
+    // Whether the file is one of the app's sources, whose directives define its properties.
+    private bool IsSource(FileBasedAppSources sources, string filePath)
+    {
+        var fullPath = _fileSystem.Path.GetFullPath(filePath);
+        return sources.Files.Any(file => FileBasedAppSources.PathComparer.Equals(file.Path, fullPath));
+    }
 
     private static string DirectiveKind(ReferenceKind kind) => kind == ReferenceKind.Sdk ? "sdk" : "package";
 

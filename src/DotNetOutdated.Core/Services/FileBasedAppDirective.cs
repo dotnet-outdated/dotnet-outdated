@@ -21,7 +21,6 @@ namespace DotNetOutdated.Core.Services;
 /// <param name="Kind">The directive kind, such as <c>package</c>.</param>
 /// <param name="Name">The id, property name or path, decoded.</param>
 /// <param name="Value">The version or property value, decoded; <see langword="null"/> when there is no separator.</param>
-/// <param name="NameSpan">Where the name is written in <paramref name="Line"/>, quotes included.</param>
 /// <param name="ValueSpan">Where the value is written in <paramref name="Line"/>, quotes included; empty when there is none.</param>
 internal sealed record FileBasedAppDirective(
     string Line,
@@ -29,7 +28,6 @@ internal sealed record FileBasedAppDirective(
     string Name,
     string? Value,
     IReadOnlyList<KeyValuePair<string, string>> Metadata,
-    (int Start, int End) NameSpan,
     (int Start, int End) ValueSpan)
 {
     /// <summary>
@@ -81,7 +79,6 @@ internal sealed record FileBasedAppDirective(
 
         var first = tokenized.Tokens[0];
         var name = first.SeparatorIndex < 0 ? first.Text : first.Text[..first.SeparatorIndex];
-        var nameEnd = first.RawSeparator < 0 ? first.RawEnd : first.RawSeparator;
         string? value = first.SeparatorIndex < 0 ? null : first.Text[(first.SeparatorIndex + 1)..];
         var valueStart = first.RawSeparator < 0 ? first.RawEnd : first.RawSeparator + 1;
         if (tokenized.IsLegacy)
@@ -91,7 +88,6 @@ internal sealed record FileBasedAppDirective(
             value = value?.TrimStart();
         }
 
-        (_, nameEnd) = Trim(text, first.RawStart, nameEnd);
         (valueStart, _) = Trim(text, valueStart, first.RawEnd);
 
         if (name.Length == 0 ||
@@ -108,7 +104,6 @@ internal sealed record FileBasedAppDirective(
             name,
             value,
             metadata,
-            (textStart + first.RawStart, textStart + nameEnd),
             (textStart + valueStart, textStart + first.RawEnd));
         return true;
     }
@@ -116,10 +111,6 @@ internal sealed record FileBasedAppDirective(
     /// <summary>The line with its value replaced by <paramref name="value"/>, quoted if it needs to be.</summary>
     public string WithValue(string value) =>
         Line[..ValueSpan.Start] + QuoteIfNeeded(value) + Line[ValueSpan.End..];
-
-    /// <summary>The line with its name and value replaced, each quoted if it needs to be.</summary>
-    public string With(string name, string value) =>
-        Line[..NameSpan.Start] + QuoteIfNeeded(name) + Line[NameSpan.End..ValueSpan.Start] + QuoteIfNeeded(value) + Line[ValueSpan.End..];
 
     /// <summary>
     /// The value as a directive writes it: bare, or as a C# string literal when it holds whitespace or a quote.

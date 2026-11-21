@@ -1334,8 +1334,9 @@ Console.WriteLine();")
                 [XFS.Path(@"c:\repo\lib\shared.cs")] = new("#:package Humanizer@3.0.10\n"),
                 [XFS.Path(@"c:\repo\lib\Shared.cs")] = new("#:package Humanizer@3.0.10\n"),
             });
-            // Windows and macOS file systems ignore case by default, so there the two paths are taken to be one file.
-            var caseSensitive = !(OperatingSystem.IsWindows() || OperatingSystem.IsMacOS());
+            // Whether the two paths are one file is the file system's to say (a macOS or Windows volume can be
+            // case-sensitive), not the operating system's.
+            var caseSensitive = !fileSystem.File.Exists(upgradedAppPath.ToUpperInvariant());
             var service = new ReferenceUpgrader(Substitute.For<IDotNetRunner>(), fileSystem);
             var upgrade = new ReferenceUpgrade
             {

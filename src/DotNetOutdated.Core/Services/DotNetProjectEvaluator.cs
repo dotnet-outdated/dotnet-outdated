@@ -31,8 +31,10 @@ internal sealed class DotNetProjectEvaluator(IDependencyGraphService dependencyG
     public IReadOnlyDictionary<string, PackageVersionDeclaration> GetPackageVersions(string projectPath, string? targetFramework = null) =>
         _evaluator.PackageVersions(projectPath, targetFramework);
 
+    // A file-based app's project is a virtual one beside its entry point, whose path has .csproj appended: its
+    // reserved properties ($(MSBuildProjectName) is app.cs for app.cs) come from that path.
     public IReadOnlyDictionary<string, ImportedProperty> GetImportedProperties(string appPath) =>
-        _evaluator.Evaluate(appPath, includeProjectFile: false).Properties
+        _evaluator.Evaluate(appPath + ".csproj", includeProjectFile: false).Properties
             .ToDictionary(
                 pair => pair.Key,
                 pair => new ImportedProperty(pair.Value.Name, pair.Value.RawValue, pair.Value.Value, pair.Value.FilePath, pair.Value.ElementIndex, pair.Value.Ambiguous),

@@ -413,6 +413,50 @@ namespace DotNetOutdated.Tests
         }
 
         [Fact]
+        public void SourceFiles_IncludedThroughAnImportedProperty_SeeTheVirtualProjectsReservedProperties()
+        {
+            // The app's project is app.cs.csproj, so its name is app.cs.
+            var includedPath = XFS.Path(@"c:\repo\app.cs.lib\shared.cs");
+            var fileSystem = FileSystem("#:include $(LibDir)/shared.cs\n", new()
+            {
+                [RootPropsPath] = "<Project><PropertyGroup><LibDir>$(MSBuildProjectName).lib</LibDir></PropertyGroup></Project>",
+                [XFS.Path(@"c:\repo\app.lib\shared.cs")] = "#:package Foo@1.0.0\n",
+                [includedPath] = "#:package Bar@2.0.0\n",
+            });
+            var directives = Directives(fileSystem);
+
+            Assert.Equal([AppPath, includedPath], directives.SourceFiles(AppPath));
+        }
+
+        [Fact]
+        public void SourceFiles_IncludedThroughAProperty_UseItsValueWhenItWasAssigned()
+        {
+            // As in MSBuild, LibDir takes the value Root has when LibDir is assigned, not Root's later value.
+            var fileSystem = FileSystem("#:property LibDir=$(Root)\n#:property Root=b\n#:include $(LibDir)/shared.cs\n", new()
+            {
+                [RootPropsPath] = "<Project><PropertyGroup><Root>a</Root></PropertyGroup></Project>",
+                [XFS.Path(@"c:\repo\a\shared.cs")] = string.Empty,
+                [XFS.Path(@"c:\repo\b\shared.cs")] = string.Empty,
+            });
+
+            Assert.Equal([AppPath, XFS.Path(@"c:\repo\a\shared.cs")], Directives(fileSystem).SourceFiles(AppPath));
+        }
+
+        [Fact]
+        public void SourceFiles_IncludedThroughAPropertyAssignedFromAnUndefinedOne_AreNotFollowed()
+        {
+            // MSBuild expands $(Root) to empty when LibDir is assigned; the later Root isn't used for the path.
+            var fileSystem = FileSystem("#:property LibDir=$(Root)\n#:property Root=b\n#:include $(LibDir)/shared.cs\n#:package Foo@1.0.0\n", new()
+            {
+                [XFS.Path(@"c:\repo\b\shared.cs")] = "#:package Foo@1.0.0\n",
+            });
+            var directives = Directives(fileSystem);
+
+            Assert.Equal([AppPath], directives.SourceFiles(AppPath));
+            Assert.Contains("could not be followed", directives.WriteDirective(AppPath, ReferenceKind.Package, "Foo", "2.0.0").Failure);
+        }
+
+        [Fact]
         public void References_WithAQuotedPropertyVersion_ResolveTheDecodedValue()
         {
             var fileSystem = FileSystem("#:property FooVersion=\"1.2.3\"\n#:package Foo@$(FooVersion)\n");
@@ -674,8 +718,9 @@ namespace DotNetOutdated.Tests
         }
 
         [Fact]
-        public void TryUpdateVariable_ForAnSdkNamedThroughAProperty_KeepsTheDirectivesComments()
+        public void TryUpdateVariable_ForAnSdkNamedThroughAProperty_KeepsEachDirectivesNameAndComments()
         {
+            // Other apps that include the shared file may not define $(SdkId), so its literal name is kept.
             const string app = "#:include lib/shared.cs\n#:property SdkId=Cake.Sdk\n#:sdk $(SdkId)@6.0.0\n";
             const string shared = "#:sdk cake.sdk @ 6.0.0 // pinned\n";
             var fileSystem = FileSystem(app, new() { [SharedPath] = shared });
@@ -685,7 +730,41 @@ namespace DotNetOutdated.Tests
             Assert.True(directives.TryUpdateVariable(AppPath, variableInfo, new NuGetVersion("6.1.0")));
 
             Assert.Equal(app.Replace("6.0.0", "6.1.0"), fileSystem.File.ReadAllText(AppPath));
-            Assert.Equal("#:sdk $(SdkId) @ 6.1.0 // pinned\n", fileSystem.File.ReadAllText(SharedPath));
+            Assert.Equal("#:sdk cake.sdk @ 6.1.0 // pinned\n", fileSystem.File.ReadAllText(SharedPath));
+        }
+
+        [Fact]
+        public void TryUpdateVariable_KeepsALiteralVersionInAnotherFileLiteral()
+        {
+            // Other apps that include the shared file may not define $(FooVersion), so it keeps a literal version.
+            const string app = "#:include lib/shared.cs\n#:property FooVersion=1.0.0\n#:package Foo@$(FooVersion)\n";
+            const string shared = "#:package Foo@1.0.0\n";
+            var fileSystem = FileSystem(app, new() { [SharedPath] = shared });
+            var directives = Directives(fileSystem);
+            var variableInfo = directives.PackageVariables(AppPath, ReferenceKind.Package)["Foo"];
+
+            Assert.True(directives.TryUpdateVariable(AppPath, variableInfo, new NuGetVersion("2.0.0")));
+
+            Assert.Equal(app.Replace("1.0.0", "2.0.0"), fileSystem.File.ReadAllText(AppPath));
+            Assert.Equal("#:package Foo@2.0.0\n", fileSystem.File.ReadAllText(SharedPath));
+        }
+
+        [Fact]
+        public void TryUpdateVariable_DefinedInAnIncludedFileOfAnotherExtension_UpdatesItThere()
+        {
+            // The item mapping makes .txt files Compile items, so their directives count, as for the SDK.
+            const string app = "#:property FileBasedProgramsItemMapping=.cs=Compile;.txt=Compile\n#:include lib/versions.txt\n#:package Foo@$(FooVersion)\n";
+            var versionsPath = XFS.Path(@"c:\repo\lib\versions.txt");
+            var fileSystem = FileSystem(app, new() { [versionsPath] = "#:property FooVersion=1.0.0\n" });
+            var directives = Directives(fileSystem);
+            var variableInfo = directives.PackageVariables(AppPath, ReferenceKind.Package)["Foo"];
+
+            Assert.Equal([versionsPath], directives.VariableFiles(AppPath, variableInfo));
+            Assert.True(directives.TryUpdateVariable(AppPath, variableInfo, new NuGetVersion("2.0.0")));
+
+            Assert.Equal(app, fileSystem.File.ReadAllText(AppPath));
+            Assert.Equal("#:property FooVersion=2.0.0\n", fileSystem.File.ReadAllText(versionsPath));
+            Assert.Empty(_warnings);
         }
 
         [Theory]

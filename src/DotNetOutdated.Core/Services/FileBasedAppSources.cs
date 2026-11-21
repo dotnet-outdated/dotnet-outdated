@@ -44,9 +44,9 @@ internal sealed partial record FileBasedAppSources(
     public static FileBasedAppSources Read(IFileSystem fileSystem, IProjectEvaluator evaluator, string projectFilePath)
     {
         // Versions are edited where they are written, so a property keeps its unexpanded value. Include paths are
-        // expanded as MSBuild expands them in the app's project, so they see an imported property's evaluated value
-        // (which can use $(MSBuildThisFileDirectory), say) and the project's reserved properties; an imported
-        // property whose value isn't certain is left undefined for them.
+        // expanded as MSBuild expands them in the app's project, so they see a property's value as it was evaluated
+        // when assigned (an imported one can use $(MSBuildThisFileDirectory), say) and the project's reserved
+        // properties; a property whose value isn't certain is left undefined for them.
         var entryPoint = fileSystem.Path.GetFullPath(projectFilePath);
         var properties = new Dictionary<string, (string Value, string FilePath)>(StringComparer.OrdinalIgnoreCase);
         var pathProperties = new Dictionary<string, (string Value, string FilePath)>(StringComparer.OrdinalIgnoreCase)
@@ -84,9 +84,18 @@ internal sealed partial record FileBasedAppSources(
             files.Add(file);
             foreach (var directive in file.Directives.Where(directive => directive.Kind == "property"))
             {
-                // A later #:property line overrides an earlier one, as in MSBuild.
+                // A later #:property line overrides an earlier one, as in MSBuild. MSBuild expands a property's
+                // value when it is assigned, so for paths it takes the values in effect then; one using a property
+                // that isn't defined (or isn't certain) is left undefined for them.
                 properties[directive.Name] = (directive.Value!, path);
-                pathProperties[directive.Name] = (directive.Value!, path);
+                if (TryResolveProperties(directive.Value!, pathProperties, out var pathValue))
+                {
+                    pathProperties[directive.Name] = (pathValue, path);
+                }
+                else
+                {
+                    pathProperties.Remove(directive.Name);
+                }
             }
 
             var directory = fileSystem.Path.GetDirectoryName(path)!;
