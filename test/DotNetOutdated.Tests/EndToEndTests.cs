@@ -8,6 +8,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Xml.Linq;
@@ -27,7 +28,10 @@ public sealed class RequiresFileBasedAppSdkAttribute : FactAttribute
 {
     private static readonly Version MinimumSdkVersion = new(10, 0, 300);
 
-    public RequiresFileBasedAppSdkAttribute()
+    public RequiresFileBasedAppSdkAttribute(
+        [CallerFilePath] string? sourceFilePath = null,
+        [CallerLineNumber] int sourceLineNumber = -1)
+        : base(sourceFilePath, sourceLineNumber)
     {
         if (!DotNetSdkDetector.HasSdkVersionAtLeast(MinimumSdkVersion))
         {
@@ -45,7 +49,10 @@ public sealed class RequiresFileBasedAppIncludeSdkAttribute : FactAttribute
 {
     private static readonly Version MinimumSdkVersion = new(11, 0, 100);
 
-    public RequiresFileBasedAppIncludeSdkAttribute()
+    public RequiresFileBasedAppIncludeSdkAttribute(
+        [CallerFilePath] string? sourceFilePath = null,
+        [CallerLineNumber] int sourceLineNumber = -1)
+        : base(sourceFilePath, sourceLineNumber)
     {
         if (!DotNetSdkDetector.HasSdkVersionAtLeast(MinimumSdkVersion))
         {
