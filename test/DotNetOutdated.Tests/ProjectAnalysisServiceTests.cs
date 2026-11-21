@@ -100,6 +100,29 @@ namespace DotNetOutdated.Tests
             }
         }
 
+        [Fact]
+        public async Task AFileBasedAppsPackageDeclaredWithARange_KeepsTheVersionTheGraphResolved()
+        {
+            // The directives give no single version for Foo, so they can't replace the graph's dependency on it, but
+            // they still replace the graph's other direct dependencies.
+            using var project = new TemporaryProject("<Project />");
+            var appPath = Path.Combine(project.Directory, "app.cs");
+            File.WriteAllText(appPath, "#:include lib/shared.cs\n#:package Bar@1.0.0\n");
+            Directory.CreateDirectory(Path.Combine(project.Directory, "lib"));
+            File.WriteAllText(Path.Combine(project.Directory, "lib", "shared.cs"), "#:package Foo@[1.0.0,3.0.0)\n");
+            project.Target.Libraries.Add(Library("Foo", "1.0.0"));
+            project.Target.Libraries.Add(Library("Bar", "1.0.0"));
+            project.Target.Libraries.Add(Library("Undeclared", "1.0.0"));
+            project.Evaluator.GetImportedProperties(Arg.Any<string>()).Returns(new Dictionary<string, ImportedProperty>());
+            project.Write(directDependencies: ["Foo", "Bar", "Undeclared"]);
+
+            var analyzed = await project.AnalyzeAsync(new ProjectAnalysisOptions(), appPath);
+
+            var dependencies = Assert.Single(analyzed.TargetFrameworks).Dependencies;
+            Assert.Equal(["Bar", "Foo"], dependencies.Select(dependency => dependency.Name).Order());
+            Assert.Equal(new NuGetVersion("1.0.0"), dependencies.Single(dependency => dependency.Name == "Foo").ResolvedVersion);
+        }
+
         [Theory]
         [InlineData(1, new[] { "CHILD" })]
         [InlineData(2, new[] { "CHILD", "Grandchild" })]

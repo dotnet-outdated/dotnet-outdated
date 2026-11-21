@@ -1323,6 +1323,35 @@ Console.WriteLine();")
         }
 
         [Fact]
+        public void FileBasedAppHeldBack_ThatIncludesAFileWhosePathDiffersOnlyInCase_IsLeftBehindOnACaseSensitiveFileSystem()
+        {
+            var upgradedAppPath = XFS.Path(@"c:\repo\upgraded.cs");
+            var heldBackAppPath = XFS.Path(@"c:\repo\heldback.cs");
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                [upgradedAppPath] = new("#:include lib/shared.cs\n"),
+                [heldBackAppPath] = new("#:include lib/Shared.cs\n"),
+                [XFS.Path(@"c:\repo\lib\shared.cs")] = new("#:package Humanizer@3.0.10\n"),
+                [XFS.Path(@"c:\repo\lib\Shared.cs")] = new("#:package Humanizer@3.0.10\n"),
+            });
+            var caseSensitive = fileSystem.AllFiles.Count() == 4;
+            var service = new ReferenceUpgrader(Substitute.For<IDotNetRunner>(), fileSystem);
+            var upgrade = new ReferenceUpgrade
+            {
+                Name = "Humanizer",
+                Kind = ReferenceKind.Package,
+                Version = new NuGetVersion("3.0.11"),
+                Projects = [new UpgradeProject(upgradedAppPath, "net10.0")],
+                HeldBack = [new UpgradeProject(heldBackAppPath, "net10.0")],
+            };
+
+            var sharing = service.FindHeldBackSharingVersion(upgrade);
+
+            // Where the file system ignores case, the two paths are one file, which both apps share.
+            Assert.Equal(caseSensitive ? 0 : 1, sharing.Count);
+        }
+
+        [Fact]
         public void FileBasedAppThatIncludesFiles_PackageNamedThroughAProperty_FailsWithoutWriting()
         {
             var appPath = XFS.Path(@"c:\repo\app.cs");

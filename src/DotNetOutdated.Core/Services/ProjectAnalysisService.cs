@@ -198,8 +198,11 @@ namespace DotNetOutdated.Core.Services
             }
 
             // The directives are the authoritative source of direct dependencies for a file-based app: replace every
-            // non-transitive graph dependency with the directive references.
-            targetFramework.RemoveDirectDependencies();
+            // non-transitive graph dependency with the directive references. A package declared without a version the
+            // directives give (a range, say) keeps the one the graph resolved.
+            var declaredPackages = _fileBasedAppDirectives.DeclaredPackages(projectPath);
+            targetFramework.RemoveDirectDependencies(keep: dependency =>
+                dependency.Kind == ReferenceKind.Package && declaredPackages.Contains(dependency.Name));
 
             foreach (var reference in fileBasedReferences)
             {
@@ -279,9 +282,9 @@ namespace DotNetOutdated.Core.Services
 
             public void Set(Dependency dependency) => _dependencies[(dependency.Name, dependency.Kind)] = dependency;
 
-            public void RemoveDirectDependencies()
+            public void RemoveDirectDependencies(Func<Dependency, bool> keep)
             {
-                foreach (var key in _dependencies.Where(pair => !pair.Value.IsTransitive).Select(pair => pair.Key).ToList())
+                foreach (var key in _dependencies.Where(pair => !pair.Value.IsTransitive && !keep(pair.Value)).Select(pair => pair.Key).ToList())
                 {
                     _dependencies.Remove(key);
                 }

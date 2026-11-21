@@ -27,12 +27,20 @@ namespace DotNetOutdated.Core.Services
         // there, and the projects restored since. A location shared by several projects, or written by an earlier
         // upgrade (another target framework's), is written once and restores each project once. Writing it again
         // forgets those restores, so a location that was changed back in between restores its projects again.
-        private readonly Dictionary<string, WrittenLocation> _writtenLocations = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, WrittenLocation> _writtenLocations = new(LocationComparer);
 
         private sealed record WrittenLocation(string Value)
         {
-            public HashSet<string> RestoredProjects { get; } = new(StringComparer.OrdinalIgnoreCase);
+            public HashSet<string> RestoredProjects { get; } = new(LocationComparer);
         }
+
+        // Locations are a file's full path and the name it holds (see Location), so they compare as the file system
+        // compares paths: two files whose paths differ only in case are different files where it is case-sensitive.
+        private static readonly StringComparer LocationComparer =
+            OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+
+        // A version location: the file, and what in it holds the version. Ids and property names are case-insensitive.
+        private static string Location(string filePath, string what) => $"{filePath}|{what.ToUpperInvariant()}";
 
         public ReferenceUpgrader(IDotNetRunner dotNetRunner, IFileSystem fileSystem)
             : this(dotNetRunner, fileSystem, new DotNetProjectEvaluator(dotNetRunner, fileSystem))
@@ -96,7 +104,7 @@ namespace DotNetOutdated.Core.Services
             bool IsPackage(UpgradeProject project) => locator.ResolveKind(project.Path, upgrade.Name, upgrade.Kind) == ReferenceKind.Package;
             IReadOnlyList<string> Locations(UpgradeProject project) => PackageVersionLocations(directives, project.Path, upgrade.Name, project.TargetFramework);
 
-            var writtenLocations = upgrade.Projects.Where(IsPackage).SelectMany(Locations).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var writtenLocations = upgrade.Projects.Where(IsPackage).SelectMany(Locations).ToHashSet(LocationComparer);
             var heldBack = upgrade.HeldBack.Distinct().Where(IsPackage).Select(project => (Project: project, Locations: Locations(project))).ToList();
             var sharing = new HashSet<UpgradeProject>();
             bool found;
@@ -140,12 +148,12 @@ namespace DotNetOutdated.Core.Services
 
             if (!_evaluator.GetPackageVersions(projectPath, targetFramework).TryGetValue(name, out var declaration))
             {
-                return [$"{fullPath}|{targetFramework}"];
+                return [Location(fullPath, targetFramework ?? string.Empty)];
             }
 
             return declaration.Variable is { UnsupportedReason: null } variable
                 ? [VariableLocation(variable)]
-                : [$"{_fileSystem.Path.GetFullPath(declaration.FilePath)}|{declaration.ElementType}|{declaration.ElementIndex}"];
+                : [Location(_fileSystem.Path.GetFullPath(declaration.FilePath), $"{declaration.ElementType}|{declaration.ElementIndex}")];
         }
 
         /// <summary>
@@ -378,7 +386,7 @@ namespace DotNetOutdated.Core.Services
         }
 
         private static string DirectiveLocation(string filePath, ReferenceKind kind, string name) =>
-            $"{filePath}|#:{kind} {name}";
+            Location(filePath, $"#:{kind} {name}");
 
         // The locations of a file-based app's property-backed version: each file with the property, or for an SDK named
         // through a property, each file with its directive.
@@ -386,14 +394,14 @@ namespace DotNetOutdated.Core.Services
         [
             .. directives.VariableFiles(projectPath, variableInfo).Select(file => string.IsNullOrEmpty(variableInfo.VariableName)
                 ? DirectiveLocation(file, variableInfo.ReferenceKind, variableInfo.PackageName)
-                : $"{file}|$({variableInfo.VariableName})")
+                : Location(file, $"$({variableInfo.VariableName})"))
         ];
 
         // `dotnet add package` cannot update an MSBuild project SDK, so rewrite its version in the project file.
         private Write UpdateProjectSdk(Context context, ProjectSdkReference sdk)
         {
             var version = context.Upgrade.Version;
-            var location = $"{_fileSystem.Path.GetFullPath(context.ProjectPath)}|Sdk {context.Name}";
+            var location = Location(_fileSystem.Path.GetFullPath(context.ProjectPath), $"Sdk {context.Name}");
             bool updated;
             try
             {
@@ -433,7 +441,7 @@ namespace DotNetOutdated.Core.Services
         }
 
         private static string VariableLocation(PackageVariableInfo variableInfo) =>
-            $"{variableInfo.FilePath}|$({variableInfo.VariableName})";
+            Location(variableInfo.FilePath, $"$({variableInfo.VariableName})");
 
         // Writes a literal version directly in the file that declares it: for a GlobalPackageReference `dotnet add package`
         // would add a PackageReference instead, which central package management rejects; for a PackageReference in an
@@ -464,8 +472,8 @@ namespace DotNetOutdated.Core.Services
             }
 
             return elementIndex >= 0
-                ? new Written(updated, $"{filePath}|{context.Name}|{elementIndex}", versionText, perTargetFramework: true)
-                : new Written(updated, $"{filePath}|{context.Name}", versionText);
+                ? new Written(updated, Location(filePath, $"{context.Name}|{elementIndex}"), versionText, perTargetFramework: true)
+                : new Written(updated, Location(filePath, context.Name), versionText);
         }
 
         private Write UpdateLiteral(Context context, LiteralVersion location, VersionRange range, string? targetFramework)
@@ -509,7 +517,7 @@ namespace DotNetOutdated.Core.Services
                 file.Write(_fileSystem, centralPackagesPath, newContent);
             }
 
-            return new Written(updated, $"{centralPackagesPath}|{context.Name}", versionText);
+            return new Written(updated, Location(centralPackagesPath, context.Name), versionText);
         }
 
         // Runs `dotnet add package`, then puts back what it loses: the Directory.Packages.props layout and, when the

@@ -8,21 +8,21 @@ using System.Text.RegularExpressions;
 
 namespace DotNetOutdated.Core.Services;
 
-/// <summary>A C# file a file-based app compiles, and its file-level directive lines.</summary>
-internal sealed record FileBasedAppSourceFile(string Path, IReadOnlyList<string> Directives);
+/// <summary>A C# file a file-based app compiles, and the file-level directives it declares.</summary>
+internal sealed record FileBasedAppSourceFile(string Path, IReadOnlyList<FileBasedAppDirective> Directives);
 
 /// <summary>
 /// The C# files a .NET file-based app compiles and the properties its directives see, found the way the SDK finds
-/// them: its entry point, then each <c>.cs</c> file the <c>#:include</c> and <c>#:exclude</c> directives of the files
-/// read so far leave as a Compile item, read in turn. Only a file's leading directives count, as for the SDK: those
-/// before its first C# token or <c>#if</c>, outside comments.
+/// them: its entry point, then each file the <c>#:include</c> and <c>#:exclude</c> directives of the files read so far
+/// leave as a Compile item, read in turn. Only a file's leading directives count, as for the SDK: those before its
+/// first C# token or <c>#if</c>, outside comments.
 /// </summary>
 /// <param name="Files">The entry point, then the included files in the order they were found.</param>
 /// <param name="Properties">The imported properties, overridden by the files' <c>#:property</c> lines.</param>
 /// <param name="HasIncludes">Whether any of the files has an <c>#:include</c> directive.</param>
 /// <param name="UnresolvedIncludes">
-/// The include and exclude directives whose path uses a property that isn't defined, or whose imported value isn't
-/// certain: the files they name weren't read.
+/// The include and exclude directives whose path (or the item mapping it is matched against) uses a property that
+/// isn't defined, or whose imported value isn't certain: the files they name weren't read.
 /// </param>
 internal sealed partial record FileBasedAppSources(
     IReadOnlyList<FileBasedAppSourceFile> Files,
@@ -33,11 +33,10 @@ internal sealed partial record FileBasedAppSources(
     /// <summary>Compares file paths as the SDK does when it tracks the files it has read.</summary>
     public static readonly StringComparer PathComparer = StringComparer.Ordinal;
 
-    [GeneratedRegex(@"^[ \t]*#:[ \t]*(include|exclude)[ \t]+(.+?)\s*$")]
-    private static partial Regex IncludeDirectiveLineRegex();
-
-    [GeneratedRegex(@"^[ \t]*#:[ \t]*property[ \t]+([^=\s]+)[ \t]*=[ \t]*(.*?)\s*$")]
-    private static partial Regex PropertyDirectiveLineRegex();
+    // The property that maps an included file's extension to its item type, and its value in a file-based app's
+    // project unless Directory.Build.props or a #:property line sets it.
+    private const string ItemMappingProperty = "FileBasedProgramsItemMapping";
+    private const string DefaultItemMapping = ".cs=Compile;.resx=EmbeddedResource;.json=None;.razor=Content;.dll=Reference";
 
     [GeneratedRegex(@"^#[ \t]*if\b")]
     private static partial Regex IfDirectiveRegex();
@@ -45,20 +44,30 @@ internal sealed partial record FileBasedAppSources(
     public static FileBasedAppSources Read(IFileSystem fileSystem, IProjectEvaluator evaluator, string projectFilePath)
     {
         // Versions are edited where they are written, so a property keeps its unexpanded value. Include paths are
-        // expanded as MSBuild expands them, so they see an imported property's evaluated value (which can use
-        // $(MSBuildThisFileDirectory), say); one whose value isn't certain is left undefined for them.
+        // expanded as MSBuild expands them in the app's project, so they see an imported property's evaluated value
+        // (which can use $(MSBuildThisFileDirectory), say) and the project's reserved properties; an imported
+        // property whose value isn't certain is left undefined for them.
+        var entryPoint = fileSystem.Path.GetFullPath(projectFilePath);
         var properties = new Dictionary<string, (string Value, string FilePath)>(StringComparer.OrdinalIgnoreCase);
-        var pathProperties = new Dictionary<string, (string Value, string FilePath)>(StringComparer.OrdinalIgnoreCase);
+        var pathProperties = new Dictionary<string, (string Value, string FilePath)>(StringComparer.OrdinalIgnoreCase)
+        {
+            [ItemMappingProperty] = (DefaultItemMapping, entryPoint),
+        };
         foreach (var (name, definition) in evaluator.GetImportedProperties(projectFilePath))
         {
             properties[name] = (definition.RawValue, definition.FilePath);
+            pathProperties.Remove(name);
             if (definition is { Ambiguous: false, Value: { } value })
             {
                 pathProperties[name] = (value, definition.FilePath);
             }
         }
 
-        var entryPoint = fileSystem.Path.GetFullPath(projectFilePath);
+        foreach (var (name, value) in ReservedProperties(fileSystem, entryPoint))
+        {
+            pathProperties[name] = (value, entryPoint);
+        }
+
         var files = new List<FileBasedAppSourceFile>();
         var seen = new HashSet<string>(PathComparer) { entryPoint };
         var toRead = new Queue<string>([entryPoint]);
@@ -71,41 +80,42 @@ internal sealed partial record FileBasedAppSources(
         var unresolved = new List<string>();
         while (toRead.TryDequeue(out var path))
         {
-            var file = new FileBasedAppSourceFile(path, DirectiveLines(fileSystem.File.ReadAllText(path)));
+            var file = new FileBasedAppSourceFile(path, ParseDirectives(fileSystem.File.ReadAllText(path)));
             files.Add(file);
-            foreach (var line in file.Directives)
+            foreach (var directive in file.Directives.Where(directive => directive.Kind == "property"))
             {
-                if (TryParseProperty(line, out var name, out var value))
-                {
-                    // A later #:property line overrides an earlier one, as in MSBuild.
-                    properties[name] = (value, path);
-                    pathProperties[name] = (value, path);
-                }
+                // A later #:property line overrides an earlier one, as in MSBuild.
+                properties[directive.Name] = (directive.Value!, path);
+                pathProperties[directive.Name] = (directive.Value!, path);
             }
 
             var directory = fileSystem.Path.GetDirectoryName(path)!;
-            foreach (var line in file.Directives)
+            foreach (var directive in file.Directives.Where(directive => directive.Kind is "include" or "exclude"))
             {
-                var match = IncludeDirectiveLineRegex().Match(line);
-                if (!match.Success)
-                {
-                    continue;
-                }
-
-                var isInclude = match.Groups[1].Value == "include";
+                var isInclude = directive.Kind == "include";
                 hasIncludes |= isInclude;
-                if (!TryParsePathValue(match.Groups[2].Value, out var pattern))
+                if (!TryResolveProperties(directive.Name, pathProperties, out var resolvedPattern))
+                {
+                    unresolved.Add($"'{directive.Line.Trim()}' in '{path}'");
+                    continue;
+                }
+
+                if (!pathProperties.TryGetValue(ItemMappingProperty, out var mappingDefinition) ||
+                    !TryResolveProperties(mappingDefinition.Value, pathProperties, out var mapping))
+                {
+                    unresolved.Add($"'{directive.Line.Trim()}' in '{path}' (its item type, from $({ItemMappingProperty}))");
+                    continue;
+                }
+
+                // Only the files the mapping makes Compile items are compiled, and so declare directives; a path whose
+                // extension the mapping doesn't name is an error the build reports.
+                var pattern = fileSystem.Path.Combine(directory, resolvedPattern);
+                if (!string.Equals(ItemType(mapping, pattern), "Compile", StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
                 }
 
-                if (!TryResolveProperties(pattern, pathProperties, out var resolvedPattern))
-                {
-                    unresolved.Add($"'#:{match.Groups[1].Value} {pattern}' in '{path}'");
-                    continue;
-                }
-
-                var matches = MatchFiles(fileSystem, resolvedPattern, directory);
+                var matches = MatchFiles(fileSystem, pattern);
                 if (isInclude)
                 {
                     compileItems.AddRange(matches);
@@ -126,19 +136,55 @@ internal sealed partial record FileBasedAppSources(
         return new FileBasedAppSources(files, properties, hasIncludes, unresolved);
     }
 
+    // The item type the mapping (`.ext=ItemType;...`, its first entry for the path's extension) gives a path.
+    private static string? ItemType(string mapping, string path)
+    {
+        foreach (var entry in mapping.Split(';', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var parts = entry.Split('=');
+            if (parts.Length == 2 &&
+                parts[0].Trim() is [ '.', _, .. ] extension &&
+                parts[1].Trim() is { Length: > 0 } itemType &&
+                path.EndsWith(extension, StringComparison.OrdinalIgnoreCase))
+            {
+                return itemType;
+            }
+        }
+
+        return null;
+    }
+
+    // The reserved properties of a file-based app's project, whose path is the entry point's with .csproj appended.
+    private static IEnumerable<(string Name, string Value)> ReservedProperties(IFileSystem fileSystem, string entryPoint)
+    {
+        var projectPath = entryPoint + ".csproj";
+        var directory = fileSystem.Path.GetDirectoryName(projectPath) ?? string.Empty;
+        yield return ("MSBuildProjectDirectory", directory.TrimEnd('\\', '/'));
+        yield return ("MSBuildProjectFullPath", projectPath);
+        yield return ("MSBuildProjectFile", fileSystem.Path.GetFileName(projectPath));
+        yield return ("MSBuildProjectName", fileSystem.Path.GetFileNameWithoutExtension(projectPath));
+        yield return ("MSBuildProjectExtension", ".csproj");
+        yield return ("MSBuildThisFileDirectory", directory.TrimEnd('\\', '/') + fileSystem.Path.DirectorySeparatorChar);
+        yield return ("MSBuildThisFileFullPath", projectPath);
+        yield return ("MSBuildThisFile", fileSystem.Path.GetFileName(projectPath));
+        yield return ("MSBuildThisFileName", fileSystem.Path.GetFileNameWithoutExtension(projectPath));
+    }
+
     /// <summary>
-    /// Replaces the matches of <paramref name="regex"/> in the file-level directive lines of <paramref name="content"/>
-    /// only, leaving text in comments and code alone.
+    /// Rewrites the file-level directives of <paramref name="content"/>: each one <paramref name="rewrite"/> returns a
+    /// line for is replaced by it. Text in comments and code is left alone.
     /// </summary>
-    public static string ReplaceInDirectives(string content, Regex regex, MatchEvaluator evaluator)
+    public static string RewriteDirectives(string content, Func<FileBasedAppDirective, string?> rewrite)
     {
         var builder = new StringBuilder(content.Length);
         var copied = 0;
         foreach (var (start, end) in DirectiveLineSpans(content))
         {
-            builder.Append(content, copied, start - copied);
-            builder.Append(regex.Replace(content[start..end], evaluator));
-            copied = end;
+            if (FileBasedAppDirective.TryParse(content[start..end], out var directive) && rewrite(directive) is { } line)
+            {
+                builder.Append(content, copied, start - copied).Append(line);
+                copied = end;
+            }
         }
 
         return builder.Append(content, copied, content.Length - copied).ToString();
@@ -200,28 +246,12 @@ internal sealed partial record FileBasedAppSources(
         return !VersionExpression.PropertyReferenceRegex().IsMatch(current);
     }
 
-    // A #:property line's name and value. A value wholly in double quotes is a C# string literal, whose escapes are
-    // decoded; one the SDK would reject (an unterminated quote or an unknown escape) defines nothing.
-    private static bool TryParseProperty(string line, out string name, out string value)
-    {
-        var match = PropertyDirectiveLineRegex().Match(line);
-        name = match.Groups[1].Value;
-        value = match.Groups[2].Value;
-        if (!match.Success)
-        {
-            return false;
-        }
-
-        if (!value.StartsWith('"'))
-        {
-            return true;
-        }
-
-        return TryReadQuoted(value, out value, out var end) && end == match.Groups[2].Value.Length;
-    }
-
-    private static List<string> DirectiveLines(string content) =>
-        [.. DirectiveLineSpans(content).Select(span => content[span.Start..span.End])];
+    private static List<FileBasedAppDirective> ParseDirectives(string content) =>
+    [
+        .. DirectiveLineSpans(content)
+            .Select(span => FileBasedAppDirective.TryParse(content[span.Start..span.End], out var directive) ? directive : null)
+            .OfType<FileBasedAppDirective>()
+    ];
 
     // The start and end (before its line break) of each #: or #! line before the file's first C# token or #if,
     // outside comments: the lines the SDK reads directives from.
@@ -298,104 +328,19 @@ internal sealed partial record FileBasedAppSources(
         return true;
     }
 
-    // The path an #:include or #:exclude names: its first token, or a whole quoted value with its escapes decoded.
-    // Trailing Name=Value metadata is ignored.
-    private static bool TryParsePathValue(string value, out string path)
+    // The files a full path or glob (*, ? and **, as MSBuild matches them) names.
+    private static List<string> MatchFiles(IFileSystem fileSystem, string pattern)
     {
-        value = value.Trim();
-        if (value.StartsWith('"'))
-        {
-            return TryReadQuoted(value, out path, out _) && path.Length > 0;
-        }
-
-        var end = value.IndexOfAny([' ', '\t']);
-        path = end < 0 ? value : value[..end];
-        return path.Length > 0;
-    }
-
-    // Reads the C# string literal at the start of text (which starts with a double quote), as the SDK lexes a quoted
-    // directive value: its escapes are decoded, and end is the index after its closing quote. False when the quote
-    // isn't closed or an escape isn't valid.
-    private static bool TryReadQuoted(string text, out string value, out int end)
-    {
-        var builder = new StringBuilder();
-        value = string.Empty;
-        end = -1;
-        for (var i = 1; i < text.Length; i++)
-        {
-            var c = text[i];
-            if (c == '"')
-            {
-                value = builder.ToString();
-                end = i + 1;
-                return true;
-            }
-
-            if (c != '\\')
-            {
-                builder.Append(c);
-                continue;
-            }
-
-            if (++i >= text.Length)
-            {
-                return false;
-            }
-
-            switch (text[i])
-            {
-                case '\'': builder.Append('\''); break;
-                case '"': builder.Append('"'); break;
-                case '\\': builder.Append('\\'); break;
-                case '0': builder.Append('\0'); break;
-                case 'a': builder.Append('\a'); break;
-                case 'b': builder.Append('\b'); break;
-                case 'e': builder.Append('\u001b'); break;
-                case 'f': builder.Append('\f'); break;
-                case 'n': builder.Append('\n'); break;
-                case 'r': builder.Append('\r'); break;
-                case 't': builder.Append('\t'); break;
-                case 'v': builder.Append('\v'); break;
-                case 'x' or 'u' or 'U':
-                    // \x takes one to four hex digits, \u exactly four and \U exactly eight.
-                    var (min, max) = text[i] switch { 'x' => (1, 4), 'u' => (4, 4), _ => (8, 8) };
-                    var digits = 0;
-                    while (digits < max && i + 1 + digits < text.Length && char.IsAsciiHexDigit(text[i + 1 + digits]))
-                    {
-                        digits++;
-                    }
-
-                    if (digits < min ||
-                        !int.TryParse(text.AsSpan(i + 1, digits), System.Globalization.NumberStyles.HexNumber, null, out var code) ||
-                        code > 0x10FFFF)
-                    {
-                        return false;
-                    }
-
-                    builder.Append(code <= char.MaxValue ? ((char)code).ToString() : char.ConvertFromUtf32(code));
-                    i += digits;
-                    break;
-                default:
-                    return false;
-            }
-        }
-
-        return false;
-    }
-
-    // The .cs files a path or glob (*, ? and **, as MSBuild matches them) names, relative to baseDirectory.
-    private static List<string> MatchFiles(IFileSystem fileSystem, string pattern, string baseDirectory)
-    {
-        var path = fileSystem.Path.Combine(baseDirectory, pattern).Replace('\\', '/');
+        var path = pattern.Replace('\\', '/');
         var wildcard = path.IndexOfAny(['*', '?']);
         if (wildcard < 0)
         {
             var fullPath = fileSystem.Path.GetFullPath(path);
-            return fullPath.IsCSharpFile() && fileSystem.File.Exists(fullPath) ? [fullPath] : [];
+            return fileSystem.File.Exists(fullPath) ? [fullPath] : [];
         }
 
         var rootEnd = path.LastIndexOf('/', wildcard);
-        var root = fileSystem.Path.GetFullPath(rootEnd < 0 ? baseDirectory : path[..(rootEnd + 1)]);
+        var root = fileSystem.Path.GetFullPath(path[..(rootEnd + 1)]);
         var glob = path[(rootEnd + 1)..];
         if (!fileSystem.Directory.Exists(root))
         {
@@ -411,7 +356,7 @@ internal sealed partial record FileBasedAppSources(
         {
             return [
                 .. fileSystem.Directory.EnumerateFiles(root, "*", searchOption)
-                    .Where(file => file.IsCSharpFile() && globRegex.IsMatch(fileSystem.Path.GetRelativePath(root, file).Replace('\\', '/')))
+                    .Where(file => globRegex.IsMatch(fileSystem.Path.GetRelativePath(root, file).Replace('\\', '/')))
                     .Select(file => fileSystem.Path.GetFullPath(file))
                     .Order(StringComparer.Ordinal)
             ];

@@ -334,7 +334,15 @@ namespace DotNetOutdated.Tests
         [InlineData("#:include lib/*.cs", "lib/a.cs, lib/nested.cs, lib/shared.cs")]
         [InlineData("#:include lib/**/*.cs", "lib/a.cs, lib/nested.cs, lib/shared.cs, lib/sub/b.cs")]
         [InlineData("#:include lib/?.cs", "lib/a.cs")]
-        [InlineData("#:include lib/**", "lib/a.cs, lib/nested.cs, lib/shared.cs, lib/sub/b.cs")]
+        // The item type comes from the path's extension, so a path without one names no Compile items.
+        [InlineData("#:include lib/**", "")]
+        [InlineData("#:include lib/*.cs\n#:property FileBasedProgramsItemMapping=.cs=None", "")]
+        [InlineData("#:property FileBasedProgramsItemMapping=.txt=Compile;.cs=Compile\n#:include lib/*.txt", "lib/notes.txt")]
+        // An unquoted path is taken whole unless what follows it is metadata, as by the SDK.
+        [InlineData("#:include my lib/c.cs", "my lib/c.cs")]
+        [InlineData("#:include lib/a.cs Link=a.cs", "lib/a.cs")]
+        [InlineData("#:include $(MSBuildProjectDirectory)/lib/a.cs", "lib/a.cs")]
+        [InlineData("#:include $(MSBuildThisFileDirectory)lib/a.cs", "lib/a.cs")]
         [InlineData("#:include **/*.cs\n#:exclude lib/shared.cs\n#:exclude lib/sub/*.cs", "lib/a.cs, lib/nested.cs, my lib/c.cs, other.cs")]
         [InlineData("#:include lib/a.cs\n#:include lib/a.cs\n#:include missing/*.cs\n#:include lib/notes.txt", "lib/a.cs")]
         [InlineData("#:include \"my lib/c.cs\" CopyToOutputDirectory=PreserveNewest", "my lib/c.cs")]
@@ -539,7 +547,9 @@ namespace DotNetOutdated.Tests
 
         [Theory]
         [InlineData("#:package Foo @ 1.0.0", "#:package Foo @ 2.0.0")]
-        [InlineData("#:package Foo@ 1.0.0 PrivateAssets=all", "#:package Foo@ 2.0.0 PrivateAssets=all")]
+        [InlineData("#:package Foo @ 1.0.0 Note = \"a b\"", "#:package Foo @ 2.0.0 Note = \"a b\"")]
+        [InlineData("#:package \"Foo\"@1.0.0", "#:package \"Foo\"@2.0.0")]
+        [InlineData("#:package Foo@\"1.0.0\" PrivateAssets=all", "#:package Foo@2.0.0 PrivateAssets=all")]
         [InlineData("#:package Foo\t@1.0.0", "#:package Foo\t@2.0.0")]
         public void WriteDirective_WithWhitespaceAroundTheSeparator_RewritesTheDirective(string directive, string expected)
         {
@@ -616,6 +626,8 @@ namespace DotNetOutdated.Tests
         // A file that wasn't read may declare it too, even when another file does.
         [InlineData("#:include lib/shared.cs\n#:include $(OtherDir)/other.cs\n#:package Foo@1.0.0\n", "#:package Foo@1.0.0\n", "'#:include $(OtherDir)/other.cs'")]
         [InlineData("#:include lib/shared.cs\n", "#:package Foo@ ExcludeAssets=runtime\n", "has no version")]
+        [InlineData("#:include lib/shared.cs\n", "#:package Foo@ ExcludeAssets = \"runtime\"\n", "has no version")]
+        [InlineData("#:include lib/shared.cs\n#:property FileBasedProgramsItemMapping=$(Mapping)\n#:package Foo@1.0.0\n", "#:package Foo@1.0.0\n", "$(FileBasedProgramsItemMapping)")]
         // References skip a range that holds no single version, so only the directives show the id is a property.
         [InlineData("#:include lib/shared.cs\n#:property FooId=Foo\n", "#:package $(FooId)@[1.0.0,3.0.0)\n", "names it through a property")]
         [InlineData("#:include lib/shared.cs\n#:property FooId=Foo\n", "#:package $(FooId) @ 1.0.0\n", "names it through a property")]
@@ -644,6 +656,66 @@ namespace DotNetOutdated.Tests
 
             Assert.Equal(app, fileSystem.File.ReadAllText(AppPath));
             Assert.Equal("#:property FooVersion=2.0.0\n", fileSystem.File.ReadAllText(SharedPath));
+        }
+
+        [Fact]
+        public void TryUpdateVariable_KeepsTheDirectivesMetadataAndComments()
+        {
+            const string app = "#:include lib/shared.cs\n#:property FooVersion=1.0.0\n";
+            const string shared = "#:package Foo@$(FooVersion) Aliases=foo // aliased\n";
+            var fileSystem = FileSystem(app, new() { [SharedPath] = shared });
+            var directives = Directives(fileSystem);
+            var variableInfo = directives.PackageVariables(AppPath, ReferenceKind.Package)["Foo"];
+
+            Assert.True(directives.TryUpdateVariable(AppPath, variableInfo, new NuGetVersion("2.0.0")));
+
+            Assert.Equal(app.Replace("1.0.0", "2.0.0"), fileSystem.File.ReadAllText(AppPath));
+            Assert.Equal(shared, fileSystem.File.ReadAllText(SharedPath));
+        }
+
+        [Fact]
+        public void TryUpdateVariable_ForAnSdkNamedThroughAProperty_KeepsTheDirectivesComments()
+        {
+            const string app = "#:include lib/shared.cs\n#:property SdkId=Cake.Sdk\n#:sdk $(SdkId)@6.0.0\n";
+            const string shared = "#:sdk cake.sdk @ 6.0.0 // pinned\n";
+            var fileSystem = FileSystem(app, new() { [SharedPath] = shared });
+            var directives = Directives(fileSystem);
+            var variableInfo = directives.PackageVariables(AppPath, ReferenceKind.Sdk)["Cake.Sdk"];
+
+            Assert.True(directives.TryUpdateVariable(AppPath, variableInfo, new NuGetVersion("6.1.0")));
+
+            Assert.Equal(app.Replace("6.0.0", "6.1.0"), fileSystem.File.ReadAllText(AppPath));
+            Assert.Equal("#:sdk $(SdkId) @ 6.1.0 // pinned\n", fileSystem.File.ReadAllText(SharedPath));
+        }
+
+        [Theory]
+        [InlineData("#:package \"Foo\"@1.0.0", "Package Foo@1.0.0")]
+        [InlineData("#:package \"F\\x6fo\" @ \"1.0.0\"", "Package Foo@1.0.0")]
+        [InlineData("#:sdk Cake.Sdk @ 6.0.0", "Sdk Cake.Sdk@6.0.0")]
+        [InlineData("#:property FooVersion = \"1.0.0\"\n#:package Foo@$(FooVersion)", "Package Foo@1.0.0")]
+        // Not directives the SDK accepts.
+        [InlineData("#:package \"Foo@1.0.0", "")]
+        [InlineData("#:package Foo@1.0.0 \"x\"", "")]
+        [InlineData("#:sdk Cake.Sdk@6.0.0 Extra=1", "")]
+        [InlineData("#:Package Foo@1.0.0", "")]
+        public void References_AreParsedAsTheSdkParsesDirectives(string app, string expected)
+        {
+            var fileSystem = FileSystem(app + "\n");
+
+            Assert.Equal(expected, Summary(Directives(fileSystem).References(AppPath)));
+        }
+
+        [Fact]
+        public void DeclaredPackages_IncludeThoseWithoutAVersionReferencesCanRead()
+        {
+            var fileSystem = FileSystem("#:include lib/shared.cs\n#:package Bar@1.0.0\n", new()
+            {
+                [SharedPath] = "#:package Foo@[1.0.0,3.0.0)\n#:package Baz\n#:sdk Cake.Sdk@6.0.0\n",
+            });
+            var directives = Directives(fileSystem);
+
+            Assert.Equal("Package Bar@1.0.0, Sdk Cake.Sdk@6.0.0", Summary(directives.References(AppPath)));
+            Assert.Equal(["Bar", "Baz", "Foo"], directives.DeclaredPackages(AppPath).Order());
         }
 
         [Fact]

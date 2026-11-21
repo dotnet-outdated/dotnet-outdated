@@ -17,25 +17,9 @@ namespace DotNetOutdated.Core.Services;
 /// </summary>
 internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IProjectEvaluator evaluator, Action<string>? onWarning = null)
 {
-    // A version after `@`: quoted (as `dotnet package add` writes a range holding a space), a range that may hold a
-    // space, or a bare token, but not Name=Value metadata (`#:package Id@ ExcludeAssets=runtime` has no version).
-    private const string VersionTokenPattern = @"(?![A-Za-z_][\w.-]*=)(?:""(?:[^""\\\r\n]|\\.)*""|[\[\(][^\]\)\r\n]*[\]\)]|[^\s]+)";
-
     private readonly IFileSystem _fileSystem = fileSystem;
     private readonly IProjectEvaluator _evaluator = evaluator;
     private readonly Action<string>? _onWarning = onWarning;
-
-    [GeneratedRegex(@"^[ \t]*#:[ \t]*package[ \t]+(.+?)\s*$")]
-    private static partial Regex PackageDirectiveLineRegex();
-
-    [GeneratedRegex(@"^[ \t]*#:[ \t]*sdk[ \t]+(.+?)\s*$")]
-    private static partial Regex SdkDirectiveLineRegex();
-
-    [GeneratedRegex(@"(^[ \t]*#:[ \t]*package[ \t]+)([^\r\n]*)(\r?\n|$)", RegexOptions.Multiline)]
-    private static partial Regex PackageDirectiveReplaceRegex();
-
-    [GeneratedRegex(@"(^[ \t]*#:[ \t]*sdk[ \t]+)([^\r\n]*)(\r?\n|$)", RegexOptions.Multiline)]
-    private static partial Regex SdkDirectiveReplaceRegex();
 
     /// <summary>
     /// Every <c>#:package</c> and <c>#:sdk</c> reference the app declares whose version resolves, literal or
@@ -77,6 +61,30 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
                 .GroupBy(reference => (reference.Kind, Name: reference.Name.ToUpperInvariant()))
                 .Select(group => group.FirstOrDefault(reference => reference.VariableInfo != null) ?? group.First())
         ];
+    }
+
+    /// <summary>
+    /// The ids of every package the app's <c>#:package</c> directives declare, whatever their version: those
+    /// <see cref="References"/> leaves out, as their version is a range or there is none, too.
+    /// </summary>
+    public IReadOnlySet<string> DeclaredPackages(string projectFilePath)
+    {
+        var declared = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (!projectFilePath.IsCSharpFile() || !_fileSystem.File.Exists(projectFilePath))
+        {
+            return declared;
+        }
+
+        var sources = ReadSources(projectFilePath);
+        foreach (var directive in sources.Files.SelectMany(file => file.Directives).Where(directive => directive.Kind == "package"))
+        {
+            if (FileBasedAppSources.TryResolveProperties(directive.Name, sources.Properties, out var name))
+            {
+                declared.Add(name);
+            }
+        }
+
+        return declared;
     }
 
     /// <summary>
@@ -131,43 +139,12 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
             return null;
         }
 
-        foreach (var line in ReadSources(projectFilePath).Files.SelectMany(file => file.Directives))
+        foreach (var directive in ReadSources(projectFilePath).Files.SelectMany(file => file.Directives))
         {
-            var match = PackageDirectiveLineRegex().Match(line);
-            if (!match.Success)
+            if (directive.Kind == "package" && string.Equals(directive.Name, name, StringComparison.OrdinalIgnoreCase))
             {
-                continue;
+                return VersionRange.TryParse(directive.Value ?? string.Empty, out var range) ? range : null;
             }
-
-            // A range can hold spaces, so the version is everything after the id rather than one token.
-            var directive = match.Groups[1].Value;
-            var separatorIndex = directive.IndexOf('@', StringComparison.Ordinal);
-            if (separatorIndex <= 0 ||
-                !string.Equals(directive[..separatorIndex].Trim(), name, StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            var version = directive[(separatorIndex + 1)..].Trim();
-            if (version.Length == 0)
-            {
-                return null;
-            }
-
-            // The version ends at its closing quote or bracket; a bare version ends at the first whitespace.
-            var length = version[0] switch
-            {
-                '"' => version.IndexOf('"', 1) + 1,
-                '[' or '(' => version.IndexOfAny([']', ')']) + 1,
-                _ => version.IndexOfAny([' ', '\t']),
-            };
-
-            if (length < 0)
-            {
-                length = version.Length;
-            }
-
-            return length > 0 && VersionRange.TryParse(version[..length].Trim('"'), out var range) ? range : null;
         }
 
         return null;
@@ -184,14 +161,10 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
             return [];
         }
 
-        var lineRegex = kind == ReferenceKind.Sdk ? SdkDirectiveLineRegex() : PackageDirectiveLineRegex();
         var sources = ReadSources(projectFilePath);
         return [
             .. sources.Files
-                .Where(file => file.Directives.Any(line =>
-                    lineRegex.Match(line) is { Success: true } match &&
-                    FileBasedAppSources.TryResolveProperties(NameExpression(match.Groups[1].Value), sources.Properties, out var resolved) &&
-                    string.Equals(resolved, name, StringComparison.OrdinalIgnoreCase)))
+                .Where(file => file.Directives.Any(directive => Declares(directive, sources, kind, name)))
                 .Select(file => file.Path)
         ];
     }
@@ -218,27 +191,18 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
             return DirectiveWrite.Failed($"{failure}: {unread}");
         }
 
-        var directiveName = kind == ReferenceKind.Sdk ? "sdk" : "package";
-        var lineRegex = kind == ReferenceKind.Sdk ? SdkDirectiveLineRegex() : PackageDirectiveLineRegex();
+        var directiveKind = DirectiveKind(kind);
         foreach (var source in sources.Files)
         {
-            foreach (var line in source.Directives)
+            // Rewriting the literal id below would miss this directive, and adding one would declare the id twice.
+            if (source.Directives.FirstOrDefault(directive =>
+                    VersionExpression.ContainsPropertyReference(directive.Name) && Declares(directive, sources, kind, name)) is { } named)
             {
-                // Rewriting the literal id below would miss this directive, and adding one would declare the id twice.
-                if (lineRegex.Match(line) is { Success: true } match &&
-                    NameExpression(match.Groups[1].Value) is var expression &&
-                    VersionExpression.ContainsPropertyReference(expression) &&
-                    FileBasedAppSources.TryResolveProperties(expression, sources.Properties, out var resolved) &&
-                    string.Equals(resolved, name, StringComparison.OrdinalIgnoreCase))
-                {
-                    return DirectiveWrite.Failed(
-                        $"{failure}: '{line.Trim()}' in '{source.Path}' names it through a property; change the version by hand.");
-                }
+                return DirectiveWrite.Failed(
+                    $"{failure}: '{named.Line.Trim()}' in '{source.Path}' names it through a property; change the version by hand.");
             }
         }
 
-        var directiveRegex = DirectiveRegex(directiveName, name);
-        var directiveVersion = versionText.Any(char.IsWhiteSpace) ? $"\"{versionText}\"" : versionText;
         var edits = new List<(string Path, EncodedText File, string Content)>();
         var declaringFiles = new List<string>();
         foreach (var source in sources.Files)
@@ -246,16 +210,21 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
             var file = EncodedText.Read(_fileSystem, source.Path);
             string? versionless = null;
             var declares = false;
-            var content = FileBasedAppSources.ReplaceInDirectives(file.Content, directiveRegex, match =>
+            var content = FileBasedAppSources.RewriteDirectives(file.Content, directive =>
             {
-                declares = true;
-                if (!match.Groups[3].Success)
+                if (directive.Kind != directiveKind || !string.Equals(directive.Name, name, StringComparison.OrdinalIgnoreCase))
                 {
-                    versionless = match.Value.Trim();
-                    return match.Value;
+                    return null;
                 }
 
-                return match.Groups[1].Value + match.Groups[2].Value + directiveVersion;
+                declares = true;
+                if (string.IsNullOrEmpty(directive.Value))
+                {
+                    versionless = directive.Line.Trim();
+                    return null;
+                }
+
+                return string.Equals(directive.Value, versionText, StringComparison.Ordinal) ? null : directive.WithValue(versionText);
             });
 
             if (versionless != null)
@@ -284,7 +253,7 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
 
             var entryPoint = sources.Files[0].Path;
             var file = EncodedText.Read(_fileSystem, entryPoint);
-            edits.Add((entryPoint, file, FileBasedAppSources.InsertDirective(file.Content, $"#:package {name}@{directiveVersion}")));
+            edits.Add((entryPoint, file, FileBasedAppSources.InsertDirective(file.Content, $"#:package {FileBasedAppDirective.QuoteIfNeeded(name)}@{FileBasedAppDirective.QuoteIfNeeded(versionText)}")));
             declaringFiles.Add(entryPoint);
         }
 
@@ -321,9 +290,8 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
     // The files with a #:property line for the variable, or the file it was found in when none has one.
     private static List<string> PropertyFiles(FileBasedAppSources sources, PackageVariableInfo variableInfo)
     {
-        var propertyRegex = PropertyDirectiveRegex(variableInfo.VariableName);
         var files = sources.Files
-            .Where(file => file.Directives.Any(propertyRegex.IsMatch))
+            .Where(file => file.Directives.Any(directive => DefinesProperty(directive, variableInfo.VariableName)))
             .Select(file => file.Path)
             .ToList();
         return files.Count > 0 ? files : [variableInfo.FilePath];
@@ -356,10 +324,6 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
 
     private void UpdateVariable(string projectFilePath, PackageVariableInfo variableInfo, NuGetVersion newVersion, ref bool updated)
     {
-        var directiveReplaceRegex = variableInfo.ReferenceKind == ReferenceKind.Sdk
-            ? SdkDirectiveReplaceRegex()
-            : PackageDirectiveReplaceRegex();
-
         var isApp = projectFilePath.IsCSharpFile() && _fileSystem.File.Exists(projectFilePath);
         var sourcesBefore = isApp ? ReadSources(projectFilePath) : null;
         if (sourcesBefore != null && UnreadIncludes(sourcesBefore) is { } unread)
@@ -372,16 +336,17 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
         {
             if (variableInfo.FilePath.IsCSharpFile())
             {
-                var propertyRegex = PropertyDirectiveRegex(variableInfo.VariableName);
                 var propertyFiles = sourcesBefore != null ? PropertyFiles(sourcesBefore, variableInfo) : [variableInfo.FilePath];
                 foreach (var propertyFilePath in propertyFiles)
                 {
                     var propertyFile = EncodedText.Read(_fileSystem, propertyFilePath);
                     var propertyContent = propertyFile.Content;
-                    var newPropertyContent = FileBasedAppSources.ReplaceInDirectives(
+                    var newPropertyContent = FileBasedAppSources.RewriteDirectives(
                         propertyContent,
-                        propertyRegex,
-                        match => match.Groups[1].Value + newVersion);
+                        directive => DefinesProperty(directive, variableInfo.VariableName) &&
+                                     !string.Equals(directive.Value, newVersion.ToString(), StringComparison.Ordinal)
+                            ? directive.WithValue(newVersion.ToString())
+                            : null);
                     if (!string.Equals(propertyContent, newPropertyContent, StringComparison.Ordinal))
                     {
                         propertyFile.Write(_fileSystem, propertyFilePath, newPropertyContent);
@@ -408,26 +373,29 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
             ? variableInfo.PackageReferenceVersion
             : newVersion.ToString();
 
+        var directiveKind = DirectiveKind(variableInfo.ReferenceKind);
         foreach (var source in sources.Files)
         {
             var file = EncodedText.Read(_fileSystem, source.Path);
             var content = file.Content;
-            var newContent = FileBasedAppSources.ReplaceInDirectives(
-                content,
-                directiveReplaceRegex,
-                match =>
+            var newContent = FileBasedAppSources.RewriteDirectives(content, directive =>
+            {
+                if (directive.Kind != directiveKind ||
+                    string.IsNullOrEmpty(directive.Value) ||
+                    (!string.Equals(directive.Name, variableInfo.PackageReferenceName, StringComparison.OrdinalIgnoreCase) &&
+                     !Declares(directive, sources, variableInfo.ReferenceKind, variableInfo.PackageName)))
                 {
-                    var directive = match.Groups[2].Value;
-                    if (!TryParseDirective(directive, out var expression, out _) ||
-                        (!string.Equals(expression, variableInfo.PackageReferenceName, StringComparison.OrdinalIgnoreCase) &&
-                         (!FileBasedAppSources.TryResolveProperties(expression, propertyDefinitions, out var resolvedName) ||
-                          !string.Equals(resolvedName, variableInfo.PackageName, StringComparison.OrdinalIgnoreCase))))
-                    {
-                        return match.Value;
-                    }
+                    return null;
+                }
 
-                    return match.Groups[1].Value + variableInfo.PackageReferenceName + "@" + directiveVersion + match.Groups[3].Value;
-                });
+                // Only what differs is rewritten, so the directive keeps its metadata, quoting and spacing.
+                var name = string.Equals(directive.Name, variableInfo.PackageReferenceName, StringComparison.Ordinal)
+                    ? directive.Name
+                    : variableInfo.PackageReferenceName!;
+                return name == directive.Name && directive.Value == directiveVersion
+                    ? null
+                    : directive.With(name, directiveVersion);
+            });
 
             if (!string.Equals(content, newContent, StringComparison.Ordinal))
             {
@@ -485,28 +453,21 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
 
         foreach (var source in sources.Files)
         {
-            foreach (var line in source.Directives)
+            foreach (var directive in source.Directives.Where(directive => directive.Kind is "package" or "sdk"))
             {
-                var packageMatch = PackageDirectiveLineRegex().Match(line);
-                if (packageMatch.Success)
+                var kind = directive.Kind == "sdk" ? ReferenceKind.Sdk : ReferenceKind.Package;
+                if (kind == ReferenceKind.Sdk)
                 {
-                    ScanPackageLine(packageMatch.Groups[1].Value, source.Path, propertyDefinitions, packageVariables);
-                    if (TryCreateReference(packageMatch.Groups[1].Value, source.Path, propertyDefinitions, ReferenceKind.Package, out var packageReference))
-                    {
-                        literalReferences.Add(packageReference);
-                    }
-
-                    continue;
+                    ScanSdkLine(directive, source.Path, propertyDefinitions, sdkVariables);
+                }
+                else
+                {
+                    ScanPackageLine(directive, source.Path, propertyDefinitions, packageVariables);
                 }
 
-                var sdkMatch = SdkDirectiveLineRegex().Match(line);
-                if (sdkMatch.Success)
+                if (TryCreateReference(directive, source.Path, propertyDefinitions, kind, out var reference))
                 {
-                    ScanSdkLine(sdkMatch.Groups[1].Value, source.Path, propertyDefinitions, sdkVariables);
-                    if (TryCreateReference(sdkMatch.Groups[1].Value, source.Path, propertyDefinitions, ReferenceKind.Sdk, out var sdkReference))
-                    {
-                        literalReferences.Add(sdkReference);
-                    }
+                    literalReferences.Add(reference);
                 }
             }
         }
@@ -523,30 +484,20 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
             ? null
             : $"{string.Join(", ", sources.UnresolvedIncludes)} could not be followed, and the files it names may declare it too.";
 
-    // Matches a #:property line for a property (case-insensitively): group 1 is the line up to its value, which runs to
-    // the end of the line.
-    private static Regex PropertyDirectiveRegex(string propertyName) =>
-        new($@"(^[ \t]*#:[ \t]*property[ \t]+{Regex.Escape(propertyName)}[ \t]*=[ \t]*)[^\r\n]*", RegexOptions.Multiline | RegexOptions.IgnoreCase);
 
-    // Matches a directive for an id (case-insensitively): group 1 is the directive up to the id, group 2 the separator
-    // (`@`, which whitespace may surround) and group 3 the version, when it has one. A directive whose separator has
-    // no version after it matches without group 3.
-    private static Regex DirectiveRegex(string directiveName, string name) =>
-        new($@"(^[ \t]*#:[ \t]*{directiveName}[ \t]+{Regex.Escape(name)})(?:([ \t]*@[ \t]*)({VersionTokenPattern}))?(?=[\s@]|$)",
-            RegexOptions.Multiline | RegexOptions.IgnoreCase);
+    private static string DirectiveKind(ReferenceKind kind) => kind == ReferenceKind.Sdk ? "sdk" : "package";
 
-    // The id expression of a directive: what comes before its `@`, or its first token when it has no version.
-    private static string NameExpression(string directive)
-    {
-        var text = directive.Trim();
-        var separator = text.IndexOf('@', StringComparison.Ordinal);
-        var name = (separator >= 0 ? text[..separator] : text).Trim();
-        var whitespace = name.IndexOfAny([' ', '\t']);
-        return whitespace < 0 ? name : name[..whitespace];
-    }
+    // Whether the directive declares the package or SDK: its id, with any properties resolved, is the name.
+    private static bool Declares(FileBasedAppDirective directive, FileBasedAppSources sources, ReferenceKind kind, string name) =>
+        directive.Kind == DirectiveKind(kind) &&
+        FileBasedAppSources.TryResolveProperties(directive.Name, sources.Properties, out var resolved) &&
+        string.Equals(resolved, name, StringComparison.OrdinalIgnoreCase);
+
+    private static bool DefinesProperty(FileBasedAppDirective directive, string propertyName) =>
+        directive.Kind == "property" && string.Equals(directive.Name, propertyName, StringComparison.OrdinalIgnoreCase);
 
     private static void ScanPackageLine(
-        string directive,
+        FileBasedAppDirective directive,
         string filePath,
         Dictionary<string, (string Value, string FilePath)> propertyDefinitions,
         Dictionary<string, PackageVariableInfo> result)
@@ -579,7 +530,7 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
     }
 
     private static void ScanSdkLine(
-        string directive,
+        FileBasedAppDirective directive,
         string filePath,
         Dictionary<string, (string Value, string FilePath)> propertyDefinitions,
         Dictionary<string, PackageVariableInfo> result)
@@ -654,7 +605,7 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
     }
 
     private static bool TryCreateReference(
-        string directive,
+        FileBasedAppDirective directive,
         string filePath,
         Dictionary<string, (string Value, string FilePath)> propertyDefinitions,
         ReferenceKind kind,
@@ -682,27 +633,12 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
         return true;
     }
 
-    // Splits `Id@Version` (whitespace may surround the `@`) into the id and version expressions; the version is one
-    // token, so a range holding a space doesn't parse.
-    private static bool TryParseDirective(string directive, out string packageExpression, out string versionExpression)
+    // The id and version expressions of a #:package or #:sdk directive with a version.
+    private static bool TryParseDirective(FileBasedAppDirective directive, out string packageExpression, out string versionExpression)
     {
-        packageExpression = string.Empty;
-        versionExpression = string.Empty;
-
-        var text = directive.Trim();
-        var separatorIndex = text.IndexOf('@', StringComparison.Ordinal);
-        if (separatorIndex <= 0)
-        {
-            return false;
-        }
-
-        packageExpression = text[..separatorIndex].Trim();
-        var version = text[(separatorIndex + 1)..].TrimStart();
-        var whitespaceIndex = version.IndexOfAny([' ', '\t']);
-        versionExpression = whitespaceIndex < 0 ? version : version[..whitespaceIndex];
-        return packageExpression.Length > 0 &&
-               !packageExpression.Any(char.IsWhiteSpace) &&
-               versionExpression.Length > 0;
+        packageExpression = directive.Name;
+        versionExpression = directive.Value ?? string.Empty;
+        return versionExpression.Length > 0;
     }
 }
 
