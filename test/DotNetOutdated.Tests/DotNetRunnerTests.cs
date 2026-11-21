@@ -95,12 +95,22 @@ public class DotNetRunnerTests
             var pool = $"{ThreadPool.ThreadCount} threads, {maxWorkers - availableWorkers} busy workers, {ThreadPool.PendingWorkItemCount} pending items";
             var probe = Stopwatch.StartNew();
             using var direct = Process.Start(new ProcessStartInfo(fileName, arguments) { RedirectStandardOutput = true, UseShellExecute = false, CreateNoWindow = true })!;
-            string firstLine = direct.StandardOutput.ReadLine();
-            var probeTime = probe.Elapsed;
-            direct.Kill();
+            // Read on a dedicated thread, off the thread pool, and give up after 30 seconds rather than hang the run.
+            string firstLine = "(nothing)";
+            TimeSpan probeTime = TimeSpan.Zero;
+            var reader = new Thread(() =>
+            {
+                firstLine = direct.StandardOutput.ReadLine();
+                probeTime = probe.Elapsed;
+            }) { IsBackground = true };
+            reader.Start();
+            bool read = reader.Join(TimeSpan.FromSeconds(30));
+            direct.Kill(entireProcessTree: true);
             Assert.Fail(
                 $"No process id in the output. Output: '{status.Output}'. Errors: '{status.Errors}'. Thread pool: {pool}. " +
-                $"A second {fileName}, read synchronously, printed '{firstLine}' after {probeTime.TotalMilliseconds:0} ms.");
+                (read
+                    ? $"A second {fileName}, read on its own thread, printed '{firstLine}' after {probeTime.TotalMilliseconds:0} ms."
+                    : $"A second {fileName}, read on its own thread, printed nothing in 30 seconds."));
         }
         Process process;
         try
