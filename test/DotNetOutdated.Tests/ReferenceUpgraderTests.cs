@@ -1447,6 +1447,87 @@ Console.WriteLine();")
         }
 
         [Fact]
+        public void FileBasedAppHeldBack_ThatComesToShareAFileAnUpgradedAppWrites_IsUpgradedWithIt()
+        {
+            // Planned before app.cs moves V, other.cs shares nothing with heldback.cs; it then writes
+            // lib/3.0.11/shared.cs, which heldback.cs includes, so heldback.cs is upgraded and restored with it.
+            var appPath = XFS.Path(@"c:\repo\app.cs");
+            var otherAppPath = XFS.Path(@"c:\repo\other.cs");
+            var heldBackAppPath = XFS.Path(@"c:\repo\heldback.cs");
+            var newSharedPath = XFS.Path(@"c:\repo\lib\3.0.11\shared.cs");
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                [XFS.Path(@"c:\repo\Directory.Build.props")] = new("<Project><PropertyGroup><V>3.0.10</V></PropertyGroup></Project>"),
+                [appPath] = new("#:package Humanizer@$(V)\n"),
+                [otherAppPath] = new("#:include lib/$(V)/shared.cs\n"),
+                [heldBackAppPath] = new("#:include lib/3.0.11/shared.cs\n"),
+                [XFS.Path(@"c:\repo\lib\3.0.10\shared.cs")] = new("#:package Humanizer@3.0.10\n"),
+                [newSharedPath] = new("#:package Humanizer@3.0.10\n"),
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
+            var upgrade = new ReferenceUpgrade
+            {
+                Name = "Humanizer",
+                Kind = ReferenceKind.Package,
+                Version = new NuGetVersion("3.0.11"),
+                Projects = [new UpgradeProject(appPath, "net10.0"), new UpgradeProject(otherAppPath, "net10.0")],
+                HeldBack = [new UpgradeProject(heldBackAppPath, "net10.0")],
+            };
+
+            Assert.Empty(service.FindHeldBackSharingVersion(upgrade));
+
+            var results = service.Upgrade(upgrade);
+
+            Assert.All(results, result => Assert.Equal(UpgradeOutcome.Upgraded, result.Outcome));
+            var heldBack = results.Single(result => result.ProjectPath == heldBackAppPath);
+            Assert.Equal([new UpgradeProject(heldBackAppPath, "net10.0")], heldBack.HeldBackUpgraded);
+            Assert.Equal("#:package Humanizer@3.0.11\n", fileSystem.File.ReadAllText(newSharedPath));
+            dotNetRunner.Received(1).Run(XFS.Path(@"c:\repo"), Arg.Is<string[]>(a => a[0] == "restore" && a[1] == "heldback.cs"));
+        }
+
+        [Fact]
+        public void FileBasedAppHeldBack_WhoseIncludeMovesAwayFromTheFileAnUpgradedAppWrites_KeepsItsVersion()
+        {
+            // heldback.cs was planned to share lib/3.0.10/shared.cs with fixed.cs, but once app.cs moves V it
+            // includes lib/3.0.11/shared.cs, which nothing writes.
+            var appPath = XFS.Path(@"c:\repo\app.cs");
+            var fixedAppPath = XFS.Path(@"c:\repo\fixed.cs");
+            var heldBackAppPath = XFS.Path(@"c:\repo\heldback.cs");
+            var oldSharedPath = XFS.Path(@"c:\repo\lib\3.0.10\shared.cs");
+            var newSharedPath = XFS.Path(@"c:\repo\lib\3.0.11\shared.cs");
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
+            {
+                [XFS.Path(@"c:\repo\Directory.Build.props")] = new("<Project><PropertyGroup><V>3.0.10</V></PropertyGroup></Project>"),
+                [appPath] = new("#:package Humanizer@$(V)\n"),
+                [fixedAppPath] = new("#:include lib/3.0.10/shared.cs\n"),
+                [heldBackAppPath] = new("#:include lib/$(V)/shared.cs\n"),
+                [oldSharedPath] = new("#:package Humanizer@3.0.10\n"),
+                [newSharedPath] = new("#:package Humanizer@3.0.10\n"),
+            });
+            var dotNetRunner = Substitute.For<IDotNetRunner>();
+            dotNetRunner.Run(default, default).ReturnsForAnyArgs(new RunStatus("", "", 0));
+            var service = new ReferenceUpgrader(dotNetRunner, fileSystem);
+            var upgrade = new ReferenceUpgrade
+            {
+                Name = "Humanizer",
+                Kind = ReferenceKind.Package,
+                Version = new NuGetVersion("3.0.11"),
+                Projects = [new UpgradeProject(appPath, "net10.0"), new UpgradeProject(fixedAppPath, "net10.0")],
+                HeldBack = [new UpgradeProject(heldBackAppPath, "net10.0")],
+            };
+
+            Assert.Equal([new UpgradeProject(heldBackAppPath, "net10.0")], service.FindHeldBackSharingVersion(upgrade));
+
+            var results = service.Upgrade(upgrade);
+
+            Assert.Equal("#:package Humanizer@3.0.11\n", fileSystem.File.ReadAllText(oldSharedPath));
+            Assert.Equal(UpgradeOutcome.Failed, results.Single(result => result.ProjectPath == heldBackAppPath).Outcome);
+            Assert.Equal("#:package Humanizer@3.0.10\n", fileSystem.File.ReadAllText(newSharedPath));
+        }
+
+        [Fact]
         public void FileBasedAppWithAPropertyBackedVersion_RestoresAnAppThatSharesALiteralDeclarationItWrote()
         {
             // first.cs writes the literal in shared.cs along with its property, so second.cs, which declares the

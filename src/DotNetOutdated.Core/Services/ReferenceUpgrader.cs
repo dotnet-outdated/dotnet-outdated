@@ -69,10 +69,19 @@ namespace DotNetOutdated.Core.Services
                 var heldBackSharing = plan.HeldBack.Select(entry => entry.Project).ToHashSet();
                 var requested = upgrade.Projects.ToHashSet();
 
+                // A held-back file-based app the plan left out can come to share a location once an earlier write
+                // changes the files an app includes, so it is a candidate too, unless it is a target framework of an
+                // upgraded project (which keeps the version only for itself).
+                var upgradedPaths = upgrade.Projects.Select(project => PathCase.OnDisk(_fileSystem, project.Path)).ToHashSet(StringComparer.Ordinal);
+                var lateCandidates = plan.Candidates.Where(project =>
+                    project.Path.IsCSharpFile() &&
+                    !heldBackSharing.Contains(project) &&
+                    !upgradedPaths.Contains(PathCase.OnDisk(_fileSystem, project.Path)));
+
                 // A project listed once per target framework is upgraded once, for all of those target frameworks.
                 // Projects are told apart by the path the file system stores, so two whose paths differ only in case
                 // are one project where the volume ignores case and two where it doesn't. Held-back projects come
-                // after the projects they share a location with, in the order they were found.
+                // after the upgraded ones, those planned first, in the order they were found.
                 var results = new List<ProjectUpgradeResult>();
                 _reachedLocations = new HashSet<string>(LocationComparer);
                 try
@@ -80,9 +89,10 @@ namespace DotNetOutdated.Core.Services
                     var deferred = new List<IGrouping<string, UpgradeProject>>();
                     foreach (var projects in upgrade.Projects
                         .Concat(plan.HeldBack.Select(entry => entry.Project))
+                        .Concat(lateCandidates)
                         .GroupBy(project => PathCase.OnDisk(_fileSystem, project.Path), StringComparer.Ordinal))
                     {
-                        if (projects.Any(requested.Contains) || Reached(projects))
+                        if (projects.Any(requested.Contains))
                         {
                             results.Add(Run(projects));
                         }
@@ -92,23 +102,28 @@ namespace DotNetOutdated.Core.Services
                         }
                     }
 
-                    // A held-back project is upgraded because another writes a location it shares. One whose locations
+                    // A held-back project is upgraded because another writes a location it shares, as its locations
+                    // are now (an earlier write can change the files a file-based app includes). One whose locations
                     // nothing has reached yet waits until another project's write reaches one; if none does (the
                     // writes were refused, say), it keeps its version.
                     bool ran;
                     do
                     {
                         ran = false;
-                        foreach (var projects in deferred.Where(Reached).ToList())
+                        foreach (var projects in deferred.ToList())
                         {
-                            deferred.Remove(projects);
-                            results.Add(Run(projects));
-                            ran = true;
+                            if (Reached(projects))
+                            {
+                                deferred.Remove(projects);
+                                results.Add(Run(projects));
+                                ran = true;
+                            }
                         }
                     }
                     while (ran);
 
-                    results.AddRange(deferred.Select(projects => new ProjectUpgradeResult
+                    // One that was planned to be upgraded is reported; one that only might have been stays held back.
+                    results.AddRange(deferred.Where(projects => projects.Any(heldBackSharing.Contains)).Select(projects => new ProjectUpgradeResult
                     {
                         ProjectPath = projects.First().Path,
                         Outcome = UpgradeOutcome.Failed,
@@ -122,8 +137,17 @@ namespace DotNetOutdated.Core.Services
                     _reachedLocations = null;
                 }
 
-                bool Reached(IGrouping<string, UpgradeProject> projects) =>
-                    projects.SelectMany(project => plan.Locations.GetValueOrDefault(project, [])).Any(_reachedLocations!.Contains);
+                // A file-based app's locations are found again, as earlier writes may have changed the files it
+                // includes; a project file's are as planned.
+                bool Reached(IGrouping<string, UpgradeProject> projects)
+                {
+                    var directives = new FileBasedAppDirectives(_fileSystem, _evaluator, _ => { });
+                    return projects
+                        .SelectMany(project => project.Path.IsCSharpFile()
+                            ? PackageVersionLocations(directives, project.Path, upgrade.Name, project.TargetFramework)
+                            : plan.Locations.GetValueOrDefault(project, []))
+                        .Any(_reachedLocations!.Contains);
+                }
 
                 ProjectUpgradeResult Run(IGrouping<string, UpgradeProject> projects)
                 {
@@ -132,7 +156,7 @@ namespace DotNetOutdated.Core.Services
                         upgrade,
                         projects.First().Path,
                         [.. projects.Select(p => p.TargetFramework).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase)],
-                        [.. projects.Where(heldBackSharing.Contains)]);
+                        [.. projects.Where(project => !requested.Contains(project))]);
 
                     // A file-based app's direct write records the locations it wrote, which can differ from the planned
                     // ones (an earlier write can change the files it includes). `dotnet add package` doesn't say, and
@@ -162,10 +186,11 @@ namespace DotNetOutdated.Core.Services
         }
 
         // The held-back projects whose package version is written where an upgraded project's is, in the order they
-        // were found, and each project's version locations.
+        // were found, each project's version locations, and every held-back project that references the package.
         private sealed record SharingPlan(
             IReadOnlyList<(UpgradeProject Project, IReadOnlyList<string> Locations)> HeldBack,
-            IReadOnlyDictionary<UpgradeProject, IReadOnlyList<string>> Locations);
+            IReadOnlyDictionary<UpgradeProject, IReadOnlyList<string>> Locations,
+            IReadOnlyList<UpgradeProject> Candidates);
 
         // The locations the projects upgraded so far in Upgrade wrote (or found already at the new value), or null
         // outside Upgrade.
@@ -181,7 +206,7 @@ namespace DotNetOutdated.Core.Services
         {
             if (upgrade.HeldBack.Count == 0)
             {
-                return new SharingPlan([], new Dictionary<UpgradeProject, IReadOnlyList<string>>());
+                return new SharingPlan([], new Dictionary<UpgradeProject, IReadOnlyList<string>>(), []);
             }
 
             var directives = new FileBasedAppDirectives(_fileSystem, _evaluator, _ => { });
@@ -215,7 +240,7 @@ namespace DotNetOutdated.Core.Services
             }
             while (found);
 
-            return new SharingPlan(sharing, projectLocations);
+            return new SharingPlan(sharing, projectLocations, [.. heldBack.Select(entry => entry.Project)]);
         }
 
         // Identifies where a package's version is written for a target framework of a project, so that target

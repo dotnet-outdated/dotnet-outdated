@@ -176,17 +176,17 @@ internal sealed partial record FileBasedAppSources(
                     continue;
                 }
 
-                // MSBuild splits an item's Include and Remove on ';', so each entry names files of its own.
+                // Only the files the mapping makes Compile items are compiled, and so declare directives; a path whose
+                // extension the mapping doesn't name is an error the build reports. The SDK gives the whole directive
+                // one item type, from the end of its value, which MSBuild then splits on ';' into entries of their own.
+                if (!string.Equals(ItemType(mapping, resolvedPatterns), "Compile", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
                 foreach (var resolvedPattern in resolvedPatterns.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
                 {
-                    // Only the files the mapping makes Compile items are compiled, and so declare directives; a path
-                    // whose extension the mapping doesn't name is an error the build reports.
                     var pattern = fileSystem.Path.Combine(directory, resolvedPattern);
-                    if (!string.Equals(ItemType(mapping, pattern), "Compile", StringComparison.OrdinalIgnoreCase))
-                    {
-                        continue;
-                    }
-
                     if (MatchFiles(fileSystem, pattern) is not { } matches)
                     {
                         unresolved.Add($"'{directive.Line.Trim()}' in '{path}' (a directory it searches could not be read)");

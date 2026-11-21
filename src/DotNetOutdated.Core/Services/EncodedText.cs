@@ -24,6 +24,9 @@ namespace DotNetOutdated.Core.Services
 
         public byte[] Preamble { get; }
 
+        /// <summary>The bytes the text was read from, when it was read from a file.</summary>
+        public byte[] Bytes { get; private set; } = [];
+
         /// <summary>
         /// Decodes <paramref name="bytes"/> using its byte order mark (UTF-8 when there is none).
         /// Returns null when re-encoding the text would not reproduce the original bytes.
@@ -48,9 +51,13 @@ namespace DotNetOutdated.Core.Services
         /// Reads a file's text and how it was encoded. When the bytes cannot be decoded losslessly, the text is
         /// read as <see cref="IFile.ReadAllText(string)"/> would and <see cref="Write"/> falls back to UTF-8.
         /// </summary>
-        public static EncodedText Read(IFileSystem fileSystem, string path) =>
-            TryDecode(fileSystem.File.ReadAllBytes(path))
-            ?? new EncodedText(fileSystem.File.ReadAllText(path), null, []);
+        public static EncodedText Read(IFileSystem fileSystem, string path)
+        {
+            var bytes = fileSystem.File.ReadAllBytes(path);
+            var text = TryDecode(bytes) ?? new EncodedText(fileSystem.File.ReadAllText(path), null, []);
+            text.Bytes = bytes;
+            return text;
+        }
 
         // Without an encoding the text is written as File.WriteAllText would: UTF-8 without a byte order mark.
         public byte[] Encode(string content) => [.. Preamble, .. (Encoding ?? new UTF8Encoding(false)).GetBytes(content)];

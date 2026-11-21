@@ -350,8 +350,10 @@ namespace DotNetOutdated.Tests
         [InlineData("#:include lib/a.cs\n#:include lib/a.cs\n#:include missing/*.cs\n#:include lib/notes.txt", "lib/a.cs")]
         [InlineData("#:include \"my lib/c.cs\" CopyToOutputDirectory=PreserveNewest", "my lib/c.cs")]
         [InlineData("#:property LibDir=lib\n#:include $(LibDir)/a.cs", "lib/a.cs")]
-        // MSBuild splits an item's Include on ';'.
+        // MSBuild splits an item's Include on ';'; the SDK gives the whole directive the item type of its value's end.
         [InlineData("#:property Lib=lib/a.cs;lib/shared.cs\n#:include $(Lib)", "lib/a.cs, lib/shared.cs")]
+        [InlineData("#:property Lib=lib/notes.txt;lib/shared.cs\n#:include $(Lib)", "lib/notes.txt, lib/shared.cs")]
+        [InlineData("#:property Lib=lib/shared.cs;lib/notes.txt\n#:include $(Lib)", "")]
         [InlineData("#:include $(Undefined)/a.cs", "")]
         // A quoted property value is a C# string literal; one the SDK rejects defines nothing.
         [InlineData("#:property LibDir=\"lib\"\n#:include $(LibDir)/a.cs", "lib/a.cs")]
@@ -979,6 +981,61 @@ namespace DotNetOutdated.Tests
         }
 
         [Fact]
+        public void WriteDirective_WhenAFileNowNamesThePackageThroughAProperty_FailsWithoutWriting()
+        {
+            // The file changed after its directives were read, so its ids are checked again in the text to rewrite.
+            const string app = "#:include lib/shared.cs\n#:property Id=Foo\n#:package Foo@1.0.0\n";
+            var fileSystem = new FaultyFileSystem
+            {
+                ChangedContent = path => path == SharedPath ? "#:package $(Id)@1.0.0\n" : null,
+            };
+            fileSystem.AddFile(AppPath, new MockFileData(app));
+            fileSystem.AddFile(SharedPath, new MockFileData("#:package Foo@1.0.0\n"));
+
+            var write = Directives(fileSystem).WriteDirective(AppPath, ReferenceKind.Package, "Foo", "2.0.0");
+
+            Assert.Contains("'#:package $(Id)@1.0.0'", write.Failure);
+            Assert.Contains("names it through a property", write.Failure);
+            Assert.Equal(app, fileSystem.File.ReadAllText(AppPath));
+        }
+
+        [Fact]
+        public void WriteDirective_WhenAFileIsSavedBeforeItIsWritten_ChangesBackTheFilesWrittenAndKeepsTheSave()
+        {
+            // Writing shared.cs from what was read before the save would lose the editor's change.
+            const string app = "#:include lib/shared.cs\n#:package Foo@1.0.0\n";
+            const string saved = "#:package Foo@1.0.0\n// saved\n";
+            var fileSystem = new FaultyFileSystem { EditedBeforeRead = (SharedPath, 2, saved) };
+            fileSystem.AddFile(AppPath, new MockFileData(app));
+            fileSystem.AddFile(SharedPath, new MockFileData("#:package Foo@1.0.0\n"));
+
+            var write = Directives(fileSystem).WriteDirective(AppPath, ReferenceKind.Package, "Foo", "2.0.0");
+
+            Assert.Contains($"'{SharedPath}' changed after it was read", write.Failure);
+            Assert.Contains("No file was changed.", write.Failure);
+            Assert.Equal(app, fileSystem.File.ReadAllText(AppPath));
+            Assert.Equal(saved, fileSystem.File.ReadAllText(SharedPath));
+        }
+
+        [Fact]
+        public void WriteDirective_WhenAnIdUsesAnImportedAliasOfAPropertyTheAppRedefines_FailsWithoutAddingADirective()
+        {
+            // FrozenId took BaseId's imported value (Foo) before the app's BaseId, so shared.cs may declare Foo.
+            const string app = "#:include lib/shared.cs\n#:property BaseId=Bar\n";
+            var fileSystem = FileSystem(app, new()
+            {
+                [RootPropsPath] = "<Project><PropertyGroup><BaseId>Foo</BaseId><FrozenId>$(BaseId)</FrozenId></PropertyGroup></Project>",
+                [SharedPath] = "#:package $(FrozenId)@1.0.0\n",
+            });
+
+            var write = Directives(fileSystem).WriteDirective(AppPath, ReferenceKind.Package, "Foo", "2.0.0");
+
+            Assert.Contains("'#:package $(FrozenId)@1.0.0'", write.Failure);
+            Assert.Contains("whose value isn't known", write.Failure);
+            Assert.Equal(app, fileSystem.File.ReadAllText(AppPath));
+        }
+
+        [Fact]
         public void TryUpdateVariable_UsedByAnIncludePath_WarnsAndChangesNothing()
         {
             // A new value would include another file, which may define the property or declare the package too.
@@ -1202,6 +1259,11 @@ namespace DotNetOutdated.Tests
 
             public Func<string, bool> Unreachable { get; init; } = _ => false;
 
+            // A file saved with new content (as by an editor) just before it is read as bytes for the nth time.
+            public (string Path, int Read, string Content)? EditedBeforeRead { get; init; }
+
+            private readonly Dictionary<string, int> _reads = [];
+
             public override IFile File => _file ??= new FaultyFile(this);
 
             public override IDirectory Directory => _directory ??= new FaultyDirectory(this, base.Directory.GetCurrentDirectory());
@@ -1217,6 +1279,12 @@ namespace DotNetOutdated.Tests
                 public override byte[] ReadAllBytes(string path)
                 {
                     Check(path);
+                    var reads = fileSystem._reads[path] = fileSystem._reads.GetValueOrDefault(path) + 1;
+                    if (fileSystem.EditedBeforeRead is { } edit && edit.Path == path && edit.Read == reads)
+                    {
+                        base.WriteAllText(path, edit.Content);
+                    }
+
                     return fileSystem.ChangedContent(path) is { } changed ? System.Text.Encoding.UTF8.GetBytes(changed) : base.ReadAllBytes(path);
                 }
 

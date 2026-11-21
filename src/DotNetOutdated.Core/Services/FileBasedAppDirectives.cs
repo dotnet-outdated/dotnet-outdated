@@ -214,6 +214,17 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
         var directiveKind = DirectiveKind(kind);
         foreach (var source in sources.Files)
         {
+            // An id whose property's value can't be determined may be this one, so a directive added for it could
+            // declare it twice.
+            if (source.Directives.FirstOrDefault(directive =>
+                    directive.Kind == directiveKind &&
+                    FileBasedAppSources.HasExpression(directive.Name) &&
+                    !FileBasedAppSources.TryResolveProperties(directive.Name, sources.Properties, out _)) is { } unknown)
+            {
+                return DirectiveWrite.Failed(
+                    $"{failure}: '{unknown.Line.Trim()}' in '{source.Path}' names a reference through a property whose value isn't known, which may be this one; change the version by hand.");
+            }
+
             foreach (var directive in source.Directives.Where(directive => Declares(directive, sources, kind, name)))
             {
                 // Rewriting the literal id below would miss this directive, and adding one would declare the id twice.
@@ -241,9 +252,21 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
                 var file = EncodedText.Read(_fileSystem, source.Path);
                 string? versionless = null;
                 string? propertyVersion = null;
+                string? propertyName = null;
                 var declares = false;
                 var content = FileBasedAppSources.RewriteDirectives(file.Content, directive =>
                 {
+                    // The file may have changed since its directives were read, so the text that is rewritten is
+                    // checked again: an id through a property that is (or may be) this one can't be rewritten.
+                    if (directive.Kind == directiveKind &&
+                        FileBasedAppSources.HasExpression(directive.Name) &&
+                        (!FileBasedAppSources.TryResolveProperties(directive.Name, sources.Properties, out var resolvedName) ||
+                         string.Equals(resolvedName, name, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        propertyName = directive.Line.Trim();
+                        return null;
+                    }
+
                     if (directive.Kind != directiveKind || !string.Equals(directive.Name, name, StringComparison.OrdinalIgnoreCase))
                     {
                         return null;
@@ -256,8 +279,6 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
                         return null;
                     }
 
-                    // The file may have changed since its directives were read, so its version is checked again in the
-                    // text that is rewritten.
                     if (FileBasedAppSources.HasExpression(directive.Value))
                     {
                         propertyVersion = directive.Line.Trim();
@@ -270,6 +291,12 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
                 if (versionless != null)
                 {
                     return DirectiveWrite.Failed($"{failure}: '{versionless}' in '{source.Path}' has no version to update.");
+                }
+
+                if (propertyName != null)
+                {
+                    return DirectiveWrite.Failed(
+                        $"{failure}: '{propertyName}' in '{source.Path}' names it through a property; change the version by hand.");
                 }
 
                 if (propertyVersion != null)
@@ -313,9 +340,10 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
             : new DirectiveWrite(declaringFiles, [.. edits.Select(edit => edit.Path)], null);
     }
 
-    // Writes each edit; if one fails, changes back the files written (the one that failed too, which a write can leave
-    // part-written), as the SDK rejects a reference left at different versions. Returns why it failed, naming any file
-    // that couldn't be changed back, or null.
+    // Writes each edit; if one fails, or a file changed after it was read (an editor saved it, say, whose change the
+    // edit would lose), changes back the files written (the one that failed too, which a write can leave
+    // part-written), as the SDK rejects a reference left at different versions. Returns why it failed, naming any
+    // file that couldn't be changed back, or null.
     private string? WriteAll(List<(string Path, EncodedText File, string Content)> edits, string failure)
     {
         // Each file's bytes are kept as they were, so changing it back restores them exactly, even text that couldn't
@@ -323,35 +351,51 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
         var written = new List<(string Path, byte[] Original)>();
         foreach (var edit in edits)
         {
+            string? problem = null;
             try
             {
-                written.Add((edit.Path, _fileSystem.File.ReadAllBytes(edit.Path)));
-                edit.File.Write(_fileSystem, edit.Path, edit.Content);
+                var current = _fileSystem.File.ReadAllBytes(edit.Path);
+                if (!current.AsSpan().SequenceEqual(edit.File.Bytes))
+                {
+                    problem = $"'{edit.Path}' changed after it was read, so it wasn't written";
+                }
+                else
+                {
+                    written.Add((edit.Path, current));
+                    edit.File.Write(_fileSystem, edit.Path, edit.Content);
+                }
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                var notRestored = new List<string>();
-                foreach (var done in written)
+                problem = $"'{edit.Path}' could not be written ({ex.Message})";
+            }
+
+            if (problem == null)
+            {
+                continue;
+            }
+
+            var notRestored = new List<string>();
+            foreach (var done in written)
+            {
+                try
                 {
-                    try
+                    // The file that failed may not have been changed at all (it is read-only, say).
+                    if (!_fileSystem.File.ReadAllBytes(done.Path).AsSpan().SequenceEqual(done.Original))
                     {
-                        // The file that failed may not have been changed at all (it is read-only, say).
-                        if (!_fileSystem.File.ReadAllBytes(done.Path).AsSpan().SequenceEqual(done.Original))
-                        {
-                            _fileSystem.File.WriteAllBytes(done.Path, done.Original);
-                        }
-                    }
-                    catch (Exception restoreEx) when (restoreEx is IOException or UnauthorizedAccessException)
-                    {
-                        notRestored.Add(done.Path);
+                        _fileSystem.File.WriteAllBytes(done.Path, done.Original);
                     }
                 }
-
-                var outcome = notRestored.Count == 0
-                    ? "No file was changed."
-                    : $"The version was already written in {string.Join(", ", notRestored.Select(path => $"'{path}'"))}, which could not be changed back; set it there to the version the other files declare.";
-                return $"{failure}: '{edit.Path}' could not be written ({ex.Message}). {outcome}";
+                catch (Exception restoreEx) when (restoreEx is IOException or UnauthorizedAccessException)
+                {
+                    notRestored.Add(done.Path);
+                }
             }
+
+            var outcome = notRestored.Count == 0
+                ? "No file was changed."
+                : $"The version was already written in {string.Join(", ", notRestored.Select(path => $"'{path}'"))}, which could not be changed back; set it there to the version the other files declare.";
+            return $"{failure}: {problem}. {outcome}";
         }
 
         return null;
