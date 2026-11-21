@@ -1323,7 +1323,7 @@ Console.WriteLine();")
         }
 
         [Fact]
-        public void FileBasedAppHeldBack_ThatIncludesAFileWhosePathDiffersOnlyInCase_IsLeftBehindOnACaseSensitiveFileSystem()
+        public void FileBasedAppHeldBack_ThatIncludesAFileWhosePathDiffersOnlyInCase_IsLeftBehindWherePathsAreCaseSensitive()
         {
             var upgradedAppPath = XFS.Path(@"c:\repo\upgraded.cs");
             var heldBackAppPath = XFS.Path(@"c:\repo\heldback.cs");
@@ -1334,7 +1334,8 @@ Console.WriteLine();")
                 [XFS.Path(@"c:\repo\lib\shared.cs")] = new("#:package Humanizer@3.0.10\n"),
                 [XFS.Path(@"c:\repo\lib\Shared.cs")] = new("#:package Humanizer@3.0.10\n"),
             });
-            var caseSensitive = fileSystem.AllFiles.Count() == 4;
+            // Windows and macOS file systems ignore case by default, so there the two paths are taken to be one file.
+            var caseSensitive = !(OperatingSystem.IsWindows() || OperatingSystem.IsMacOS());
             var service = new ReferenceUpgrader(Substitute.For<IDotNetRunner>(), fileSystem);
             var upgrade = new ReferenceUpgrade
             {
@@ -1347,7 +1348,6 @@ Console.WriteLine();")
 
             var sharing = service.FindHeldBackSharingVersion(upgrade);
 
-            // Where the file system ignores case, the two paths are one file, which both apps share.
             Assert.Equal(caseSensitive ? 0 : 1, sharing.Count);
         }
 
