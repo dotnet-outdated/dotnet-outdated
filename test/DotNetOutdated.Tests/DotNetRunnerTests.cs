@@ -77,10 +77,11 @@ public class DotNetRunnerTests
     public void WhenTheIdleTimeoutExpires_TheProcessIsKilled()
     {
         // The process prints its id and then stays silent, so the runner times out on a process the test can look up.
+        // The timeout leaves room for a slow shell start (PowerShell on a loaded CI agent) before the id is printed.
         (string fileName, string[] arguments) = OperatingSystem.IsWindows()
             ? ("powershell", new[] { "-NoProfile", "-NonInteractive", "-Command", "Write-Output $PID; Start-Sleep -Seconds 60" })
             : ("sh", new[] { "-c", "echo $$; exec sleep 60" });
-        var runner = new DotNetRunner(new DotNetRunnerOptions { IdleTimeout = TimeSpan.FromSeconds(1), FileName = fileName });
+        var runner = new DotNetRunner(new DotNetRunnerOptions { IdleTimeout = TimeSpan.FromSeconds(3), FileName = fileName });
 
         RunStatus status = runner.Run(Path.GetTempPath(), arguments);
 
