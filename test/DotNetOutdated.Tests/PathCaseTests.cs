@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.IO.Abstractions;
 using System.IO.Abstractions.TestingHelpers;
 using DotNetOutdated.Core.Services;
 using Xunit;
@@ -43,6 +45,22 @@ namespace DotNetOutdated.Tests
             var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData> { [StoredPath] = new(string.Empty) });
 
             Assert.Equal(StoredPath, PathCase.OnDisk(fileSystem, XFS.Path(@"c:\repo\lib\Shared.cs")));
+        }
+
+        [Theory]
+        [InlineData(@"c:\{0}\lib\shared.cs", @"C:\{0}\lib\shared.cs")]
+        [InlineData(@"\\?\c:\{0}\lib\shared.cs", @"\\?\C:\{0}\lib\shared.cs")]
+        public void OnDisk_OnWindows_SpellsADriveLetterInUpperCase_InAnExtendedPathToo(string written, string expected)
+        {
+            // The mock file system can't model \\?\ paths, so this uses the real one, with a directory that doesn't exist.
+            if (!OperatingSystem.IsWindows())
+            {
+                return;
+            }
+
+            var missing = $"dotnet-outdated-{Guid.NewGuid():N}";
+
+            Assert.Equal(string.Format(expected, missing), PathCase.OnDisk(new FileSystem(), string.Format(written, missing)));
         }
 
         [Fact]
