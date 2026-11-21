@@ -8,13 +8,13 @@ namespace DotNetOutdated.Tests
 {
     public class PathCaseTests
     {
-        private static readonly string StoredPath = XFS.Path(@"c:\repo\lib\Shared.cs");
+        private static readonly string StoredPath = XFS.Path(@"C:\repo\lib\Shared.cs");
 
         [Fact]
         public void OnDisk_SpellsAPathAsTheFileSystemStoresIt()
         {
             var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData> { [StoredPath] = new(string.Empty) });
-            var written = XFS.Path(@"c:\repo\LIB\shared.cs");
+            var written = XFS.Path(@"C:\repo\LIB\shared.cs");
 
             // Where case is ignored, the path written names the stored file; where it matters, it names nothing.
             var caseSensitive = !fileSystem.File.Exists(written);
@@ -26,7 +26,7 @@ namespace DotNetOutdated.Tests
         [Fact]
         public void OnDisk_KeepsTwoFilesWhosePathsDifferOnlyInCaseApart()
         {
-            var otherPath = XFS.Path(@"c:\repo\lib\shared.cs");
+            var otherPath = XFS.Path(@"C:\repo\lib\shared.cs");
             var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData>
             {
                 [StoredPath] = new("a"),
@@ -38,10 +38,18 @@ namespace DotNetOutdated.Tests
         }
 
         [Fact]
+        public void OnDisk_SpellsADriveLetterInUpperCase()
+        {
+            var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData> { [StoredPath] = new(string.Empty) });
+
+            Assert.Equal(StoredPath, PathCase.OnDisk(fileSystem, XFS.Path(@"c:\repo\lib\Shared.cs")));
+        }
+
+        [Fact]
         public void OnDisk_KeepsThePartsThatDoNotExistAsWritten()
         {
             var fileSystem = new MockFileSystem(new Dictionary<string, MockFileData> { [StoredPath] = new(string.Empty) });
-            var missing = XFS.Path(@"c:\repo\lib\Missing\File.cs");
+            var missing = XFS.Path(@"C:\repo\lib\Missing\File.cs");
 
             Assert.Equal(missing, PathCase.OnDisk(fileSystem, missing));
         }

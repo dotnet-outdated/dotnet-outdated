@@ -216,56 +216,63 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
 
         var edits = new List<(string Path, EncodedText File, string Content)>();
         var declaringFiles = new List<string>();
-        foreach (var source in sources.Files)
+        try
         {
-            var file = EncodedText.Read(_fileSystem, source.Path);
-            string? versionless = null;
-            var declares = false;
-            var content = FileBasedAppSources.RewriteDirectives(file.Content, directive =>
+            foreach (var source in sources.Files)
             {
-                if (directive.Kind != directiveKind || !string.Equals(directive.Name, name, StringComparison.OrdinalIgnoreCase))
+                var file = EncodedText.Read(_fileSystem, source.Path);
+                string? versionless = null;
+                var declares = false;
+                var content = FileBasedAppSources.RewriteDirectives(file.Content, directive =>
                 {
-                    return null;
+                    if (directive.Kind != directiveKind || !string.Equals(directive.Name, name, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return null;
+                    }
+
+                    declares = true;
+                    if (string.IsNullOrEmpty(directive.Value))
+                    {
+                        versionless = directive.Line.Trim();
+                        return null;
+                    }
+
+                    return string.Equals(directive.Value, versionText, StringComparison.Ordinal) ? null : directive.WithValue(versionText);
+                });
+
+                if (versionless != null)
+                {
+                    return DirectiveWrite.Failed($"{failure}: '{versionless}' in '{source.Path}' has no version to update.");
                 }
 
-                declares = true;
-                if (string.IsNullOrEmpty(directive.Value))
+                if (declares)
                 {
-                    versionless = directive.Line.Trim();
-                    return null;
+                    declaringFiles.Add(source.Path);
                 }
 
-                return string.Equals(directive.Value, versionText, StringComparison.Ordinal) ? null : directive.WithValue(versionText);
-            });
-
-            if (versionless != null)
-            {
-                return DirectiveWrite.Failed($"{failure}: '{versionless}' in '{source.Path}' has no version to update.");
+                if (!string.Equals(content, file.Content, StringComparison.Ordinal))
+                {
+                    edits.Add((source.Path, file, content));
+                }
             }
 
-            if (declares)
+            if (declaringFiles.Count == 0)
             {
-                declaringFiles.Add(source.Path);
-            }
+                if (kind == ReferenceKind.Sdk)
+                {
+                    return DirectiveWrite.Failed(
+                        $"{failure}. Expected a literal #:sdk {name}@<version> directive (id match is case-insensitive; trailing comments are preserved).");
+                }
 
-            if (!string.Equals(content, file.Content, StringComparison.Ordinal))
-            {
-                edits.Add((source.Path, file, content));
+                var entryPoint = sources.Files[0].Path;
+                var file = EncodedText.Read(_fileSystem, entryPoint);
+                edits.Add((entryPoint, file, FileBasedAppSources.InsertDirective(file.Content, $"#:package {FileBasedAppDirective.QuoteIfNeeded(name)}@{FileBasedAppDirective.QuoteIfNeeded(versionText)}")));
+                declaringFiles.Add(entryPoint);
             }
         }
-
-        if (declaringFiles.Count == 0)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            if (kind == ReferenceKind.Sdk)
-            {
-                return DirectiveWrite.Failed(
-                    $"{failure}. Expected a literal #:sdk {name}@<version> directive (id match is case-insensitive; trailing comments are preserved).");
-            }
-
-            var entryPoint = sources.Files[0].Path;
-            var file = EncodedText.Read(_fileSystem, entryPoint);
-            edits.Add((entryPoint, file, FileBasedAppSources.InsertDirective(file.Content, $"#:package {FileBasedAppDirective.QuoteIfNeeded(name)}@{FileBasedAppDirective.QuoteIfNeeded(versionText)}")));
-            declaringFiles.Add(entryPoint);
+            return DirectiveWrite.Failed($"{failure}: {ex.Message}");
         }
 
         return WriteAll(edits, failure) is { } writeFailure
@@ -273,8 +280,9 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
             : new DirectiveWrite(declaringFiles, [.. edits.Select(edit => edit.Path)], null);
     }
 
-    // Writes each edit; if one fails, changes back the files already written, as the SDK rejects a reference left at
-    // different versions. Returns why it failed, naming any file that couldn't be changed back, or null.
+    // Writes each edit; if one fails, changes back the files written (the one that failed too, which a write can leave
+    // part-written), as the SDK rejects a reference left at different versions. Returns why it failed, naming any file
+    // that couldn't be changed back, or null.
     private string? WriteAll(List<(string Path, EncodedText File, string Content)> edits, string failure)
     {
         var written = new List<(string Path, EncodedText File, string Content)>();
@@ -282,8 +290,8 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
         {
             try
             {
-                edit.File.Write(_fileSystem, edit.Path, edit.Content);
                 written.Add(edit);
+                edit.File.Write(_fileSystem, edit.Path, edit.Content);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
@@ -292,7 +300,11 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
                 {
                     try
                     {
-                        done.File.Write(_fileSystem, done.Path, done.File.Content);
+                        // The file that failed may not have been changed at all (it is read-only, say).
+                        if (!string.Equals(EncodedText.Read(_fileSystem, done.Path).Content, done.File.Content, StringComparison.Ordinal))
+                        {
+                            done.File.Write(_fileSystem, done.Path, done.File.Content);
+                        }
                     }
                     catch (Exception restoreEx) when (restoreEx is IOException or UnauthorizedAccessException)
                     {
@@ -349,149 +361,205 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
     }
 
     /// <summary>
-    /// Sets the property behind a property-backed directive (each <c>#:property</c> line for it, or a Directory.*
-    /// property) to <paramref name="newVersion"/>, and makes the directive read it again. Nothing is written when an
-    /// <c>#:include</c> could not be followed, as a file that wasn't read may declare the property too.
+    /// The files with a literal-version directive for the reference, whose version a property-backed upgrade writes too
+    /// so that every declaration of it stays the same.
     /// </summary>
-    /// <param name="projectFilePath">The app's entry point, whose files and imported properties are in effect.</param>
+    public IReadOnlyList<string> LiteralDeclaringFiles(string projectFilePath, ReferenceKind kind, string name)
+    {
+        if (!projectFilePath.IsCSharpFile() || !_fileSystem.File.Exists(projectFilePath))
+        {
+            return [];
+        }
+
+        var sources = ReadSources(projectFilePath);
+        return [
+            .. sources.Files
+                .Where(file => file.Directives.Any(directive =>
+                    Declares(directive, sources, kind, name) &&
+                    !string.IsNullOrEmpty(directive.Value) &&
+                    !FileBasedAppSources.HasExpression(directive.Value)))
+                .Select(file => file.Path)
+        ];
+    }
+
+    /// <summary>
+    /// As <see cref="UpdateVariable"/>, reporting a failure as a warning.
+    /// </summary>
     /// <returns><see langword="true"/> when any file was changed.</returns>
     public bool TryUpdateVariable(string projectFilePath, PackageVariableInfo variableInfo, NuGetVersion newVersion)
     {
-        // A failure after the property was rewritten (say, evaluating the imported properties for the directive pass)
-        // still reports the update that was written.
-        var updated = false;
+        var write = UpdateVariable(projectFilePath, variableInfo, newVersion);
+        if (write.Failure != null)
+        {
+            _onWarning?.Invoke(write.Failure);
+        }
+
+        return write.ChangedFiles.Count > 0;
+    }
+
+    /// <summary>
+    /// Sets the property behind a property-backed directive (each <c>#:property</c> line for it, or a Directory.*
+    /// property) to <paramref name="newVersion"/>, and writes it in each literal-version directive for the reference
+    /// too. Every file is written, or none: nothing is written when an <c>#:include</c> could not be followed (a file
+    /// that wasn't read may declare the property too), when an include path uses the property, or when another
+    /// directive for the reference takes its version from a different property; and if writing one file fails, the
+    /// files already written are changed back.
+    /// </summary>
+    /// <param name="projectFilePath">The app's entry point, whose files and imported properties are in effect.</param>
+    public VariableWrite UpdateVariable(string projectFilePath, PackageVariableInfo variableInfo, NuGetVersion newVersion)
+    {
         try
         {
-            UpdateVariable(projectFilePath, variableInfo, newVersion, ref updated);
+            return UpdateVariableFiles(projectFilePath, variableInfo, newVersion);
         }
         catch (Exception ex)
         {
-            _onWarning?.Invoke(
+            return VariableWrite.Failed(
                 $"Failed to update package reference '{variableInfo.PackageName}' ({variableInfo.ElementType}): {ex.Message}");
         }
-
-        return updated;
     }
 
-    private void UpdateVariable(string projectFilePath, PackageVariableInfo variableInfo, NuGetVersion newVersion, ref bool updated)
+    private VariableWrite UpdateVariableFiles(string projectFilePath, PackageVariableInfo variableInfo, NuGetVersion newVersion)
     {
+        var notUpdating = $"Not updating '{variableInfo.PackageName}' in file-based app '{projectFilePath}'";
         var isApp = projectFilePath.IsCSharpFile() && _fileSystem.File.Exists(projectFilePath);
-        var sourcesBefore = isApp ? ReadSources(projectFilePath) : null;
-        if (sourcesBefore != null && UnreadIncludes(sourcesBefore) is { } unread)
+        var sources = isApp ? ReadSources(projectFilePath) : null;
+        if (sources != null && UnreadIncludes(sources) is { } unread)
         {
-            _onWarning?.Invoke($"Not updating '{variableInfo.PackageName}' in file-based app '{projectFilePath}': {unread}");
-            return;
+            return VariableWrite.Failed($"{notUpdating}: {unread}");
         }
 
         // Changing a property an include path uses can change the files the app compiles, which may declare it too.
-        if (sourcesBefore != null && !string.IsNullOrEmpty(variableInfo.VariableName) &&
-            IncludeUsing(sourcesBefore, variableInfo.VariableName) is { } include)
+        if (sources != null && !string.IsNullOrEmpty(variableInfo.VariableName) &&
+            IncludeUsing(sources, variableInfo.VariableName) is { } include)
         {
-            _onWarning?.Invoke(
-                $"Not updating '{variableInfo.PackageName}' in file-based app '{projectFilePath}': {include} uses $({variableInfo.VariableName}), " +
+            return VariableWrite.Failed(
+                $"{notUpdating}: {include} uses $({variableInfo.VariableName}), " +
                 "so changing it can change the files the app compiles; change the version by hand.");
-            return;
         }
 
+        // A declaration whose version is another property would be left at the old version.
+        if (sources != null && OtherVersionProperty(sources, variableInfo) is { } other)
+        {
+            return VariableWrite.Failed(
+                $"{notUpdating}: {other} takes its version from another property, which would be left at the old version; change the version by hand.");
+        }
+
+        // Each file's new content, in the order first changed.
+        var edits = new List<(string Path, EncodedText File, string Content)>();
+        void Edit(string path, Func<string, string> change)
+        {
+            var index = edits.FindIndex(edit => FileBasedAppSources.PathComparer.Equals(edit.Path, path));
+            if (index < 0)
+            {
+                var file = EncodedText.Read(_fileSystem, path);
+                edits.Add((path, file, change(file.Content)));
+            }
+            else
+            {
+                edits[index] = edits[index] with { Content = change(edits[index].Content) };
+            }
+        }
+
+        var version = newVersion.ToString();
         if (_fileSystem.File.Exists(variableInfo.FilePath) && !string.IsNullOrEmpty(variableInfo.VariableName))
         {
-            if (sourcesBefore != null && IsSource(sourcesBefore, variableInfo.FilePath))
+            if (sources != null && IsSource(sources, variableInfo.FilePath))
             {
-                var propertyFiles = PropertyFiles(sourcesBefore, variableInfo);
-                foreach (var propertyFilePath in propertyFiles)
+                foreach (var propertyFilePath in PropertyFiles(sources, variableInfo))
                 {
-                    var propertyFile = EncodedText.Read(_fileSystem, propertyFilePath);
-                    var propertyContent = propertyFile.Content;
-                    var newPropertyContent = FileBasedAppSources.RewriteDirectives(
-                        propertyContent,
+                    Edit(propertyFilePath, content => FileBasedAppSources.RewriteDirectives(
+                        content,
                         directive => DefinesProperty(directive, variableInfo.VariableName) &&
-                                     !string.Equals(directive.Value, newVersion.ToString(), StringComparison.Ordinal)
-                            ? directive.WithValue(newVersion.ToString())
-                            : null);
-                    if (!string.Equals(propertyContent, newPropertyContent, StringComparison.Ordinal))
-                    {
-                        propertyFile.Write(_fileSystem, propertyFilePath, newPropertyContent);
-                        updated = true;
-                    }
+                                     !string.Equals(directive.Value, version, StringComparison.Ordinal)
+                            ? directive.WithValue(version)
+                            : null));
                 }
             }
-            else if (TryUpdateXmlPropertyFile(projectFilePath, variableInfo.FilePath, variableInfo.VariableName, newVersion.ToString()))
+            else
             {
-                updated = true;
-            }
-        }
-
-        if (!isApp)
-        {
-            return;
-        }
-
-        // Read after the property was written, so a directive whose id is a property expression resolves with it. A
-        // directive repeated in several files must keep the same version in each, so every file is rewritten: one
-        // that reads a property already sees the new value, and a literal version is written. Each directive keeps
-        // its own id and version expression, as other apps that include its file may not define the properties
-        // this app's directive uses.
-        var sources = ReadSources(projectFilePath);
-        var literalVersion = newVersion.ToString();
-        var directiveKind = DirectiveKind(variableInfo.ReferenceKind);
-        foreach (var source in sources.Files)
-        {
-            var file = EncodedText.Read(_fileSystem, source.Path);
-            var content = file.Content;
-            var newContent = FileBasedAppSources.RewriteDirectives(content, directive =>
-            {
-                if (directive.Kind != directiveKind ||
-                    string.IsNullOrEmpty(directive.Value) ||
-                    VersionExpression.ContainsPropertyReference(directive.Value) ||
-                    (!string.Equals(directive.Name, variableInfo.PackageReferenceName, StringComparison.OrdinalIgnoreCase) &&
-                     !Declares(directive, sources, variableInfo.ReferenceKind, variableInfo.PackageName)))
+                var failure = XmlPropertyEdit(projectFilePath, variableInfo.FilePath, variableInfo.VariableName, version, Edit);
+                if (failure != null)
                 {
-                    return null;
+                    return VariableWrite.Failed(failure);
                 }
-
-                // Only the version is rewritten, so the directive keeps its metadata, quoting and spacing.
-                return directive.Value == literalVersion ? null : directive.WithValue(literalVersion);
-            });
-
-            if (!string.Equals(content, newContent, StringComparison.Ordinal))
-            {
-                file.Write(_fileSystem, source.Path, newContent);
-                updated = true;
             }
         }
+
+        if (sources != null)
+        {
+            // A directive repeated in several files must keep the same version in each, so every file is rewritten:
+            // one that reads the property sees the new value, and a literal version is written. Each directive keeps
+            // its own id and version expression, as other apps that include its file may not define the properties
+            // this app's directive uses.
+            var directiveKind = DirectiveKind(variableInfo.ReferenceKind);
+            foreach (var source in sources.Files)
+            {
+                Edit(source.Path, content => FileBasedAppSources.RewriteDirectives(content, directive =>
+                {
+                    if (directive.Kind != directiveKind ||
+                        string.IsNullOrEmpty(directive.Value) ||
+                        FileBasedAppSources.HasExpression(directive.Value) ||
+                        (!string.Equals(directive.Name, variableInfo.PackageReferenceName, StringComparison.OrdinalIgnoreCase) &&
+                         !Declares(directive, sources, variableInfo.ReferenceKind, variableInfo.PackageName)))
+                    {
+                        return null;
+                    }
+
+                    // Only the version is rewritten, so the directive keeps its metadata, quoting and spacing.
+                    return directive.Value == version ? null : directive.WithValue(version);
+                }));
+            }
+        }
+
+        var changed = edits.Where(edit => !string.Equals(edit.Content, edit.File.Content, StringComparison.Ordinal)).ToList();
+        return WriteAll(changed, $"Failed to update '{variableInfo.PackageName}' in file-based app '{projectFilePath}'") is { } writeFailure
+            ? VariableWrite.Failed(writeFailure)
+            : new VariableWrite([.. changed.Select(edit => edit.Path)], null);
     }
 
-    // Updates the definition of variableName that is in effect for the file-based app at projectFilePath.
-    private bool TryUpdateXmlPropertyFile(string projectFilePath, string propertyFilePath, string variableName, string newMSBuildValue)
+    // The first directive for the reference whose version uses other properties than the variable's directive does.
+    private static string? OtherVersionProperty(FileBasedAppSources sources, PackageVariableInfo variableInfo)
     {
-        if (string.IsNullOrEmpty(propertyFilePath) ||
-            string.IsNullOrEmpty(variableName) ||
-            !_fileSystem.File.Exists(propertyFilePath))
-        {
-            return false;
-        }
+        static HashSet<string> PropertyNames(string? expression) =>
+            VersionExpression.PropertyReferenceRegex().Matches(expression ?? string.Empty)
+                .Select(match => match.Groups[1].Value)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
+        var own = PropertyNames(variableInfo.PackageReferenceVersion);
+        var directiveKind = DirectiveKind(variableInfo.ReferenceKind);
+        return sources.Files
+            .SelectMany(file => file.Directives
+                .Where(directive =>
+                    directive.Kind == directiveKind &&
+                    FileBasedAppSources.HasExpression(directive.Value) &&
+                    (string.Equals(directive.Name, variableInfo.PackageReferenceName, StringComparison.OrdinalIgnoreCase) ||
+                     Declares(directive, sources, variableInfo.ReferenceKind, variableInfo.PackageName)) &&
+                    !PropertyNames(directive.Value).SetEquals(own))
+                .Select(directive => $"'{directive.Line.Trim()}' in '{file.Path}'"))
+            .FirstOrDefault();
+    }
+
+    // Edits the definition of variableName that is in effect for the file-based app at projectFilePath; returns why
+    // it can't, or null.
+    private string? XmlPropertyEdit(
+        string projectFilePath,
+        string propertyFilePath,
+        string variableName,
+        string newMSBuildValue,
+        Action<string, Func<string, string>> edit)
+    {
         var properties = _evaluator.GetImportedProperties(projectFilePath);
         if (!properties.TryGetValue(variableName, out var definition) ||
             definition.Ambiguous ||
             definition.ElementIndex < 0 ||
             !string.Equals(definition.FilePath, _fileSystem.Path.GetFullPath(propertyFilePath), StringComparison.OrdinalIgnoreCase))
         {
-            _onWarning?.Invoke(
-                $"Not updating $({variableName}) in '{propertyFilePath}': the definition in effect could not be determined.");
-            return false;
+            return $"Not updating $({variableName}) in '{propertyFilePath}': the definition in effect could not be determined.";
         }
 
-        var propertyFile = EncodedText.Read(_fileSystem, propertyFilePath);
-        string propertyContent = propertyFile.Content;
-        var newPropertyContent = PackageVersionMarkup.ReplacePropertyValueAt(propertyContent, variableName, definition.ElementIndex, newMSBuildValue);
-        if (string.Equals(propertyContent, newPropertyContent, StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        propertyFile.Write(_fileSystem, propertyFilePath, newPropertyContent);
-        return true;
+        edit(propertyFilePath, content => PackageVersionMarkup.ReplacePropertyValueAt(content, variableName, definition.ElementIndex, newMSBuildValue));
+        return null;
     }
 
     private sealed record ScanResult(
@@ -742,4 +810,12 @@ internal sealed partial class FileBasedAppDirectives(IFileSystem fileSystem, IPr
 internal sealed record DirectiveWrite(IReadOnlyList<string> DeclaringFiles, IReadOnlyList<string> ChangedFiles, string? Failure)
 {
     public static DirectiveWrite Failed(string failure) => new([], [], failure);
+}
+
+/// <summary>What writing a file-based app's property-backed version did.</summary>
+/// <param name="ChangedFiles">The files that were changed.</param>
+/// <param name="Failure">Why nothing could be written; <see langword="null"/> when the version was written.</param>
+internal sealed record VariableWrite(IReadOnlyList<string> ChangedFiles, string? Failure)
+{
+    public static VariableWrite Failed(string failure) => new([], failure);
 }

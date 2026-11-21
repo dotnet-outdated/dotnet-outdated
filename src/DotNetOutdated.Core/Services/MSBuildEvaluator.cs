@@ -39,6 +39,12 @@ internal sealed class MSBuildEvaluator(IFileSystem fileSystem)
         /// <summary>Assigned by a file imported after the project's own properties (Directory.Build.targets).</summary>
         public bool AfterProject { get; init; }
 
+        /// <summary>
+        /// The undefined properties its condition (or its group's) took to be empty, as in the default idiom
+        /// <c>Condition="'$(X)' == ''"</c>.
+        /// </summary>
+        public IReadOnlyCollection<string> AssumedUndefined { get; init; } = [];
+
         /// <summary>When <see cref="RawValue"/> is exactly <c>$(Other)</c>, the name of that property.</summary>
         public string? LinkName { get; init; }
 
@@ -77,6 +83,9 @@ internal sealed class MSBuildEvaluator(IFileSystem fileSystem)
 
         /// <summary>Whether the files being evaluated are imported after the project's own properties.</summary>
         public bool AfterProject { get; set; }
+
+        /// <summary>While a condition is evaluated, collects the undefined properties it takes to be empty.</summary>
+        public HashSet<string>? AssumedUndefined { get; set; }
 
         // Last version-setting item per package, per item type.
         public Dictionary<string, PackageItem> PackageReferences { get; } = new(StringComparer.OrdinalIgnoreCase);
@@ -280,7 +289,7 @@ internal sealed class MSBuildEvaluator(IFileSystem fileSystem)
                     // Properties assigned in the group count as empty when undefined, so the group-level default
                     // idiom <PropertyGroup Condition="'$(X)' == ''"><X>...</X></PropertyGroup> can be evaluated.
                     var assigned = element.Elements().Select(e => e.Name.LocalName).ToArray();
-                    var groupCondition = EvaluateCondition(element, filePath, state, assigned);
+                    var groupCondition = EvaluateCondition(element, filePath, state, assigned, out var groupAssumed);
                     if (groupCondition == false)
                     {
                         break;
@@ -288,7 +297,7 @@ internal sealed class MSBuildEvaluator(IFileSystem fileSystem)
 
                     foreach (var property in element.Elements())
                     {
-                        EvaluateProperty(property, filePath, state, elementIndexes, uncertain || groupCondition == null);
+                        EvaluateProperty(property, filePath, state, elementIndexes, uncertain || groupCondition == null, groupAssumed);
                     }
 
                     break;
@@ -366,10 +375,11 @@ internal sealed class MSBuildEvaluator(IFileSystem fileSystem)
         string filePath,
         EvaluationState state,
         Dictionary<XElement, int> elementIndexes,
-        bool uncertain)
+        bool uncertain,
+        IReadOnlyCollection<string> groupAssumed)
     {
         var name = property.Name.LocalName;
-        var condition = EvaluateCondition(property, filePath, state, [name]);
+        var condition = EvaluateCondition(property, filePath, state, [name], out var assumed);
         if (condition == false)
         {
             return;
@@ -402,6 +412,7 @@ internal sealed class MSBuildEvaluator(IFileSystem fileSystem)
             ElementIndex = elementIndexes.TryGetValue(property, out var index) ? index : -1,
             Ambiguous = ambiguous,
             AfterProject = state.AfterProject,
+            AssumedUndefined = [.. groupAssumed.Union(assumed, StringComparer.OrdinalIgnoreCase)],
             LinkName = linkName,
             Link = link,
         };
@@ -528,6 +539,27 @@ internal sealed class MSBuildEvaluator(IFileSystem fileSystem)
                 path => Exists(path, state));
     }
 
+    // As above, also giving the undefined properties the condition took to be empty.
+    private bool? EvaluateCondition(
+        XElement element,
+        string filePath,
+        EvaluationState state,
+        IReadOnlyCollection<string> assignedProperties,
+        out IReadOnlyCollection<string> assumedUndefined)
+    {
+        var assumed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        state.AssumedUndefined = assumed;
+        try
+        {
+            return EvaluateCondition(element, filePath, state, assignedProperties);
+        }
+        finally
+        {
+            state.AssumedUndefined = null;
+            assumedUndefined = assumed;
+        }
+    }
+
     private bool? Exists(string path, EvaluationState state)
     {
         if (string.IsNullOrWhiteSpace(path))
@@ -604,6 +636,7 @@ internal sealed class MSBuildEvaluator(IFileSystem fileSystem)
 
             if (assignedProperties != null && assignedProperties.Contains(name, StringComparer.OrdinalIgnoreCase))
             {
+                state.AssumedUndefined?.Add(name);
                 return string.Empty;
             }
 

@@ -24,8 +24,9 @@ internal static class PathCase
             [fileSystem.Path.DirectorySeparatorChar, fileSystem.Path.AltDirectorySeparatorChar],
             StringSplitOptions.RemoveEmptyEntries);
 
-        // The root is kept as written: a drive letter or share name isn't listed by any directory.
-        var current = root;
+        // No directory lists the root. A drive letter is one drive whatever its case, so it is spelled in upper case;
+        // the rest of the root (a share name, say) is kept as written.
+        var current = OperatingSystem.IsWindows() ? WithUpperCaseDrive(root) : root;
         for (var i = 0; i < segments.Length; i++)
         {
             if (StoredName(fileSystem, current, segments[i]) is not { } name)
@@ -37,6 +38,15 @@ internal static class PathCase
         }
 
         return current;
+    }
+
+    // The root with the letter of a drive (c:\ or \\?\c:\) in upper case.
+    private static string WithUpperCaseDrive(string root)
+    {
+        var colon = root.IndexOf(':', StringComparison.Ordinal);
+        return colon > 0 && char.IsAsciiLetter(root[colon - 1])
+            ? string.Concat(root.AsSpan(0, colon - 1), char.ToUpperInvariant(root[colon - 1]).ToString(), root.AsSpan(colon))
+            : root;
     }
 
     // The name the directory lists for the entry written as name, or null when the file system doesn't find it.

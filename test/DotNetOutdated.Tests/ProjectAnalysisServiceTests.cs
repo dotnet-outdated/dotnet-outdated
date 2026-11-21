@@ -123,6 +123,23 @@ namespace DotNetOutdated.Tests
             Assert.Equal(new NuGetVersion("1.0.0"), dependencies.Single(dependency => dependency.Name == "Foo").ResolvedVersion);
         }
 
+        [Fact]
+        public async Task AFileBasedAppsPackageNamedInOtherCaseThanTheGraph_IsOneDependency()
+        {
+            // Package ids are case-insensitive, so the directive's entry replaces the graph's.
+            using var project = new TemporaryProject("<Project />");
+            var appPath = Path.Combine(project.Directory, "app.cs");
+            File.WriteAllText(appPath, "#:package FOO@1.0.0\n");
+            project.Target.Libraries.Add(Library("Foo", "1.0.0"));
+            project.Evaluator.GetImportedProperties(Arg.Any<string>()).Returns(new Dictionary<string, ImportedProperty>());
+            project.Write(directDependencies: ["Foo"]);
+
+            var analyzed = await project.AnalyzeAsync(new ProjectAnalysisOptions(), appPath);
+
+            var dependency = Assert.Single(Assert.Single(analyzed.TargetFrameworks).Dependencies);
+            Assert.Equal("FOO", dependency.Name);
+        }
+
         [Theory]
         [InlineData(1, new[] { "CHILD" })]
         [InlineData(2, new[] { "CHILD", "Grandchild" })]

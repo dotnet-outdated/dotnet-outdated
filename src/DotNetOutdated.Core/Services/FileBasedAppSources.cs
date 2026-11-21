@@ -43,33 +43,73 @@ internal sealed partial record FileBasedAppSources(
 
     public static FileBasedAppSources Read(IFileSystem fileSystem, IProjectEvaluator evaluator, string projectFilePath)
     {
+        var entryPoint = fileSystem.Path.GetFullPath(projectFilePath);
+        var imported = evaluator.GetImportedProperties(projectFilePath);
+
+        // A Directory.Build.targets definition whose condition took a property to be undefined (the default idiom
+        // Condition="'$(X)' == ''") may not apply once a #:property line defines it. Those found while reading are
+        // treated as uncertain, and the app read again, until no more are found.
+        var uncertain = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        while (true)
+        {
+            var (sources, assigned) = Read(fileSystem, imported, entryPoint, uncertain);
+            var found = imported
+                .Where(pair => pair.Value.AfterProject && !uncertain.Contains(pair.Key) &&
+                               (pair.Value.AssumedUndefined ?? []).Any(assigned.Contains))
+                .Select(pair => pair.Key)
+                .ToList();
+            if (found.Count == 0)
+            {
+                return sources;
+            }
+
+            uncertain.UnionWith(found);
+        }
+    }
+
+    // Reads the app's files, with the imported definitions in uncertain left out for paths; also gives the names its
+    // #:property lines assign.
+    private static (FileBasedAppSources Sources, HashSet<string> Assigned) Read(
+        IFileSystem fileSystem,
+        IReadOnlyDictionary<string, ImportedProperty> imported,
+        string entryPoint,
+        HashSet<string> uncertain)
+    {
         // Versions are edited where they are written, so a property keeps its unexpanded value. Include paths are
         // expanded as MSBuild expands them in the app's project, so they see a property's value as it was evaluated
         // when assigned (an imported one can use $(MSBuildThisFileDirectory), say) and the project's reserved
         // properties; a property whose value isn't certain is left undefined for them.
-        var entryPoint = fileSystem.Path.GetFullPath(projectFilePath);
         var properties = new Dictionary<string, (string Value, string FilePath)>(StringComparer.OrdinalIgnoreCase);
         var pathProperties = new Dictionary<string, (string Value, string FilePath)>(StringComparer.OrdinalIgnoreCase)
         {
             [ItemMappingProperty] = (DefaultItemMapping, entryPoint),
         };
-        // Directory.Build.targets is imported after the app's #:property lines, so its definitions override them. Its
-        // value was evaluated without them, so for paths it is only certain when it uses no other property.
+
+        // Directory.Build.targets is imported after the app's #:property lines, so its definitions are the final
+        // values, which items (and so include paths) see. A #:property line still assigns its own value first, which a
+        // later #:property line expanding it takes. The final value was evaluated without the app's #:property lines,
+        // so for paths it is only certain when it uses no other property.
         var reserved = ReservedProperties(fileSystem, entryPoint).ToList();
-        var importedLast = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var (name, definition) in evaluator.GetImportedProperties(projectFilePath))
+        var finalPathValues = new Dictionary<string, (string Value, string FilePath)?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (name, definition) in imported)
         {
             properties[name] = (definition.RawValue, definition.FilePath);
             pathProperties.Remove(name);
-            if (definition is { Ambiguous: false, Value: { } value } &&
-                (!definition.AfterProject || !UsesOtherProperties(definition.RawValue, reserved)))
+            var certain = definition is { Ambiguous: false, Value: not null } && !uncertain.Contains(name);
+            if (!definition.AfterProject)
             {
-                pathProperties[name] = (value, definition.FilePath);
+                if (certain)
+                {
+                    pathProperties[name] = (definition.Value!, definition.FilePath);
+                }
             }
-
-            if (definition.AfterProject)
+            else
             {
-                importedLast.Add(name);
+                // Its value before Directory.Build.targets assigns it isn't known, so it is undefined until a #:property
+                // line assigns one.
+                finalPathValues[name] = certain && !UsesOtherProperties(definition.RawValue, reserved)
+                    ? (definition.Value!, definition.FilePath)
+                    : null;
             }
         }
 
@@ -78,9 +118,29 @@ internal sealed partial record FileBasedAppSources(
             pathProperties[name] = (value, entryPoint);
         }
 
+        // The values an include path sees: the final ones.
+        Dictionary<string, (string Value, string FilePath)> ItemProperties()
+        {
+            var itemProperties = new Dictionary<string, (string Value, string FilePath)>(pathProperties, StringComparer.OrdinalIgnoreCase);
+            foreach (var (name, value) in finalPathValues)
+            {
+                if (value is { } final)
+                {
+                    itemProperties[name] = final;
+                }
+                else
+                {
+                    itemProperties.Remove(name);
+                }
+            }
+
+            return itemProperties;
+        }
+
         var files = new List<FileBasedAppSourceFile>();
         var seen = new HashSet<string>(PathComparer) { entryPoint };
         var toRead = new Queue<string>([entryPoint]);
+        var assigned = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         // The Compile items the include and exclude directives read so far leave, in order: the SDK writes them as
         // ordered Include and Remove items, so a later include can add back what an earlier exclude removed. A file
@@ -92,12 +152,18 @@ internal sealed partial record FileBasedAppSources(
         {
             var file = new FileBasedAppSourceFile(path, ParseDirectives(fileSystem.File.ReadAllText(path)));
             files.Add(file);
-            foreach (var directive in file.Directives.Where(directive => directive.Kind == "property" && !importedLast.Contains(directive.Name)))
+            foreach (var directive in file.Directives.Where(directive => directive.Kind == "property"))
             {
-                // A later #:property line overrides an earlier one, as in MSBuild. MSBuild expands a property's
-                // value when it is assigned, so for paths it takes the values in effect then; one using a property
-                // that isn't defined (or isn't certain) is left undefined for them.
-                properties[directive.Name] = (directive.Value!, path);
+                // A later #:property line overrides an earlier one, as in MSBuild, and a Directory.Build.targets
+                // definition overrides both (unless its condition took the property to be undefined). MSBuild expands
+                // a property's value when it is assigned, so for paths it takes the values in effect then; one using a
+                // property that isn't defined (or isn't certain) is left undefined for them.
+                assigned.Add(directive.Name);
+                if (!imported.TryGetValue(directive.Name, out var definition) || !definition.AfterProject || uncertain.Contains(directive.Name))
+                {
+                    properties[directive.Name] = (directive.Value!, path);
+                }
+
                 if (TryResolveProperties(directive.Value!, pathProperties, out var pathValue))
                 {
                     pathProperties[directive.Name] = (pathValue, path);
@@ -108,19 +174,20 @@ internal sealed partial record FileBasedAppSources(
                 }
             }
 
+            var itemProperties = ItemProperties();
             var directory = fileSystem.Path.GetDirectoryName(path)!;
             foreach (var directive in file.Directives.Where(directive => directive.Kind is "include" or "exclude"))
             {
                 var isInclude = directive.Kind == "include";
                 hasIncludes |= isInclude;
-                if (!TryResolveProperties(directive.Name, pathProperties, out var resolvedPattern))
+                if (!TryResolveProperties(directive.Name, itemProperties, out var resolvedPattern))
                 {
                     unresolved.Add($"'{directive.Line.Trim()}' in '{path}'");
                     continue;
                 }
 
-                if (!pathProperties.TryGetValue(ItemMappingProperty, out var mappingDefinition) ||
-                    !TryResolveProperties(mappingDefinition.Value, pathProperties, out var mapping))
+                if (!itemProperties.TryGetValue(ItemMappingProperty, out var mappingDefinition) ||
+                    !TryResolveProperties(mappingDefinition.Value, itemProperties, out var mapping))
                 {
                     unresolved.Add($"'{directive.Line.Trim()}' in '{path}' (its item type, from $({ItemMappingProperty}))");
                     continue;
@@ -134,7 +201,12 @@ internal sealed partial record FileBasedAppSources(
                     continue;
                 }
 
-                var matches = MatchFiles(fileSystem, pattern);
+                if (MatchFiles(fileSystem, pattern) is not { } matches)
+                {
+                    unresolved.Add($"'{directive.Line.Trim()}' in '{path}' (a directory it searches could not be read)");
+                    continue;
+                }
+
                 if (isInclude)
                 {
                     compileItems.AddRange(matches);
@@ -152,7 +224,7 @@ internal sealed partial record FileBasedAppSources(
             }
         }
 
-        return new FileBasedAppSources(files, properties, hasIncludes, unresolved);
+        return (new FileBasedAppSources(files, properties, hasIncludes, unresolved), assigned);
     }
 
     // Whether an imported value uses a property other than the project's reserved ones, or any other expression.
@@ -233,18 +305,29 @@ internal sealed partial record FileBasedAppSources(
     /// <summary>Adds a directive line after the file's last directive (or shebang), or as its first line.</summary>
     public static string InsertDirective(string content, string directive)
     {
-        var newLine = content.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
+        var newLine = content.Contains("\r\n", StringComparison.Ordinal) ? "\r\n"
+            : content.Contains('\r') && !content.Contains('\n') ? "\r"
+            : "\n";
         var spans = DirectiveLineSpans(content);
         if (spans.Count == 0)
         {
             return directive + newLine + content;
         }
 
-        var lineBreak = content.IndexOf('\n', spans[^1].End);
-        return lineBreak < 0
+        var nextLine = NextLineStart(content, spans[^1].End);
+        return nextLine == spans[^1].End
             ? content + newLine + directive + newLine
-            : content[..(lineBreak + 1)] + directive + newLine + content[(lineBreak + 1)..];
+            : content[..nextLine] + directive + newLine + content[nextLine..];
     }
+
+    // The characters C# ends a line at; \r\n is one line break.
+    private static readonly char[] LineBreaks = ['\r', '\n', '\u0085', '\u2028', '\u2029'];
+
+    // The index after the line break at lineEnd (where a line's text ends), or lineEnd at the end of the content.
+    private static int NextLineStart(string content, int lineEnd) =>
+        lineEnd >= content.Length ? lineEnd
+        : content[lineEnd] == '\r' && lineEnd + 1 < content.Length && content[lineEnd + 1] == '\n' ? lineEnd + 2
+        : lineEnd + 1;
 
     /// <summary>
     /// The value of <paramref name="expression"/> with its <c>$(Name)</c> references expanded; <see langword="false"/>
@@ -303,9 +386,8 @@ internal sealed partial record FileBasedAppSources(
         var lineStart = 0;
         while (lineStart < content.Length)
         {
-            var lineBreak = content.IndexOf('\n', lineStart);
-            var lineEnd = lineBreak < 0 ? content.Length : lineBreak;
-            var textEnd = lineEnd > lineStart && content[lineEnd - 1] == '\r' ? lineEnd - 1 : lineEnd;
+            var lineBreak = content.IndexOfAny(LineBreaks, lineStart);
+            var textEnd = lineBreak < 0 ? content.Length : lineBreak;
             var line = content[lineStart..textEnd];
             if (!inComment && line.TrimStart().StartsWith('#'))
             {
@@ -324,7 +406,7 @@ internal sealed partial record FileBasedAppSources(
                 break;
             }
 
-            lineStart = lineEnd + 1;
+            lineStart = NextLineStart(content, textEnd);
         }
 
         return spans;
@@ -369,8 +451,9 @@ internal sealed partial record FileBasedAppSources(
         return true;
     }
 
-    // The files a full path or glob (*, ? and **, as MSBuild matches them) names.
-    private static List<string> MatchFiles(IFileSystem fileSystem, string pattern)
+    // The files a full path or glob (*, ? and **, as MSBuild matches them) names, or null when a directory the glob
+    // searches can't be read.
+    private static List<string>? MatchFiles(IFileSystem fileSystem, string pattern)
     {
         var path = pattern.Replace('\\', '/');
         var wildcard = path.IndexOfAny(['*', '?']);
@@ -404,8 +487,8 @@ internal sealed partial record FileBasedAppSources(
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // A directory under the glob that can't be read; the build would report it.
-            return [];
+            // A directory under the glob that can't be read, which may hold files the build compiles.
+            return null;
         }
     }
 
@@ -437,7 +520,8 @@ internal sealed partial record FileBasedAppSources(
             }
         }
 
-        var options = OperatingSystem.IsWindows() ? RegexOptions.IgnoreCase | RegexOptions.CultureInvariant : RegexOptions.CultureInvariant;
+        // The glob comes from the app's files, so it is matched in time linear in the path's length.
+        var options = RegexOptions.NonBacktracking | RegexOptions.CultureInvariant | (OperatingSystem.IsWindows() ? RegexOptions.IgnoreCase : RegexOptions.None);
         return new Regex(builder.Append('$').ToString(), options);
     }
 }

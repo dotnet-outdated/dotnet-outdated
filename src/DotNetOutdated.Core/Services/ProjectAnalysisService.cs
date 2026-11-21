@@ -268,11 +268,12 @@ namespace DotNetOutdated.Core.Services
 
         /// <summary>
         /// The dependencies of a target framework while its project is analyzed, keyed by name and kind, since a project
-        /// can reference a package and an SDK with the same id.
+        /// can reference a package and an SDK with the same id. Ids are case-insensitive, as for NuGet, so the restore
+        /// graph's entry and a directive's for one package are one dependency whatever their casing.
         /// </summary>
         private sealed class TargetFrameworkBuilder(NuGetFramework name, string? targetAlias)
         {
-            private readonly Dictionary<(string Name, ReferenceKind Kind), Dependency> _dependencies = [];
+            private readonly Dictionary<(string Name, ReferenceKind Kind), Dependency> _dependencies = new(DependencyKeyComparer.Instance);
 
             public IReadOnlyList<Dependency> Dependencies => [.. _dependencies.Values];
 
@@ -288,6 +289,17 @@ namespace DotNetOutdated.Core.Services
                 {
                     _dependencies.Remove(key);
                 }
+            }
+
+            private sealed class DependencyKeyComparer : IEqualityComparer<(string Name, ReferenceKind Kind)>
+            {
+                public static readonly DependencyKeyComparer Instance = new();
+
+                public bool Equals((string Name, ReferenceKind Kind) x, (string Name, ReferenceKind Kind) y) =>
+                    x.Kind == y.Kind && StringComparer.OrdinalIgnoreCase.Equals(x.Name, y.Name);
+
+                public int GetHashCode((string Name, ReferenceKind Kind) key) =>
+                    HashCode.Combine(StringComparer.OrdinalIgnoreCase.GetHashCode(key.Name), key.Kind);
             }
 
             public void ReplaceAll(IEnumerable<Dependency> dependencies)

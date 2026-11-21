@@ -246,24 +246,26 @@ namespace DotNetOutdated.Tests
         }
 
         [Fact]
-        public void TryUpdateVariable_WhenTheUpdateThrowsAfterRewritingTheProperty_WarnsAndReportsTheUpdate()
+        public void TryUpdateVariable_WhenALaterFileCannotBeWritten_ChangesBackTheFilesAlreadyWrittenAndWarns()
         {
-            const string app = "#:property FooVersion=1.0.0\n#:package Foo@$(FooVersion)\n";
-            var fileSystem = FileSystem(app);
-            var variableInfo = Directives(fileSystem).PackageVariables(AppPath, ReferenceKind.Package)["Foo"];
-            var evaluator = Substitute.For<IProjectEvaluator>();
+            // Every definition is written, or none: the SDK rejects the property declared with different values.
+            const string app = "#:include lib/shared.cs\n#:property FooVersion=1.0.0\n#:package Foo@$(FooVersion)\n";
+            const string shared = "#:property FooVersion=1.0.0\n";
+            var fileSystem = FileSystem(app, new() { [SharedPath] = shared });
+            fileSystem.File.SetAttributes(SharedPath, System.IO.FileAttributes.ReadOnly);
+            var directives = Directives(fileSystem);
+            var variableInfo = directives.PackageVariables(AppPath, ReferenceKind.Package)["Foo"];
 
-            // The app's files are read before the property is written, and again for the directive pass.
-            evaluator.GetImportedProperties(Arg.Any<string>()).Returns(
-                _ => new Dictionary<string, ImportedProperty>(),
-                _ => throw new InvalidOperationException("boom"));
+            var write = directives.UpdateVariable(AppPath, variableInfo, new NuGetVersion("2.0.0"));
 
-            Assert.True(Directives(fileSystem, evaluator).TryUpdateVariable(AppPath, variableInfo, new NuGetVersion("2.0.0")));
+            Assert.Empty(write.ChangedFiles);
+            Assert.Contains($"'{SharedPath}' could not be written", write.Failure);
+            Assert.Contains("No file was changed.", write.Failure);
+            Assert.Equal(app, fileSystem.File.ReadAllText(AppPath));
+            Assert.Equal(shared, fileSystem.File.ReadAllText(SharedPath));
 
-            Assert.Equal(app.Replace("FooVersion=1.0.0", "FooVersion=2.0.0"), fileSystem.File.ReadAllText(AppPath));
-            var warning = Assert.Single(_warnings);
-            Assert.Contains("'Foo'", warning);
-            Assert.Contains("boom", warning);
+            Assert.False(directives.TryUpdateVariable(AppPath, variableInfo, new NuGetVersion("2.0.0")));
+            Assert.Contains(_warnings, w => w.Contains("No file was changed."));
         }
 
         private static readonly string SharedPath = XFS.Path(@"c:\repo\lib\shared.cs");
@@ -441,6 +443,41 @@ namespace DotNetOutdated.Tests
             });
 
             Assert.Equal([AppPath, XFS.Path(@"c:\repo\second.cs")], Directives(fileSystem).SourceFiles(AppPath));
+        }
+
+        [Fact]
+        public void SourceFiles_IncludedThroughAPropertyAssignedFromOneDirectoryBuildTargetsSetsLater_UseTheValueItHadThen()
+        {
+            // Lib takes Root's value when Lib is assigned; Directory.Build.targets sets Root only afterwards.
+            var fileSystem = FileSystem("#:property Root=first\n#:property Lib=$(Root)\n#:include $(Lib)/shared.cs\n", new()
+            {
+                [TargetsPath] = "<Project><PropertyGroup><Root>second</Root></PropertyGroup></Project>",
+                [XFS.Path(@"c:\repo\first\shared.cs")] = string.Empty,
+                [XFS.Path(@"c:\repo\second\shared.cs")] = string.Empty,
+            });
+
+            Assert.Equal([AppPath, XFS.Path(@"c:\repo\first\shared.cs")], Directives(fileSystem).SourceFiles(AppPath));
+        }
+
+        [Theory]
+        // The default applies only when the app leaves Lib undefined, which this can't be sure of once it defines it.
+        [InlineData("#:property Lib=first.cs\n#:include $(Lib)\n", "")]
+        [InlineData("#:include $(Lib)\n", "second.cs")]
+        public void SourceFiles_IncludedThroughADirectoryBuildTargetsDefault_FollowItOnlyWhenTheAppLeavesItUndefined(string app, string expected)
+        {
+            var fileSystem = FileSystem(app, new()
+            {
+                [TargetsPath] = "<Project><PropertyGroup><Lib Condition=\"'$(Lib)' == ''\">second.cs</Lib></PropertyGroup></Project>",
+                [XFS.Path(@"c:\repo\first.cs")] = string.Empty,
+                [XFS.Path(@"c:\repo\second.cs")] = string.Empty,
+            });
+            var directives = Directives(fileSystem);
+
+            Assert.Equal(expected, string.Join(", ", directives.SourceFiles(AppPath).Skip(1).Select(path => path[(XFS.Path(@"c:\repo").Length + 1)..])));
+            if (expected.Length == 0)
+            {
+                Assert.Contains("could not be followed", directives.WriteDirective(AppPath, ReferenceKind.Package, "Foo", "2.0.0").Failure);
+            }
         }
 
         [Fact]
@@ -741,6 +778,95 @@ namespace DotNetOutdated.Tests
         }
 
         [Fact]
+        public void WriteDirective_WhenAWriteChangesAFileAndFails_ChangesThatFileBackToo()
+        {
+            // An in-place write can fail after the file was truncated.
+            const string app = "#:include lib/shared.cs\n#:package Foo@1.0.0\n";
+            const string shared = "#:package Foo@1.0.0\n";
+            var fileSystem = new PartWriteFileSystem(AppPath);
+            fileSystem.AddFile(AppPath, new MockFileData(app));
+            fileSystem.AddFile(SharedPath, new MockFileData(shared));
+
+            var write = Directives(fileSystem).WriteDirective(AppPath, ReferenceKind.Package, "Foo", "2.0.0");
+
+            Assert.Contains($"'{AppPath}' could not be written", write.Failure);
+            Assert.Contains("No file was changed.", write.Failure);
+            Assert.Equal(app, fileSystem.File.ReadAllText(AppPath));
+            Assert.Equal(shared, fileSystem.File.ReadAllText(SharedPath));
+        }
+
+        [Fact]
+        public void WriteDirective_WhenAGlobsDirectoryCannotBeRead_FailsWithoutWriting()
+        {
+            // The directory may hold a file that declares the package too.
+            const string app = "#:include lib/**/*.cs\n#:package Foo@1.0.0\n";
+            var fileSystem = new UnreadableDirectoriesFileSystem();
+            fileSystem.AddFile(AppPath, new MockFileData(app));
+            fileSystem.AddFile(SharedPath, new MockFileData("#:package Foo@1.0.0\n"));
+            var directives = Directives(fileSystem);
+
+            Assert.Equal([AppPath], directives.SourceFiles(AppPath));
+            Assert.Contains("could not be read", directives.WriteDirective(AppPath, ReferenceKind.Package, "Foo", "2.0.0").Failure);
+            Assert.Equal(app, fileSystem.File.ReadAllText(AppPath));
+        }
+
+        [Fact]
+        public void SourceFiles_MatchAGlobWithManyWildcardsQuickly()
+        {
+            // A glob that backtracks on a long file name it doesn't match would take far longer than the test runs.
+            var fileSystem = FileSystem("#:include lib/*a*a*a*a*a*a*a*a*a*a*a*a*b.cs\n", new()
+            {
+                [XFS.Path(@"c:\repo\lib\" + new string('a', 60) + ".cs")] = string.Empty,
+                [XFS.Path(@"c:\repo\lib\" + new string('a', 12) + "b.cs")] = string.Empty,
+            });
+
+            Assert.Equal(["lib/" + new string('a', 12) + "b.cs"], Directives(fileSystem).SourceFiles(AppPath).Skip(1).Select(Relative));
+        }
+
+        [Theory]
+        [InlineData("\r")]
+        [InlineData("\u2028")]
+        public void References_EndALineAtEachLineBreakCSharpHas(string lineBreak)
+        {
+            // A // comment ends at the line break, so the directive after it counts.
+            var shared = $"// shared{lineBreak}#:package Foo@1.0.0{lineBreak}";
+            var fileSystem = FileSystem("#:include lib/shared.cs\n#:package Foo@1.0.0\n", new() { [SharedPath] = shared });
+            var directives = Directives(fileSystem);
+
+            var write = directives.WriteDirective(AppPath, ReferenceKind.Package, "Foo", "2.0.0");
+
+            Assert.Equal([AppPath, SharedPath], write.ChangedFiles);
+            Assert.Equal(shared.Replace("1.0.0", "2.0.0"), fileSystem.File.ReadAllText(SharedPath));
+        }
+
+        [Fact]
+        public void WriteDirective_DeclaredNowhereInAFileWithCarriageReturns_AddsALineEndedTheSameWay()
+        {
+            var fileSystem = FileSystem("#:include lib/shared.cs\rConsole.WriteLine();\r", new() { [SharedPath] = string.Empty });
+
+            Directives(fileSystem).WriteDirective(AppPath, ReferenceKind.Package, "Foo", "2.0.0");
+
+            Assert.Equal("#:include lib/shared.cs\r#:package Foo@2.0.0\rConsole.WriteLine();\r", fileSystem.File.ReadAllText(AppPath));
+        }
+
+        [Fact]
+        public void TryUpdateVariable_WhenAnotherDeclarationUsesADifferentProperty_WarnsAndChangesNothing()
+        {
+            // Writing A alone would leave the declaration that reads B at the old version.
+            const string app = "#:include lib/shared.cs\n#:property A=1.0.0\n#:package Foo@$(A)\n";
+            const string shared = "#:property B=1.0.0\n#:package Foo@$(B)\n";
+            var fileSystem = FileSystem(app, new() { [SharedPath] = shared });
+            var directives = Directives(fileSystem);
+            var variableInfo = directives.PackageVariables(AppPath, ReferenceKind.Package)["Foo"];
+
+            Assert.False(directives.TryUpdateVariable(AppPath, variableInfo, new NuGetVersion("2.0.0")));
+
+            Assert.Equal(app, fileSystem.File.ReadAllText(AppPath));
+            Assert.Equal(shared, fileSystem.File.ReadAllText(SharedPath));
+            Assert.Contains(_warnings, w => w.Contains("'#:package Foo@$(B)'") && w.Contains("another property"));
+        }
+
+        [Fact]
         public void TryUpdateVariable_UsedByAnIncludePath_WarnsAndChangesNothing()
         {
             // A new value would include another file, which may define the property or declare the package too.
@@ -911,6 +1037,57 @@ namespace DotNetOutdated.Tests
 
             Assert.Equal(app.Replace("6.0.0", "6.1.0"), fileSystem.File.ReadAllText(AppPath));
             Assert.Equal(shared.Replace("6.0.0", "6.1.0"), fileSystem.File.ReadAllText(SharedPath));
+        }
+
+        // A file system on which the first write to one file empties it and then fails, as an in-place write can.
+        private sealed class PartWriteFileSystem : MockFileSystem
+        {
+            private readonly PartWriteFile _file;
+
+            public PartWriteFileSystem(string failingPath) => _file = new PartWriteFile(this, failingPath);
+
+            public override IFile File => _file;
+
+            private sealed class PartWriteFile(IMockFileDataAccessor files, string failingPath) : MockFile(files)
+            {
+                private bool _failed;
+
+                public override void WriteAllText(string path, string? contents)
+                {
+                    FailOnce(path);
+                    base.WriteAllText(path, contents);
+                }
+
+                public override void WriteAllBytes(string path, byte[] bytes)
+                {
+                    FailOnce(path);
+                    base.WriteAllBytes(path, bytes);
+                }
+
+                private void FailOnce(string path)
+                {
+                    if (!_failed && path == failingPath)
+                    {
+                        _failed = true;
+                        base.WriteAllText(path, string.Empty);
+                        throw new System.IO.IOException("The disk is full.");
+                    }
+                }
+            }
+        }
+
+        // A file system whose directories can't be searched.
+        private sealed class UnreadableDirectoriesFileSystem : MockFileSystem
+        {
+            private UnreadableDirectory? _directory;
+
+            public override IDirectory Directory => _directory ??= new UnreadableDirectory(this, base.Directory.GetCurrentDirectory());
+
+            private sealed class UnreadableDirectory(IMockFileDataAccessor files, string currentDirectory) : MockDirectory(files, currentDirectory)
+            {
+                public override IEnumerable<string> EnumerateFiles(string path, string searchPattern, System.IO.SearchOption searchOption) =>
+                    throw new UnauthorizedAccessException($"Access to '{path}' is denied.");
+            }
         }
     }
 }

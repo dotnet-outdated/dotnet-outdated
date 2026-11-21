@@ -65,18 +65,57 @@ namespace DotNetOutdated.Core.Services
                 // restored) with the others: leaving both behind instead could leave a package upgraded for the other
                 // target framework depending on a newer version than the one kept, which restore rejects as a
                 // downgrade (NU1605).
-                var heldBackSharing = HeldBackSharingVersion(upgrade);
+                var plan = PlanSharing(upgrade);
+                var heldBackSharing = plan.HeldBack.Select(entry => entry.Project).ToHashSet();
+                var requested = upgrade.Projects.ToHashSet();
 
                 // A project listed once per target framework is upgraded once, for all of those target frameworks.
-                return upgrade.Projects
-                    .Concat(heldBackSharing)
-                    .GroupBy(project => _fileSystem.Path.GetFullPath(project.Path), StringComparer.OrdinalIgnoreCase)
-                    .Select(projects => UpgradeProject(
-                        upgrade,
-                        projects.First().Path,
-                        [.. projects.Select(p => p.TargetFramework).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase)],
-                        [.. projects.Where(heldBackSharing.Contains)]))
-                    .ToList();
+                // Projects are told apart by the path the file system stores, so two whose paths differ only in case
+                // are one project where the volume ignores case and two where it doesn't. Held-back projects come
+                // after the projects they share a location with, in the order they were found.
+                var results = new List<ProjectUpgradeResult>();
+                _reachedLocations = new HashSet<string>(LocationComparer);
+                try
+                {
+                    foreach (var projects in upgrade.Projects
+                        .Concat(plan.HeldBack.Select(entry => entry.Project))
+                        .GroupBy(project => PathCase.OnDisk(_fileSystem, project.Path), StringComparer.Ordinal))
+                    {
+                        // A held-back project is upgraded because an earlier one writes a location it shares; if none
+                        // of those got as far as writing (its write was refused, say), it keeps its version.
+                        var locations = projects.SelectMany(project => plan.Locations.GetValueOrDefault(project, [])).ToList();
+                        if (!projects.Any(requested.Contains) && !locations.Any(_reachedLocations.Contains))
+                        {
+                            results.Add(new ProjectUpgradeResult
+                            {
+                                ProjectPath = projects.First().Path,
+                                Outcome = UpgradeOutcome.Failed,
+                                FailureDetails =
+                                    $"'{projects.First().Path}' was held back but shares the version of {upgrade.Name} with a project that couldn't be " +
+                                    "upgraded, so neither was changed.",
+                            });
+                            continue;
+                        }
+
+                        var result = UpgradeProject(
+                            upgrade,
+                            projects.First().Path,
+                            [.. projects.Select(p => p.TargetFramework).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase)],
+                            [.. projects.Where(heldBackSharing.Contains)]);
+                        if (result.Outcome != UpgradeOutcome.Failed)
+                        {
+                            _reachedLocations.UnionWith(locations);
+                        }
+
+                        results.Add(result);
+                    }
+                }
+                finally
+                {
+                    _reachedLocations = null;
+                }
+
+                return results;
             }
         }
 
@@ -86,17 +125,28 @@ namespace DotNetOutdated.Core.Services
 
             lock (_gate)
             {
-                return HeldBackSharingVersion(upgrade);
+                var sharing = PlanSharing(upgrade).HeldBack.Select(entry => entry.Project).ToHashSet();
+                return [.. upgrade.HeldBack.Distinct().Where(sharing.Contains)];
             }
         }
 
-        // The held-back projects whose package version is written where an upgraded project's is. Upgrading one writes
-        // all of its locations, so a held-back project sharing another of them with it is upgraded too, and so on.
-        private List<UpgradeProject> HeldBackSharingVersion(ReferenceUpgrade upgrade)
+        // The held-back projects whose package version is written where an upgraded project's is, in the order they
+        // were found, and each project's version locations.
+        private sealed record SharingPlan(
+            IReadOnlyList<(UpgradeProject Project, IReadOnlyList<string> Locations)> HeldBack,
+            IReadOnlyDictionary<UpgradeProject, IReadOnlyList<string>> Locations);
+
+        // The locations the projects upgraded so far in Upgrade wrote (or found already at the new value), or null
+        // outside Upgrade.
+        private HashSet<string>? _reachedLocations;
+
+        // Upgrading a project writes all of its locations, so a held-back project sharing one of them is upgraded
+        // too, and so is one sharing another of that one's, and so on.
+        private SharingPlan PlanSharing(ReferenceUpgrade upgrade)
         {
             if (upgrade.HeldBack.Count == 0)
             {
-                return [];
+                return new SharingPlan([], new Dictionary<UpgradeProject, IReadOnlyList<string>>());
             }
 
             var directives = new FileBasedAppDirectives(_fileSystem, _evaluator, _ => { });
@@ -104,26 +154,33 @@ namespace DotNetOutdated.Core.Services
             bool IsPackage(UpgradeProject project) => locator.ResolveKind(project.Path, upgrade.Name, upgrade.Kind) == ReferenceKind.Package;
             IReadOnlyList<string> Locations(UpgradeProject project) => PackageVersionLocations(directives, project.Path, upgrade.Name, project.TargetFramework);
 
-            var writtenLocations = upgrade.Projects.Where(IsPackage).SelectMany(Locations).ToHashSet(LocationComparer);
+            var projectLocations = new Dictionary<UpgradeProject, IReadOnlyList<string>>();
+            foreach (var project in upgrade.Projects.Distinct().Where(IsPackage))
+            {
+                projectLocations[project] = Locations(project);
+            }
+
+            var writtenLocations = projectLocations.Values.SelectMany(locations => locations).ToHashSet(LocationComparer);
             var heldBack = upgrade.HeldBack.Distinct().Where(IsPackage).Select(project => (Project: project, Locations: Locations(project))).ToList();
-            var sharing = new HashSet<UpgradeProject>();
+            var sharing = new List<(UpgradeProject Project, IReadOnlyList<string> Locations)>();
             bool found;
             do
             {
                 found = false;
-                foreach (var (project, locations) in heldBack)
+                foreach (var entry in heldBack)
                 {
-                    if (!sharing.Contains(project) && locations.Any(writtenLocations.Contains))
+                    if (!sharing.Contains(entry) && entry.Locations.Any(writtenLocations.Contains))
                     {
-                        sharing.Add(project);
-                        writtenLocations.UnionWith(locations);
+                        sharing.Add(entry);
+                        projectLocations.TryAdd(entry.Project, entry.Locations);
+                        writtenLocations.UnionWith(entry.Locations);
                         found = true;
                     }
                 }
             }
             while (found);
 
-            return [.. heldBack.Select(entry => entry.Project).Where(sharing.Contains)];
+            return new SharingPlan(sharing, projectLocations);
         }
 
         // Identifies where a package's version is written for a target framework of a project, so that target
@@ -137,7 +194,7 @@ namespace DotNetOutdated.Core.Services
             {
                 if (directives.PackageVariables(projectPath, ReferenceKind.Package).TryGetValue(name, out var directiveVariable))
                 {
-                    return FileBasedVariableLocations(directives, projectPath, directiveVariable);
+                    return [.. FileBasedVariableLocations(directives, projectPath, directiveVariable).Select(location => location.Location)];
                 }
 
                 var declaringFiles = directives.DeclaringFiles(projectPath, ReferenceKind.Package, name);
@@ -292,6 +349,7 @@ namespace DotNetOutdated.Core.Services
                     case Written written:
                         foreach (var (location, changed) in written.Locations)
                         {
+                            _reachedLocations?.Add(location);
                             if (changed)
                             {
                                 // No project has been restored since this write, whatever was restored at the value before.
@@ -358,13 +416,15 @@ namespace DotNetOutdated.Core.Services
         {
             var version = context.Upgrade.Version;
             var locations = FileBasedVariableLocations(context.Directives, context.ProjectPath, variableInfo);
-            if (context.Directives.TryUpdateVariable(context.ProjectPath, variableInfo, version))
+            var write = context.Directives.UpdateVariable(context.ProjectPath, variableInfo, version);
+            if (write.Failure != null)
             {
-                return new Written([.. locations.Select(location => (location, true))], version.ToString());
+                return new WriteFailed(write.Failure);
             }
 
-            return IsFileBasedAppVariableAtRequestedVersion(variableInfo, version)
-                ? new Written([.. locations.Select(location => (location, false))], version.ToString())
+            bool Changed(string file) => write.ChangedFiles.Contains(file, FileBasedAppSources.PathComparer);
+            return write.ChangedFiles.Count > 0 || IsFileBasedAppVariableAtRequestedVersion(variableInfo, version)
+                ? new Written([.. locations.Select(location => (location.Location, Changed(location.File)))], version.ToString())
                 : new WriteFailed(
                     $"Failed to update file-based app '{context.ProjectPath}' for '{context.Name}'. " +
                     "Could not update the matching #:property value or #:package/#:sdk directive.");
@@ -388,14 +448,24 @@ namespace DotNetOutdated.Core.Services
         private string DirectiveLocation(string filePath, ReferenceKind kind, string name) =>
             Location(filePath, $"#:{kind} {name}");
 
-        // The locations of a file-based app's property-backed version: each file with the property, or for an SDK named
-        // through a property, each file with its directive.
-        private IReadOnlyList<string> FileBasedVariableLocations(FileBasedAppDirectives directives, string projectPath, PackageVariableInfo variableInfo) =>
-        [
-            .. directives.VariableFiles(projectPath, variableInfo).Select(file => string.IsNullOrEmpty(variableInfo.VariableName)
-                ? DirectiveLocation(file, variableInfo.ReferenceKind, variableInfo.PackageName)
-                : Location(file, $"$({variableInfo.VariableName})"))
-        ];
+        // The locations of a file-based app's property-backed version, with the file each is in: each file with the
+        // property and each with a literal-version directive for the reference (which the upgrade writes too), or for
+        // an SDK named through a property, each file with its directive.
+        private IReadOnlyList<(string File, string Location)> FileBasedVariableLocations(FileBasedAppDirectives directives, string projectPath, PackageVariableInfo variableInfo)
+        {
+            var files = directives.VariableFiles(projectPath, variableInfo);
+            if (string.IsNullOrEmpty(variableInfo.VariableName))
+            {
+                return [.. files.Select(file => (file, DirectiveLocation(file, variableInfo.ReferenceKind, variableInfo.PackageName)))];
+            }
+
+            return
+            [
+                .. files.Select(file => (file, Location(file, $"$({variableInfo.VariableName})"))),
+                .. directives.LiteralDeclaringFiles(projectPath, variableInfo.ReferenceKind, variableInfo.PackageName)
+                    .Select(file => (file, DirectiveLocation(file, variableInfo.ReferenceKind, variableInfo.PackageName))),
+            ];
+        }
 
         // `dotnet add package` cannot update an MSBuild project SDK, so rewrite its version in the project file.
         private Write UpdateProjectSdk(Context context, ProjectSdkReference sdk)
