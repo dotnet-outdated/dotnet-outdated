@@ -17,6 +17,7 @@
     <Description>A .NET Core global tool to update project dependencies.</Description>
     <PackageId>dotnet-outdated-tool</PackageId>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageIcon>icon.png</PackageIcon>
     <PackageProjectUrl>https://github.com/dotnet-outdated/dotnet-outdated</PackageProjectUrl>
     <PackageReleaseNotes>See $(PackageProjectUrl)/blob/master/CHANGELOG.md#$(VersionSuffix.Replace('.','')) for release notes.</PackageReleaseNotes>
     <PackageVersion>$(VersionSuffix)</PackageVersion>
@@ -34,5 +35,8 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\DotNetOutdated.Core\DotNetOutdated.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\assets\icon.png" Pack="true" PackagePath="\" Visible="false" />
   </ItemGroup>
 </Project>

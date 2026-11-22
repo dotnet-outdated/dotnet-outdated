@@ -16,6 +16,7 @@
     <WarningsAsErrors>$(WarningsAsErrors);Nullable;RS0016;RS0017;RS0036;RS0037</WarningsAsErrors>
     <PackageId>DotNetOutdatedTool.Core</PackageId>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageIcon>icon.png</PackageIcon>
     <PackageProjectUrl>https://github.com/dotnet-outdated/dotnet-outdated</PackageProjectUrl>
     <PackageReleaseNotes>See $(PackageProjectUrl)/blob/master/CHANGELOG.md#$(VersionSuffix.Replace('.','')) for release notes.</PackageReleaseNotes>
     <PackageVersion>$(VersionSuffix)</PackageVersion>
@@ -60,5 +61,8 @@
       <Generator>ResXFileCodeGenerator</Generator>
       <LastGenOutput>ValidationErrorMessages.Designer.cs</LastGenOutput>
     </EmbeddedResource>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\assets\icon.png" Pack="true" PackagePath="\" Visible="false" />
   </ItemGroup>
 </Project>
