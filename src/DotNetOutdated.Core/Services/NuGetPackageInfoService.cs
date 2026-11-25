@@ -24,9 +24,9 @@ namespace DotNetOutdated.Core.Services
 
     internal sealed class NuGetPackageInfoService : INuGetPackageInfoService, IDisposable
     {
-        // The enabled sources and the package source mapping come from the same settings and are published together,
-        // so a concurrent first call never sees sources without their mapping (which would query unmapped sources).
-        private SourceSettings? _sourceSettings;
+        // Settings are scoped to the project's directory, and sources and mappings are published together.
+        private readonly ConcurrentDictionary<string, SourceSettings> _sourceSettings =
+            new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
 
         private readonly SourceCacheContext _context;
 
@@ -78,15 +78,14 @@ namespace DotNetOutdated.Core.Services
 
         private SourceSettings GetSourceSettings(string? root)
         {
-            if (_sourceSettings == null)
+            var directory = root == null ? string.Empty : Path.GetDirectoryName(Path.GetFullPath(root)) ?? string.Empty;
+            return _sourceSettings.GetOrAdd(directory, static directory =>
             {
-                var settings = Settings.LoadDefaultSettings(root);
-                _sourceSettings = new SourceSettings(
+                var settings = Settings.LoadDefaultSettings(directory.Length == 0 ? null : directory);
+                return new SourceSettings(
                     SettingsUtility.GetEnabledSources(settings),
                     PackageSourceMapping.GetPackageSourceMapping(settings));
-            }
-
-            return _sourceSettings;
+            });
         }
 
         /// <summary>
@@ -120,7 +119,7 @@ namespace DotNetOutdated.Core.Services
         {
             try
             {
-                string resourceUrl = source.AbsoluteUri;
+                string resourceUrl = $"{source.AbsoluteUri}|{projectFilePath}";
                 var sourceRepository = GetSourceRepository(source, projectFilePath, packageId);
                 if (sourceRepository == null)
                 {

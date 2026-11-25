@@ -12,6 +12,7 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Xml.Linq;
+using DotNetOutdated.Core.Models;
 using DotNetOutdated.Core.Services;
 using Microsoft.Extensions.DependencyInjection;
 using NuGet.Versioning;
@@ -57,6 +58,40 @@ public sealed class RequiresFileBasedAppIncludeSdkAttribute : FactAttribute
         if (!DotNetSdkDetector.HasSdkVersionAtLeast(MinimumSdkVersion))
         {
             Skip = $"Requires .NET SDK {MinimumSdkVersion} or newer.";
+        }
+    }
+}
+
+/// <summary>
+/// Skips the test when the process cannot create symbolic links (e.g. Windows without Developer Mode or elevation).
+/// </summary>
+[AttributeUsage(AttributeTargets.Method)]
+public sealed class RequiresSymbolicLinksAttribute : FactAttribute
+{
+    public RequiresSymbolicLinksAttribute(
+        [CallerFilePath] string? sourceFilePath = null,
+        [CallerLineNumber] int sourceLineNumber = -1)
+        : base(sourceFilePath, sourceLineNumber)
+    {
+        var target = Path.Combine(Path.GetTempPath(), "symlink-target-" + Guid.NewGuid().ToString("N"));
+        var link = target + "-link";
+        Directory.CreateDirectory(target);
+        try
+        {
+            Directory.CreateSymbolicLink(link, target);
+            Directory.Delete(link);
+        }
+        catch (IOException)
+        {
+            Skip = "Requires the privilege to create symbolic links.";
+        }
+        catch (UnauthorizedAccessException)
+        {
+            Skip = "Requires the privilege to create symbolic links.";
+        }
+        finally
+        {
+            Directory.Delete(target);
         }
     }
 }
@@ -109,6 +144,198 @@ internal static class DotNetSdkDetector
 
 public static class EndToEndTests
 {
+    [Theory]
+    [InlineData("--version-lock:Major", "1.1.0")]
+    [InlineData("--version-lock:Minor", "1.0.0")]
+    [InlineData("--pre-release:Always", "3.0.0-preview.1")]
+    public static void LocalToolsRespectVersionOptions(string option, string expected)
+    {
+        using var directory = new TemporaryDirectory();
+        File.WriteAllText(Path.Combine(directory.Path, "NuGet.Config"), TestPackageFeed.NuGetConfig);
+        File.WriteAllText(Path.Combine(directory.Path, "dotnet-tools.json"),
+            """{"version":1,"isRoot":true,"tools":{"DotNetOutdated.Fake.Tool":{"version":"1.0.0","commands":["tool"]}}}""");
+        var output = Path.Combine(directory.Path, "report.json");
+
+        var expectedExitCode = expected == "1.0.0" ? 0 : 2;
+        Assert.Equal(expectedExitCode, Program.Main([directory.Path, option, "--include-up-to-date", "--fail-on-updates", "--output", output]));
+        using var report = JsonDocument.Parse(File.ReadAllText(output));
+        var dependency = report.RootElement.GetProperty("Projects")[0].GetProperty("TargetFrameworks")[0].GetProperty("Dependencies")[0];
+        Assert.Equal("1.0.0", dependency.GetProperty("ResolvedVersion").GetString());
+        Assert.Equal(expected, dependency.GetProperty("LatestVersion").GetString());
+    }
+
+    [Fact]
+    public static void LocalToolUpgradePreservesManifestAndRespectsFilters()
+    {
+        using var directory = new TemporaryDirectory();
+        File.WriteAllText(Path.Combine(directory.Path, "NuGet.Config"), TestPackageFeed.NuGetConfig);
+        Directory.CreateDirectory(Path.Combine(directory.Path, ".config"));
+        var path = Path.Combine(directory.Path, ".config", "dotnet-tools.json");
+        const string original = "{\r\n  \"version\": 1,\r\n  \"isRoot\": true,\r\n  \"tools\": {\r\n    \"DotNetOutdated.Fake.Tool\": { \"version\": \"1.0.0\", \"commands\": [\"tool\"] },\r\n    \"DotNetOutdated.Fake.Json\": { \"version\": \"11.0.1\", \"commands\": [\"other\"] }\r\n  }\r\n}\r\n";
+        File.WriteAllText(path, original);
+
+        Assert.Equal(0, Program.Main([directory.Path, "--upgrade", "--include", "fake", "--exclude", "json"]));
+        Assert.Equal(original.Replace("\"version\": \"1.0.0\"", "\"version\": \"2.0.0\""), File.ReadAllText(path));
+    }
+
+    [Fact]
+    public static void LocalToolDiscoveryStopsAtRootAndWorksFromChildDirectory()
+    {
+        using var directory = new TemporaryDirectory();
+        File.WriteAllText(Path.Combine(directory.Path, "NuGet.Config"), TestPackageFeed.NuGetConfig);
+        var child = Path.Combine(directory.Path, "child");
+        var nested = Path.Combine(child, "nested");
+        Directory.CreateDirectory(nested);
+        File.WriteAllText(Path.Combine(directory.Path, "dotnet-tools.json"),
+            """{"version":1,"isRoot":true,"tools":{"DotNetOutdated.Fake.Json":{"version":"11.0.1","commands":["other"]}}}""");
+        var childManifest = Path.Combine(child, "dotnet-tools.json");
+        File.WriteAllText(childManifest,
+            """{"version":1,"isRoot":true,"tools":{"DotNetOutdated.Fake.Tool":{"version":"1.0.0","commands":["tool"]}}}""");
+        var output = Path.Combine(nested, "report.json");
+
+        Assert.Equal(0, Program.Main([nested, "--output", output]));
+        using var report = JsonDocument.Parse(File.ReadAllText(output));
+        var project = Assert.Single(report.RootElement.GetProperty("Projects").EnumerateArray());
+        Assert.Equal(childManifest, project.GetProperty("FilePath").GetString());
+    }
+
+    [Fact]
+    public static void LocalToolDiscoveryFindsBothManifestLocationsInParentDirectories()
+    {
+        using var directory = new TemporaryDirectory();
+        var child = Path.Combine(directory.Path, "child");
+        Directory.CreateDirectory(Path.Combine(child, ".config"));
+        var rootManifest = Path.Combine(directory.Path, "dotnet-tools.json");
+        var childManifest = Path.Combine(child, ".config", "dotnet-tools.json");
+        File.WriteAllText(rootManifest, """{"version":1,"isRoot":true,"tools":{}}""");
+        File.WriteAllText(childManifest, """{"version":1,"isRoot":false,"tools":{}}""");
+        var project = Path.Combine(child, "test.csproj");
+        File.WriteAllText(project, "<Project />");
+        var service = new LocalToolManifestService(new System.IO.Abstractions.FileSystem(), null!);
+
+        Assert.Equal(new[] { childManifest, rootManifest }, service.Discover(project));
+    }
+
+    [Fact]
+    public static void CurrentLocalToolsDoNotFailBuildByDefault()
+    {
+        using var directory = new TemporaryDirectory();
+        File.WriteAllText(Path.Combine(directory.Path, "NuGet.Config"), TestPackageFeed.NuGetConfig);
+        File.WriteAllText(Path.Combine(directory.Path, "dotnet-tools.json"),
+            """{"version":1,"isRoot":true,"tools":{"DotNetOutdated.Fake.Tool":{"version":"2.0.0","commands":["tool"]}}}""");
+
+        Assert.Equal(0, Program.Main([directory.Path, "--include-up-to-date", "--fail-on-updates"]));
+    }
+
+    [Fact]
+    public static void LocalToolsAndProjectPackagesAreReportedAndUpgradedTogether()
+    {
+        using var project = TestSetup("development-dependencies");
+        var path = Path.Combine(project.Path, "dotnet-tools.json");
+        File.WriteAllText(path,
+            """{"version":1,"isRoot":true,"tools":{"DotNetOutdated.Fake.Tool":{"version":"1.0.0","commands":["tool"]}}}""");
+        var output = Path.Combine(project.Path, "report.json");
+
+        Assert.Equal(2, Program.Main([project.Path, "--upgrade", "--fail-on-updates", "--output", output]));
+        using var report = JsonDocument.Parse(File.ReadAllText(output));
+        Assert.Contains(report.RootElement.GetProperty("Projects").EnumerateArray(),
+            item => item.GetProperty("FilePath").GetString() == path &&
+                    item.GetProperty("TargetFrameworks")[0].GetProperty("Dependencies")[0].GetProperty("LatestVersion").GetString() == "2.0.0");
+        Assert.Contains(report.RootElement.GetProperty("Projects").EnumerateArray(),
+            item => item.GetProperty("FilePath").GetString() != path);
+        Assert.Contains("\"version\":\"2.0.0\"", File.ReadAllText(path));
+    }
+
+    [Theory]
+    [InlineData("--no-tools")]
+    [InlineData("-nt")]
+    public static void LocalToolsAreNotReportedOrUpgradedWhenOptedOut(string option)
+    {
+        using var project = TestSetup("development-dependencies");
+        var path = Path.Combine(project.Path, "dotnet-tools.json");
+        const string manifest = """{"version":1,"isRoot":true,"tools":{"DotNetOutdated.Fake.Tool":{"version":"1.0.0","commands":["tool"]}}}""";
+        File.WriteAllText(path, manifest);
+        var output = Path.Combine(project.Path, "report.json");
+
+        Assert.Equal(0, Program.Main([option, project.Path, "--upgrade", "--output", output]));
+        Assert.DoesNotContain("DotNetOutdated.Fake.Tool", File.ReadAllText(output));
+        Assert.Equal(manifest, File.ReadAllText(path));
+    }
+
+    [Fact]
+    public static void LocalToolUpgradePreservesUtf8Bom()
+    {
+        using var directory = new TemporaryDirectory();
+        File.WriteAllText(Path.Combine(directory.Path, "NuGet.Config"), TestPackageFeed.NuGetConfig);
+        var path = Path.Combine(directory.Path, "dotnet-tools.json");
+        const string content = """{"version":1,"isRoot":true,"tools":{"DotNetOutdated.Fake.Tool":{"version":"1.0.0","commands":["tool"]}}}""";
+        File.WriteAllText(path, content, new System.Text.UTF8Encoding(true));
+
+        Assert.Equal(0, Program.Main([directory.Path, "--upgrade"]));
+        Assert.True(File.ReadAllBytes(path).AsSpan().StartsWith(System.Text.Encoding.UTF8.Preamble));
+        Assert.Equal(content.Replace("\"1.0.0\"", "\"2.0.0\""), File.ReadAllText(path));
+    }
+
+    [Theory]
+    [InlineData("n\n", "1.0.0")]
+    [InlineData("y\n", "2.0.0")]
+    [InlineData("", "1.0.0")]
+    public static void LocalToolUpgradePromptRequiresConfirmation(string input, string expected)
+    {
+        using var directory = new TemporaryDirectory();
+        var path = Path.Combine(directory.Path, "dotnet-tools.json");
+        File.WriteAllText(path,
+            """{"version":1,"isRoot":true,"tools":{"DotNetOutdated.Fake.Tool":{"version":"1.0.0","commands":["tool"]}}}""");
+        var project = new OutdatedProject
+        {
+            Name = "tools",
+            FilePath = path,
+            TargetFrameworks = [new OutdatedTargetFramework
+            {
+                Name = NuGet.Frameworks.NuGetFramework.AnyFramework,
+                Dependencies = [new OutdatedDependency
+                {
+                    Dependency = new Dependency { Name = "DotNetOutdated.Fake.Tool", VersionRange = VersionRange.Parse("1.0.0"), ResolvedVersion = NuGetVersion.Parse("1.0.0") },
+                    LatestVersion = NuGetVersion.Parse("2.0.0"),
+                }],
+            }],
+        };
+        var service = new LocalToolManifestService(new System.IO.Abstractions.FileSystem(), null!);
+        using var console = new MockConsole(input);
+
+        Assert.True(service.Upgrade([project], UpgradeType.Prompt, console));
+        using var manifest = JsonDocument.Parse(File.ReadAllText(path));
+        Assert.Equal(expected, manifest.RootElement.GetProperty("tools").GetProperty("DotNetOutdated.Fake.Tool").GetProperty("version").GetString());
+    }
+
+    [Fact]
+    public static void InvalidLocalToolManifestReturnsValidationError()
+    {
+        using var directory = new TemporaryDirectory();
+        File.WriteAllText(Path.Combine(directory.Path, "dotnet-tools.json"),
+            """{"version":1,"isRoot":true,"tools":{"broken":{"version":"invalid","commands":["broken"]}}}""");
+
+        Assert.Equal(1, Program.Main([directory.Path]));
+    }
+
+    [Theory]
+    [InlineData("csv")]
+    [InlineData("markdown")]
+    public static void LocalToolsAppearInOtherReportFormats(string format)
+    {
+        using var directory = new TemporaryDirectory();
+        File.WriteAllText(Path.Combine(directory.Path, "NuGet.Config"), TestPackageFeed.NuGetConfig);
+        File.WriteAllText(Path.Combine(directory.Path, "dotnet-tools.json"),
+            """{"version":1,"isRoot":true,"tools":{"DotNetOutdated.Fake.Tool":{"version":"1.0.0","commands":["tool"]}}}""");
+        var output = Path.Combine(directory.Path, "report.txt");
+
+        Assert.Equal(0, Program.Main([directory.Path, "--output-format", format, "--output", output]));
+        var text = File.ReadAllText(output);
+        Assert.Contains("DotNetOutdated.Fake.Tool", text);
+        Assert.Contains("1.0.0", text);
+        Assert.Contains("2.0.0", text);
+    }
+
     [Theory]
     [InlineData("build-props")]
     [InlineData("development-dependencies")]
@@ -670,7 +897,7 @@ public static class EndToEndTests
         Assert.Equal(["A.csproj", "B.csproj"], reportedPaths.Select(Path.GetFileName));
     }
 
-    [Fact]
+    [RequiresSymbolicLinks]
     public static void Recursive_Reports_Each_Project_Once_When_Reached_Through_A_Symbolic_Link()
     {
         // The project is analyzed through the link, but MSBuild reports a referenced project by its real path (issue #830).

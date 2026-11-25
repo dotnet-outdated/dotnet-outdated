@@ -94,6 +94,7 @@ Options:
                                                         Default value is: 0.
   -n|--no-restore                                       Add the reference without performing restore preview and compatibility check.
   -r|--recursive                                        Recursively search for all projects within the provided directory.
+  -nt|--no-tools                                        Skip local tools from manifests in the target directory and its parents.
   -fba|--include-file-based-apps                        Include loose file-based apps when recursively searching a directory.
   -ifs|--ignore-failed-sources                          Treat package source failures as warnings.
   -utd|--include-up-to-date                             Include all dependencies in the report even the ones not outdated.
@@ -118,6 +119,8 @@ You can also pass a directory in the `Path` argument, in which case the same log
 Lastly, you can specify the path to a solution (`.sln` or `.slnx`), project (`.csproj` or `.fsproj`), or .NET file-based app (`.cs`) which **dotnet-outdated** must analyze. File-based apps require .NET SDK 10.0.300 or later.
 
 When `--recursive --include-file-based-apps` is used, **dotnet-outdated** also discovers loose `.cs` file-based apps that start with a shebang (`#!`). `.cs` files under a `.csproj` directory tree are ignored during recursive file-based app discovery.
+
+Local tools from `.config/dotnet-tools.json` and `dotnet-tools.json` in the target directory and its parents are included by default. Use `-nt` or `--no-tools` to skip them. Discovery stops at a manifest with `isRoot: true`; subdirectories are not searched. Tool updates use the same version and name filters, NuGet settings and report formats as packages. `--upgrade` updates the manifest, and `--fail-on-updates` includes available tool updates.
 
 File-based apps can declare NuGet packages with `#:package` and MSBuild SDK packages with `#:sdk` (for example `#:sdk Cake.Sdk@6.0.0`). Variable-backed versions use `#:property` the same way as for packages.
 

@@ -26,7 +26,8 @@ namespace DotNetOutdated
         IOutdatedDependencyService outdatedDependencyService,
         IReferenceUpgrader referenceUpgrader,
         INuGetPackageInfoService nuGetPackageInfoService,
-        DotNetRunnerOptions dotNetRunnerOptions)
+        DotNetRunnerOptions dotNetRunnerOptions,
+        INuGetPackageResolutionService packageResolutionService = null)
    {
       private readonly IFileSystem _fileSystem = fileSystem;
       private readonly IReporter _reporter = reporter;
@@ -34,6 +35,7 @@ namespace DotNetOutdated
       private readonly IReferenceUpgrader _referenceUpgrader = referenceUpgrader;
       private readonly INuGetPackageInfoService _nuGetPackageInfoService = nuGetPackageInfoService;
       private readonly DotNetRunnerOptions _dotNetRunnerOptions = dotNetRunnerOptions;
+      private readonly INuGetPackageResolutionService _packageResolutionService = packageResolutionService;
 
       public bool IncludeAutoReferences { get; set; } = false;
 
@@ -64,6 +66,8 @@ namespace DotNetOutdated
       public bool NoRestore { get; set; } = false;
 
       public bool Recursive { get; set; } = false;
+
+      public bool NoTools { get; set; }
 
       public bool IncludeFileBasedApps { get; set; } = false;
 
@@ -123,7 +127,19 @@ namespace DotNetOutdated
             if (string.IsNullOrEmpty(Path))
                Path = _fileSystem.Directory.GetCurrentDirectory();
 
-            var report = await _outdatedDependencyService.FindOutdatedAsync(Path, CreateOutdatedOptions(), new ConsoleProgress(console)).ConfigureAwait(false);
+            var options = CreateOutdatedOptions();
+            var toolService = NoTools ? null : new LocalToolManifestService(_fileSystem, _packageResolutionService);
+            var manifests = toolService?.Discover(Path) ?? [];
+            OutdatedReport report;
+            try
+            {
+               report = await _outdatedDependencyService.FindOutdatedAsync(Path, options, new ConsoleProgress(console)).ConfigureAwait(false);
+            }
+            catch (NoProjectsFoundException) when (manifests.Count != 0)
+            {
+               report = new OutdatedReport { Projects = [] };
+            }
+            var tools = toolService == null ? [] : await toolService.FindOutdatedAsync(manifests, Path, options).ConfigureAwait(false);
 
             // Show only the target frameworks, and the projects, with something to report.
             var outdatedProjects = report.Projects
@@ -131,13 +147,17 @@ namespace DotNetOutdated
                .Where(project => project.TargetFrameworks.Count != 0)
                .ToList();
 
-            if (outdatedProjects.Count != 0)
+            var reportedTools = tools.Where(project => project.TargetFrameworks.Any(framework => framework.Dependencies.Count != 0)).ToList();
+            var allProjects = outdatedProjects.Concat(reportedTools).ToList();
+            if (allProjects.Count != 0)
             {
                // Report on the outdated dependencies
-               ReportOutdatedDependencies(outdatedProjects, console);
+               ReportOutdatedDependencies(allProjects, console);
 
                // Upgrade the packages
                var success = await UpgradePackagesAsync(outdatedProjects, console).ConfigureAwait(false);
+               if (Upgrade.HasValue && toolService != null)
+                  success &= toolService.Upgrade(reportedTools, Upgrade.UpgradeType, console);
 
                if (!Upgrade.HasValue)
                {
@@ -146,9 +166,10 @@ namespace DotNetOutdated
                }
 
                // Output report file
-               await GenerateOutputFile(outdatedProjects);
+               await GenerateOutputFile(allProjects);
 
-               if (FailOnUpdates)
+               if (FailOnUpdates && (outdatedProjects.Count != 0 || reportedTools.SelectMany(p => p.TargetFrameworks)
+                   .SelectMany(f => f.Dependencies).Any(d => d.LatestVersion != null && d.LatestVersion > d.Dependency.ResolvedVersion)))
                   return 2;
 
                if (!success)

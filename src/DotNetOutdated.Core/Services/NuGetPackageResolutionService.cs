@@ -38,7 +38,8 @@ namespace DotNetOutdated.Core.Services
             else if (prerelease == PrereleaseReporting.Never)
                 includePrerelease = false;
 
-            string cacheKey = (packageName + "-" + includePrerelease + "-" + targetFrameworkName + "-" + olderThanDays).ToUpperInvariant();
+            string cacheKey = string.Join("|", packageName.ToUpperInvariant(), includePrerelease, targetFrameworkName, olderThanDays,
+                query.IsDevelopmentDependency, query.IgnoreFailedSources, query.ProjectFilePath, string.Join(",", query.Sources));
 
             // Get all the available versions
             // The request is shared by every caller with the same key, so it doesn't take one caller's cancellation token.

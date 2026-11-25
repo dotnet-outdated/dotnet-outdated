@@ -186,6 +186,8 @@ public class CommandLineTests
         { ["-t:true"], "Error" },
         { ["--recursive=false"], "Error" },
         { ["-i:x", "path"], "Error" },
+        { ["--no-tools=false"], "Error" },
+        { ["-nt:true"], "Error" },
 
         // A path starting with "-" was always rejected, even after "--".
         { ["--", "-dashed.csproj"], "Error" },
