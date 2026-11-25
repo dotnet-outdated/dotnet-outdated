@@ -30,11 +30,11 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.14" />
-    <PackageReference Include="NuGet.Configuration" Version="7.9.0" />
+    <PackageReference Include="NuGet.Configuration" Version="8.0.0" />
     <PackageReference Include="NuGet.Credentials" Version="7.9.0" />
     <PackageReference Include="NuGet.ProjectModel" Version="7.9.0" />
     <PackageReference Include="NuGet.Protocol" Version="7.9.0" />
-    <PackageReference Include="NuGet.Versioning" Version="7.9.0" />
+    <PackageReference Include="NuGet.Versioning" Version="8.0.0" />
     <PackageReference Include="System.Formats.Asn1" Version="10.0.14" />
     <PackageReference Include="System.IO.Abstractions" Version="22.3.0" />
     <!-- NuGet.Packaging 7.9.0 pulls in System.Security.Cryptography.Pkcs 8.0.1, which has known vulnerabilities
