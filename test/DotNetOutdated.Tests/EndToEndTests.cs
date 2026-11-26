@@ -309,6 +309,47 @@ public static class EndToEndTests
     }
 
     [Fact]
+    public static void LocalToolUpgradePrintsRestoreHintWhenLaterManifestWriteFails()
+    {
+        using var directory = new TemporaryDirectory();
+        const string content = """{"version":1,"isRoot":true,"tools":{"DotNetOutdated.Fake.Tool":{"version":"1.0.0","commands":["tool"]}}}""";
+        var first = Path.Combine(directory.Path, "first.json");
+        var second = Path.Combine(directory.Path, "second.json");
+        File.WriteAllText(first, content);
+        File.WriteAllText(second, content);
+        OutdatedProject CreateProject(string path) => new()
+        {
+            Name = "tools",
+            FilePath = path,
+            TargetFrameworks = [new OutdatedTargetFramework
+            {
+                Name = NuGet.Frameworks.NuGetFramework.AnyFramework,
+                Dependencies = [new OutdatedDependency
+                {
+                    Dependency = new Dependency { Name = "DotNetOutdated.Fake.Tool", VersionRange = VersionRange.Parse("1.0.0"), ResolvedVersion = NuGetVersion.Parse("1.0.0") },
+                    LatestVersion = NuGetVersion.Parse("2.0.0"),
+                }],
+            }],
+        };
+        var service = new LocalToolManifestService(new System.IO.Abstractions.FileSystem(), null!);
+        using var console = new MockConsole();
+        File.SetAttributes(second, FileAttributes.ReadOnly);
+        try
+        {
+            Assert.Throws<DotNetOutdated.Core.Exceptions.CommandValidationException>(() =>
+                service.Upgrade([CreateProject(first), CreateProject(second)], UpgradeType.Auto, console));
+        }
+        finally
+        {
+            File.SetAttributes(second, FileAttributes.Normal);
+        }
+
+        Assert.Contains("\"version\":\"2.0.0\"", File.ReadAllText(first));
+        Assert.Contains("\"version\":\"1.0.0\"", File.ReadAllText(second));
+        Assert.Contains("dotnet tool restore", console.WrittenOut);
+    }
+
+    [Fact]
     public static void InvalidLocalToolManifestReturnsValidationError()
     {
         using var directory = new TemporaryDirectory();
