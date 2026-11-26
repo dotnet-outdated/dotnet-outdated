@@ -146,7 +146,18 @@ internal sealed class LocalToolManifestService(IFileSystem fileSystem, INuGetPac
                 }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 {
-                    throw new CommandValidationException($"Could not update local tool manifest '{project.FilePath}': {ex.Message}", ex);
+                    var restoreNote = string.Empty;
+                    try
+                    {
+                        // The write may have failed before changing anything, so only restore when the bytes differ.
+                        if (!_fileSystem.File.ReadAllBytes(project.FilePath).AsSpan().SequenceEqual(bytes))
+                            _fileSystem.File.WriteAllBytes(project.FilePath, bytes);
+                    }
+                    catch (Exception restoreEx) when (restoreEx is IOException or UnauthorizedAccessException)
+                    {
+                        restoreNote = $" The original contents could not be restored ({restoreEx.Message}).";
+                    }
+                    throw new CommandValidationException($"Could not update local tool manifest '{project.FilePath}': {ex.Message}{restoreNote}", ex);
                 }
                 console.WriteLine($"Upgraded local tool {tool.Name} in {project.FilePath} to {dependency.LatestVersion}.");
             }
