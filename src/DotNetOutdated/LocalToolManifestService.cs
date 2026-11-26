@@ -30,7 +30,6 @@ internal sealed class LocalToolManifestService(IFileSystem fileSystem, INuGetPac
         var manifests = new List<string>();
         while (directory != null)
         {
-            bool root = false;
             foreach (var candidate in new[] {
                 _fileSystem.Path.Combine(directory, ".config", "dotnet-tools.json"),
                 _fileSystem.Path.Combine(directory, "dotnet-tools.json")
@@ -40,11 +39,10 @@ internal sealed class LocalToolManifestService(IFileSystem fileSystem, INuGetPac
                     continue;
 
                 manifests.Add(candidate);
-                root |= ReadManifest(candidate).IsRoot;
+                if (ReadManifest(candidate).IsRoot)
+                    return manifests;
             }
 
-            if (root)
-                break;
             directory = _fileSystem.Directory.GetParent(directory)?.FullName;
         }
         return manifests;
