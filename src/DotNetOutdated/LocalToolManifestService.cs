@@ -148,6 +148,17 @@ internal sealed class LocalToolManifestService(IFileSystem fileSystem, INuGetPac
         if (relative == ".." || relative.StartsWith(".." + _fileSystem.Path.DirectorySeparatorChar, StringComparison.Ordinal) || _fileSystem.Path.IsPathRooted(relative))
             return false;
 
+        // A link on any directory between the manifest and the scope could redirect the write outside the scope.
+        var fullScope = _fileSystem.Path.GetFullPath(scope).TrimEnd(_fileSystem.Path.DirectorySeparatorChar, _fileSystem.Path.AltDirectorySeparatorChar);
+        var directory = _fileSystem.Path.GetDirectoryName(_fileSystem.Path.GetFullPath(manifestPath));
+        while (!string.IsNullOrEmpty(directory)
+            && !string.Equals(directory.TrimEnd(_fileSystem.Path.DirectorySeparatorChar, _fileSystem.Path.AltDirectorySeparatorChar), fullScope, StringComparison.Ordinal))
+        {
+            if (_fileSystem.DirectoryInfo.New(directory).LinkTarget != null)
+                return false;
+            directory = _fileSystem.Path.GetDirectoryName(directory);
+        }
+
         return _fileSystem.FileInfo.New(manifestPath).LinkTarget == null;
     }
 

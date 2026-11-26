@@ -15,6 +15,7 @@ using System.Xml.Linq;
 using DotNetOutdated.Core.Models;
 using DotNetOutdated.Core.Services;
 using Microsoft.Extensions.DependencyInjection;
+using NSubstitute;
 using NuGet.Versioning;
 using Xunit;
 
@@ -331,18 +332,20 @@ public static class EndToEndTests
                 }],
             }],
         };
-        var service = new LocalToolManifestService(new System.IO.Abstractions.FileSystem(), null!);
+        var real = new System.IO.Abstractions.FileSystem();
+        var file = NSubstitute.Substitute.ForPartsOf<System.IO.Abstractions.FileWrapper>(real);
+        file.When(f => f.Move(NSubstitute.Arg.Any<string>(), second, true)).Throw(new IOException("Injected move failure"));
+        var fileSystem = NSubstitute.Substitute.For<System.IO.Abstractions.IFileSystem>();
+        fileSystem.File.Returns(file);
+        fileSystem.Path.Returns(real.Path);
+        fileSystem.Directory.Returns(real.Directory);
+        fileSystem.FileInfo.Returns(real.FileInfo);
+        fileSystem.DirectoryInfo.Returns(real.DirectoryInfo);
+        var service = new LocalToolManifestService(fileSystem, null!);
         using var console = new MockConsole();
-        File.SetAttributes(second, FileAttributes.ReadOnly);
-        try
-        {
-            Assert.Throws<DotNetOutdated.Core.Exceptions.CommandValidationException>(() =>
-                service.Upgrade([CreateProject(first), CreateProject(second)], UpgradeType.Auto, console, directory.Path));
-        }
-        finally
-        {
-            File.SetAttributes(second, FileAttributes.Normal);
-        }
+
+        Assert.Throws<DotNetOutdated.Core.Exceptions.CommandValidationException>(() =>
+            service.Upgrade([CreateProject(first), CreateProject(second)], UpgradeType.Auto, console, directory.Path));
 
         Assert.Contains("\"version\":\"2.0.0\"", File.ReadAllText(first));
         Assert.Contains("\"version\":\"1.0.0\"", File.ReadAllText(second));
