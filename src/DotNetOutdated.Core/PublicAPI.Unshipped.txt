@@ -445,3 +445,5 @@ override DotNetOutdated.Core.Services.TargetFrameworkSupportQuery.GetHashCode() 
 override DotNetOutdated.Core.Services.TargetFrameworkSupportQuery.ToString() -> string!
 static DotNetOutdated.Core.Services.TargetFrameworkSupportQuery.operator ==(DotNetOutdated.Core.Services.TargetFrameworkSupportQuery? left, DotNetOutdated.Core.Services.TargetFrameworkSupportQuery? right) -> bool
 static DotNetOutdated.Core.Services.TargetFrameworkSupportQuery.operator !=(DotNetOutdated.Core.Services.TargetFrameworkSupportQuery? left, DotNetOutdated.Core.Services.TargetFrameworkSupportQuery? right) -> bool
+DotNetOutdated.Core.Exceptions.NoProjectsFoundException
+DotNetOutdated.Core.Exceptions.NoProjectsFoundException.NoProjectsFoundException(string! message) -> void
