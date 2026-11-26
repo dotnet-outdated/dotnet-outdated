@@ -115,12 +115,22 @@ internal sealed class LocalToolManifestService(IFileSystem fileSystem, INuGetPac
         var upgradedAny = false;
         try
         {
-            return UpgradeTools(projects, upgradeType, console, ref upgradedAny);
+            var result = UpgradeTools(projects, upgradeType, console, ref upgradedAny);
+            WriteRestoreHint(upgradedAny, console);
+            return result;
         }
-        finally
+        catch when (upgradedAny)
         {
             // Earlier upgrades still need a restore even when a later one fails.
-            WriteRestoreHint(upgradedAny, console);
+            // A failure writing the hint must not mask the original exception.
+            try
+            {
+                WriteRestoreHint(upgradedAny, console);
+            }
+            catch (Exception)
+            {
+            }
+            throw;
         }
     }
 
