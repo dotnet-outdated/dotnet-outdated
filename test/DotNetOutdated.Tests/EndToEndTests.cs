@@ -166,7 +166,7 @@ public static class EndToEndTests
     }
 
     [Fact]
-    public static void LocalToolUpgradePreservesManifestAndRespectsFilters()
+    public static void LocalToolUpgradeSkipsManifestChangesAndRespectsFilters()
     {
         using var directory = new TemporaryDirectory();
         File.WriteAllText(Path.Combine(directory.Path, "NuGet.Config"), TestPackageFeed.NuGetConfig);
@@ -175,8 +175,11 @@ public static class EndToEndTests
         const string original = "{\r\n  \"version\": 1,\r\n  \"isRoot\": true,\r\n  \"tools\": {\r\n    \"DotNetOutdated.Fake.Tool\": { \"version\": \"1.0.0\", \"commands\": [\"tool\"] },\r\n    \"DotNetOutdated.Fake.Json\": { \"version\": \"11.0.1\", \"commands\": [\"other\"] }\r\n  }\r\n}\r\n";
         File.WriteAllText(path, original);
 
-        Assert.Equal(0, Program.Main([directory.Path, "--upgrade", "--include", "fake", "--exclude", "json"]));
-        Assert.Equal(original.Replace("\"version\": \"1.0.0\"", "\"version\": \"2.0.0\""), File.ReadAllText(path));
+        var (exitCode, output) = RunAndCaptureOutput(["--upgrade", "--include", "fake", "--exclude", "json", directory.Path]);
+        Assert.Equal(0, exitCode);
+        Assert.Equal(original, File.ReadAllText(path));
+        Assert.Contains("dotnet tool update --local DotNetOutdated.Fake.Tool --version 2.0.0", output);
+        Assert.DoesNotContain("DotNetOutdated.Fake.Json", output);
     }
 
     [Fact]
@@ -229,7 +232,7 @@ public static class EndToEndTests
     }
 
     [Fact]
-    public static void LocalToolsAndProjectPackagesAreReportedAndUpgradedTogether()
+    public static void LocalToolsAndProjectPackagesAreReportedButOnlyPackagesAreUpgraded()
     {
         using var project = TestSetup("development-dependencies");
         var path = Path.Combine(project.Path, "dotnet-tools.json");
@@ -244,7 +247,7 @@ public static class EndToEndTests
                     item.GetProperty("TargetFrameworks")[0].GetProperty("Dependencies")[0].GetProperty("LatestVersion").GetString() == "2.0.0");
         Assert.Contains(report.RootElement.GetProperty("Projects").EnumerateArray(),
             item => item.GetProperty("FilePath").GetString() != path);
-        Assert.Contains("\"version\":\"2.0.0\"", File.ReadAllText(path));
+        Assert.Contains("\"version\":\"1.0.0\"", File.ReadAllText(path));
     }
 
     [Theory]
@@ -264,7 +267,7 @@ public static class EndToEndTests
     }
 
     [Fact]
-    public static void LocalToolUpgradePreservesUtf8Bom()
+    public static void LocalToolUpgradeLeavesUtf8BomManifestUnchanged()
     {
         using var directory = new TemporaryDirectory();
         File.WriteAllText(Path.Combine(directory.Path, "NuGet.Config"), TestPackageFeed.NuGetConfig);
@@ -274,14 +277,11 @@ public static class EndToEndTests
 
         Assert.Equal(0, Program.Main([directory.Path, "--upgrade"]));
         Assert.True(File.ReadAllBytes(path).AsSpan().StartsWith(System.Text.Encoding.UTF8.Preamble));
-        Assert.Equal(content.Replace("\"1.0.0\"", "\"2.0.0\""), File.ReadAllText(path));
+        Assert.Equal(content, File.ReadAllText(path));
     }
 
-    [Theory]
-    [InlineData("n\n", "1.0.0")]
-    [InlineData("y\n", "2.0.0")]
-    [InlineData("", "1.0.0")]
-    public static void LocalToolUpgradePromptRequiresConfirmation(string input, string expected)
+    [Fact]
+    public static void LocalToolUpgradeSkipsManifestChangesAndPrintsPinnedCommand()
     {
         using var directory = new TemporaryDirectory();
         var path = Path.Combine(directory.Path, "dotnet-tools.json");
@@ -302,15 +302,16 @@ public static class EndToEndTests
             }],
         };
         var service = new LocalToolManifestService(new System.IO.Abstractions.FileSystem(), null!);
-        using var console = new MockConsole(input);
+        using var console = new MockConsole();
 
-        Assert.True(service.Upgrade([project], UpgradeType.Prompt, console, directory.Path));
+        Assert.True(service.Upgrade([project], console));
         using var manifest = JsonDocument.Parse(File.ReadAllText(path));
-        Assert.Equal(expected, manifest.RootElement.GetProperty("tools").GetProperty("DotNetOutdated.Fake.Tool").GetProperty("version").GetString());
+        Assert.Equal("1.0.0", manifest.RootElement.GetProperty("tools").GetProperty("DotNetOutdated.Fake.Tool").GetProperty("version").GetString());
+        Assert.Contains("dotnet tool update --local DotNetOutdated.Fake.Tool --version 2.0.0", console.WrittenOut);
     }
 
     [Fact]
-    public static void LocalToolUpgradePrintsRestoreHintWhenLaterManifestWriteFails()
+    public static void LocalToolUpgradeSkipsManifestChangesAndPrintsPinnedCommands()
     {
         using var directory = new TemporaryDirectory();
         const string content = """{"version":1,"isRoot":true,"tools":{"DotNetOutdated.Fake.Tool":{"version":"1.0.0","commands":["tool"]}}}""";
@@ -332,58 +333,16 @@ public static class EndToEndTests
                 }],
             }],
         };
-        var real = new System.IO.Abstractions.FileSystem();
-        var file = NSubstitute.Substitute.ForPartsOf<System.IO.Abstractions.FileWrapper>(real);
-        file.When(f => f.Move(NSubstitute.Arg.Any<string>(), second, true)).Throw(new IOException("Injected move failure"));
-        var fileSystem = NSubstitute.Substitute.For<System.IO.Abstractions.IFileSystem>();
-        fileSystem.File.Returns(file);
-        fileSystem.Path.Returns(real.Path);
-        fileSystem.Directory.Returns(real.Directory);
-        fileSystem.FileInfo.Returns(real.FileInfo);
-        fileSystem.DirectoryInfo.Returns(real.DirectoryInfo);
-        var service = new LocalToolManifestService(fileSystem, null!);
-        using var console = new MockConsole();
-
-        Assert.Throws<DotNetOutdated.Core.Exceptions.CommandValidationException>(() =>
-            service.Upgrade([CreateProject(first), CreateProject(second)], UpgradeType.Auto, console, directory.Path));
-
-        Assert.Contains("\"version\":\"2.0.0\"", File.ReadAllText(first));
-        Assert.Contains("\"version\":\"1.0.0\"", File.ReadAllText(second));
-        Assert.Contains("dotnet tool restore", console.WrittenOut);
-        Assert.Contains("dotnet tool uninstall <package-id> --local", console.WrittenOut);
-        Assert.Contains("dotnet tool install <package-id> --local --version <version>", console.WrittenOut);
-        Assert.DoesNotContain("dotnet tool update --local", console.WrittenOut);
-    }
-
-    [Fact]
-    public static void LocalToolUpgradeDoesNotModifyManifestOutsideAnalyzedDirectory()
-    {
-        using var directory = new TemporaryDirectory();
-        const string content = """{"version":1,"isRoot":true,"tools":{"DotNetOutdated.Fake.Tool":{"version":"1.0.0","commands":["tool"]}}}""";
-        var child = Directory.CreateDirectory(Path.Combine(directory.Path, "child")).FullName;
-        var path = Path.Combine(directory.Path, "dotnet-tools.json");
-        File.WriteAllText(path, content);
-        var project = new OutdatedProject
-        {
-            Name = "tools",
-            FilePath = path,
-            TargetFrameworks = [new OutdatedTargetFramework
-            {
-                Name = NuGet.Frameworks.NuGetFramework.AnyFramework,
-                Dependencies = [new OutdatedDependency
-                {
-                    Dependency = new Dependency { Name = "DotNetOutdated.Fake.Tool", VersionRange = VersionRange.Parse("1.0.0"), ResolvedVersion = NuGetVersion.Parse("1.0.0") },
-                    LatestVersion = NuGetVersion.Parse("2.0.0"),
-                }],
-            }],
-        };
         var service = new LocalToolManifestService(new System.IO.Abstractions.FileSystem(), null!);
         using var console = new MockConsole();
 
-        Assert.True(service.Upgrade([project], UpgradeType.Auto, console, child));
+        Assert.True(service.Upgrade([CreateProject(first), CreateProject(second)], console));
 
-        Assert.Equal(content, File.ReadAllText(path));
-        Assert.Contains("outside the analyzed directory", console.WrittenOut);
+        Assert.Contains("\"version\":\"1.0.0\"", File.ReadAllText(first));
+        Assert.Contains("\"version\":\"1.0.0\"", File.ReadAllText(second));
+        Assert.Contains("dotnet tool update --local DotNetOutdated.Fake.Tool --version 2.0.0", console.WrittenOut);
+        Assert.Contains($"--tool-manifest \"{first}\"", console.WrittenOut);
+        Assert.Contains($"--tool-manifest \"{second}\"", console.WrittenOut);
     }
 
     [Fact]
@@ -1199,6 +1158,9 @@ public static class EndToEndTests
     }
 
     private static (int ExitCode, string Output) RunAndCaptureOutput(string path)
+        => RunAndCaptureOutput([path]);
+
+    private static (int ExitCode, string Output) RunAndCaptureOutput(string[] args)
     {
         var originalOut = Console.Out;
         var originalError = Console.Error;
@@ -1207,7 +1169,7 @@ public static class EndToEndTests
         Console.SetError(output);
         try
         {
-            var exitCode = Program.Main([path]);
+            var exitCode = Program.Main(args);
             return (exitCode, output.ToString());
         }
         finally
