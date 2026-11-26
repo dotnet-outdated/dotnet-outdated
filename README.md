@@ -120,7 +120,7 @@ Lastly, you can specify the path to a solution (`.sln` or `.slnx`), project (`.c
 
 When `--recursive --include-file-based-apps` is used, **dotnet-outdated** also discovers loose `.cs` file-based apps that start with a shebang (`#!`). `.cs` files under a `.csproj` directory tree are ignored during recursive file-based app discovery.
 
-Local tools from `.config/dotnet-tools.json` and `dotnet-tools.json` in the target directory and its parents are included by default. Use `-nt` or `--no-tools` to skip them. Discovery stops at a manifest with `isRoot: true`; subdirectories are not searched. Tool updates use the same version and name filters, NuGet settings and report formats as packages. `--upgrade` updates the manifest, and `--fail-on-updates` includes available tool updates.
+Local tools from `.config/dotnet-tools.json` and `dotnet-tools.json` in the target directory and its parents are included by default. Use `-nt` or `--no-tools` to skip them. Discovery stops at a manifest with `isRoot: true`; subdirectories are not searched. Tool updates use the same version and name filters, NuGet settings and report formats as packages. `--upgrade` updates the manifest but does not install the new versions, so run `dotnet tool restore` afterwards, and `--fail-on-updates` includes available tool updates.
 
 File-based apps can declare NuGet packages with `#:package` and MSBuild SDK packages with `#:sdk` (for example `#:sdk Cake.Sdk@6.0.0`). Variable-backed versions use `#:property` the same way as for packages.
 

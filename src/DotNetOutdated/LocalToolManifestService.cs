@@ -112,6 +112,7 @@ internal sealed class LocalToolManifestService(IFileSystem fileSystem, INuGetPac
 
     public bool Upgrade(IReadOnlyList<OutdatedProject> projects, UpgradeType upgradeType, IConsole console)
     {
+        var upgradedAny = false;
         foreach (var project in projects)
         {
             foreach (var dependency in project.TargetFrameworks.SelectMany(framework => framework.Dependencies))
@@ -126,6 +127,7 @@ internal sealed class LocalToolManifestService(IFileSystem fileSystem, INuGetPac
                     if (answer is null)
                     {
                         console.WriteLine("No input is available to answer the prompt, so the remaining tool upgrades were skipped.");
+                        WriteRestoreHint(upgradedAny, console);
                         return true;
                     }
                     if (!answer.Value)
@@ -160,9 +162,17 @@ internal sealed class LocalToolManifestService(IFileSystem fileSystem, INuGetPac
                     throw new CommandValidationException($"Could not update local tool manifest '{project.FilePath}': {ex.Message}{restoreNote}", ex);
                 }
                 console.WriteLine($"Upgraded local tool {tool.Name} in {project.FilePath} to {dependency.LatestVersion}.");
+                upgradedAny = true;
             }
         }
+        WriteRestoreHint(upgradedAny, console);
         return true;
+    }
+
+    private static void WriteRestoreHint(bool upgradedAny, IConsole console)
+    {
+        if (upgradedAny)
+            console.WriteLine("Run 'dotnet tool restore' to install the upgraded local tools.");
     }
 
     private Manifest ReadManifest(string path)
