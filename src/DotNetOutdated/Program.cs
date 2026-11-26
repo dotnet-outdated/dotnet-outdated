@@ -157,7 +157,7 @@ namespace DotNetOutdated
                // Upgrade the packages
                var success = await UpgradePackagesAsync(outdatedProjects, console).ConfigureAwait(false);
                if (Upgrade.HasValue && toolService != null)
-                  success &= toolService.Upgrade(reportedTools, Upgrade.UpgradeType, console);
+                  success &= toolService.Upgrade(reportedTools, Upgrade.UpgradeType, console, Path);
 
                if (!Upgrade.HasValue)
                {

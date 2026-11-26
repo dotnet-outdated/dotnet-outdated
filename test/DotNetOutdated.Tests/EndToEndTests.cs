@@ -303,7 +303,7 @@ public static class EndToEndTests
         var service = new LocalToolManifestService(new System.IO.Abstractions.FileSystem(), null!);
         using var console = new MockConsole(input);
 
-        Assert.True(service.Upgrade([project], UpgradeType.Prompt, console));
+        Assert.True(service.Upgrade([project], UpgradeType.Prompt, console, directory.Path));
         using var manifest = JsonDocument.Parse(File.ReadAllText(path));
         Assert.Equal(expected, manifest.RootElement.GetProperty("tools").GetProperty("DotNetOutdated.Fake.Tool").GetProperty("version").GetString());
     }
@@ -337,7 +337,7 @@ public static class EndToEndTests
         try
         {
             Assert.Throws<DotNetOutdated.Core.Exceptions.CommandValidationException>(() =>
-                service.Upgrade([CreateProject(first), CreateProject(second)], UpgradeType.Auto, console));
+                service.Upgrade([CreateProject(first), CreateProject(second)], UpgradeType.Auto, console, directory.Path));
         }
         finally
         {
@@ -347,6 +347,37 @@ public static class EndToEndTests
         Assert.Contains("\"version\":\"2.0.0\"", File.ReadAllText(first));
         Assert.Contains("\"version\":\"1.0.0\"", File.ReadAllText(second));
         Assert.Contains("dotnet tool restore", console.WrittenOut);
+    }
+
+    [Fact]
+    public static void LocalToolUpgradeDoesNotModifyManifestOutsideAnalyzedDirectory()
+    {
+        using var directory = new TemporaryDirectory();
+        const string content = """{"version":1,"isRoot":true,"tools":{"DotNetOutdated.Fake.Tool":{"version":"1.0.0","commands":["tool"]}}}""";
+        var child = Directory.CreateDirectory(Path.Combine(directory.Path, "child")).FullName;
+        var path = Path.Combine(directory.Path, "dotnet-tools.json");
+        File.WriteAllText(path, content);
+        var project = new OutdatedProject
+        {
+            Name = "tools",
+            FilePath = path,
+            TargetFrameworks = [new OutdatedTargetFramework
+            {
+                Name = NuGet.Frameworks.NuGetFramework.AnyFramework,
+                Dependencies = [new OutdatedDependency
+                {
+                    Dependency = new Dependency { Name = "DotNetOutdated.Fake.Tool", VersionRange = VersionRange.Parse("1.0.0"), ResolvedVersion = NuGetVersion.Parse("1.0.0") },
+                    LatestVersion = NuGetVersion.Parse("2.0.0"),
+                }],
+            }],
+        };
+        var service = new LocalToolManifestService(new System.IO.Abstractions.FileSystem(), null!);
+        using var console = new MockConsole();
+
+        Assert.True(service.Upgrade([project], UpgradeType.Auto, console, child));
+
+        Assert.Equal(content, File.ReadAllText(path));
+        Assert.Contains("outside the analyzed directory", console.WrittenOut);
     }
 
     [Fact]

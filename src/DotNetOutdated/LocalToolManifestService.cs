@@ -109,12 +109,14 @@ internal sealed class LocalToolManifestService(IFileSystem fileSystem, INuGetPac
         return projects;
     }
 
-    public bool Upgrade(IReadOnlyList<OutdatedProject> projects, UpgradeType upgradeType, IConsole console)
+    public bool Upgrade(IReadOnlyList<OutdatedProject> projects, UpgradeType upgradeType, IConsole console, string path)
     {
         var upgradedAny = false;
+        var scope = GetScope(path);
+        var committed = new List<string>();
         try
         {
-            var result = UpgradeTools(projects, upgradeType, console, ref upgradedAny);
+            var result = UpgradeTools(projects, upgradeType, console, scope, committed, ref upgradedAny);
             WriteRestoreHint(upgradedAny, console);
             return result;
         }
@@ -124,6 +126,7 @@ internal sealed class LocalToolManifestService(IFileSystem fileSystem, INuGetPac
             // A failure writing the hint must not mask the original exception.
             try
             {
+                console.WriteLine($"The upgrade stopped early. Already written: {string.Join("; ", committed)}.");
                 WriteRestoreHint(upgradedAny, console);
             }
             catch (Exception)
@@ -133,10 +136,31 @@ internal sealed class LocalToolManifestService(IFileSystem fileSystem, INuGetPac
         }
     }
 
-    private bool UpgradeTools(IReadOnlyList<OutdatedProject> projects, UpgradeType upgradeType, IConsole console, ref bool upgradedAny)
+    private string GetScope(string path)
+    {
+        var fullPath = _fileSystem.Path.GetFullPath(path);
+        return _fileSystem.Directory.Exists(fullPath) ? fullPath : _fileSystem.Path.GetDirectoryName(fullPath);
+    }
+
+    private bool IsWritable(string manifestPath, string scope)
+    {
+        var relative = _fileSystem.Path.GetRelativePath(scope, _fileSystem.Path.GetFullPath(manifestPath));
+        if (relative == ".." || relative.StartsWith(".." + _fileSystem.Path.DirectorySeparatorChar, StringComparison.Ordinal) || _fileSystem.Path.IsPathRooted(relative))
+            return false;
+
+        return _fileSystem.FileInfo.New(manifestPath).LinkTarget == null;
+    }
+
+    private bool UpgradeTools(IReadOnlyList<OutdatedProject> projects, UpgradeType upgradeType, IConsole console, string scope, List<string> committed, ref bool upgradedAny)
     {
         foreach (var project in projects)
         {
+            if (!IsWritable(project.FilePath, scope))
+            {
+                console.WriteLine($"Skipped local tool manifest {project.FilePath}: it is outside the analyzed directory or is a symbolic link, so it was not modified.");
+                continue;
+            }
+
             foreach (var dependency in project.TargetFrameworks.SelectMany(framework => framework.Dependencies))
             {
                 if (dependency.LatestVersion == null || dependency.LatestVersion <= dependency.Dependency.ResolvedVersion)
@@ -163,27 +187,33 @@ internal sealed class LocalToolManifestService(IFileSystem fileSystem, INuGetPac
                 var replacement = JsonSerializer.SerializeToUtf8Bytes(dependency.LatestVersion.ToString());
                 var bytes = manifest.Bytes;
                 byte[] updated = [.. bytes.AsSpan(0, tool.Start), .. replacement, .. bytes.AsSpan(tool.End)];
+                var temporaryPath = project.FilePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
                 try
                 {
-                    _fileSystem.File.WriteAllBytes(project.FilePath, updated);
+                    _fileSystem.File.WriteAllBytes(temporaryPath, updated);
+                    // Narrow the lost-update window: refuse to replace a manifest edited since it was read.
+                    if (!_fileSystem.File.ReadAllBytes(project.FilePath).AsSpan().SequenceEqual(bytes))
+                        throw new CommandValidationException($"Local tool manifest '{project.FilePath}' was modified while it was being upgraded; it was left unchanged.");
+                    _fileSystem.File.Move(temporaryPath, project.FilePath, true);
                 }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 {
-                    var restoreNote = string.Empty;
+                    throw new CommandValidationException($"Could not update local tool manifest '{project.FilePath}': {ex.Message}. The manifest was left unchanged.", ex);
+                }
+                finally
+                {
                     try
                     {
-                        // The write may have failed before changing anything, so only restore when the bytes differ.
-                        if (!_fileSystem.File.ReadAllBytes(project.FilePath).AsSpan().SequenceEqual(bytes))
-                            _fileSystem.File.WriteAllBytes(project.FilePath, bytes);
+                        if (_fileSystem.File.Exists(temporaryPath))
+                            _fileSystem.File.Delete(temporaryPath);
                     }
-                    catch (Exception restoreEx) when (restoreEx is IOException or UnauthorizedAccessException)
+                    catch (Exception cleanupEx) when (cleanupEx is IOException or UnauthorizedAccessException)
                     {
-                        restoreNote = $" The original contents could not be restored ({restoreEx.Message}).";
                     }
-                    throw new CommandValidationException($"Could not update local tool manifest '{project.FilePath}': {ex.Message}{restoreNote}", ex);
                 }
                 console.WriteLine($"Upgraded local tool {tool.Name} in {project.FilePath} to {dependency.LatestVersion}.");
                 upgradedAny = true;
+                committed.Add($"{tool.Name} in {project.FilePath}");
             }
         }
         return true;
