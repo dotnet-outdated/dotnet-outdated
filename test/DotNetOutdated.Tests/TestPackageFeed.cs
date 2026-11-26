@@ -31,6 +31,7 @@ internal static class TestPackageFeed
     private static readonly IReadOnlyList<FakePackage> Catalog =
     [
         .. Library("DotNetOutdated.Fake.Json", "11.0.1", "12.0.1", "12.0.3", "13.0.1", "13.0.3", "13.0.4"),
+        .. Library("DotNetOutdated.Fake.Tool", "1.0.0", "1.1.0", "2.0.0", "3.0.0-preview.1"),
         .. Library("DotNetOutdated.Fake.DependencyInjection", ExtensionsVersions),
         .. ExtensionsVersions.Select(version => new FakePackage("DotNetOutdated.Fake.Logging", version)
         {

@@ -94,6 +94,30 @@ namespace DotNetOutdated.Tests
             await infoService.Received(1).GetAllVersionsAsync(Arg.Any<PackageVersionsQuery>(), CancellationToken.None);
         }
 
+        [Fact]
+        public async Task LookupCacheSeparatesSourcesAndDevelopmentDependencies()
+        {
+            var info = Substitute.For<INuGetPackageInfoService>();
+            info.GetAllVersionsAsync(Arg.Any<PackageVersionsQuery>(), Arg.Any<CancellationToken>())
+                .Returns(call =>
+                {
+                    var query = call.Arg<PackageVersionsQuery>();
+                    var version = query.IsDevelopmentDependency ? "3.0.0" :
+                        query.Sources[0].Host == "second.example" ? "2.0.0" : "1.1.0";
+                    return Task.FromResult<IReadOnlyList<NuGetVersion>>([NuGetVersion.Parse(version)]);
+                });
+            var service = new NuGetPackageResolutionService(info);
+            var first = Query("Shared", "1.0.0", VersionLock.None, PrereleaseReporting.Auto, null) with
+            {
+                Sources = [new Uri("https://first.example/")],
+            };
+            var second = first with { Sources = [new Uri("https://second.example/")] };
+
+            Assert.Equal(NuGetVersion.Parse("1.1.0"), await service.ResolveLatestVersionAsync(first, TestContext.Current.CancellationToken));
+            Assert.Equal(NuGetVersion.Parse("2.0.0"), await service.ResolveLatestVersionAsync(second, TestContext.Current.CancellationToken));
+            Assert.Equal(NuGetVersion.Parse("3.0.0"), await service.ResolveLatestVersionAsync(second with { IsDevelopmentDependency = true }, TestContext.Current.CancellationToken));
+        }
+
         private static LatestVersionQuery Query(string packageId, string current, VersionLock versionLock, PrereleaseReporting prerelease, string prereleaseLabel) => new()
         {
             PackageId = packageId,

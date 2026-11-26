@@ -50,7 +50,7 @@ namespace DotNetOutdated.Core.Services
                         return recursiveProjectFiles;
 
                     // At this point the path contains no solutions or projects, so throw an exception
-                    throw new CommandValidationException(string.Format(CultureInfo.InvariantCulture, Resources.ValidationErrorMessages.DirectoryDoesNotContainSolutionsOrProjects, path));
+                    throw new NoProjectsFoundException(string.Format(CultureInfo.InvariantCulture, Resources.ValidationErrorMessages.DirectoryDoesNotContainSolutionsOrProjects, path));
                 }
 
                 // Search for solution(s)
@@ -77,7 +77,7 @@ namespace DotNetOutdated.Core.Services
                     throw new CommandValidationException(string.Format(CultureInfo.InvariantCulture, Resources.ValidationErrorMessages.DirectoryContainsMultipleProjects, path));
 
                 // At this point the path contains no solutions or projects, so throw an exception
-                throw new CommandValidationException(string.Format(CultureInfo.InvariantCulture, Resources.ValidationErrorMessages.DirectoryDoesNotContainSolutionsOrProjects, path));
+                throw new NoProjectsFoundException(string.Format(CultureInfo.InvariantCulture, Resources.ValidationErrorMessages.DirectoryDoesNotContainSolutionsOrProjects, path));
             }
 
             // If a solution file or project file was passed, just return that

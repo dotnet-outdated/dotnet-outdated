@@ -122,6 +122,9 @@ namespace DotNetOutdated
       public Option<bool> Recursive { get; } = Flag("--recursive", "-r",
           "Recursively search for all projects within the provided directory.");
 
+      public Option<bool> NoTools { get; } = Flag("--no-tools", "-nt",
+          "Skip local tools from manifests in the target directory and its parents.");
+
       public Option<bool> IncludeFileBasedApps { get; } = Flag("--include-file-based-apps", "-fba",
           "Include loose file-based apps when recursively searching a directory.");
 
@@ -214,6 +217,7 @@ namespace DotNetOutdated
             OlderThanDays,
             NoRestore,
             Recursive,
+            NoTools,
             IncludeFileBasedApps,
             IgnoreFailedSources,
             IncludeUpToDate,
@@ -268,6 +272,7 @@ namespace DotNetOutdated
          program.OlderThanDays = parseResult.GetValue(OlderThanDays);
          program.NoRestore = parseResult.GetValue(NoRestore);
          program.Recursive = parseResult.GetValue(Recursive);
+         program.NoTools = parseResult.GetValue(NoTools);
          program.IncludeFileBasedApps = parseResult.GetValue(IncludeFileBasedApps);
          program.IgnoreFailedSources = parseResult.GetValue(IgnoreFailedSources);
          program.IncludeUpToDate = parseResult.GetValue(IncludeUpToDate);

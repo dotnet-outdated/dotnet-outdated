@@ -274,7 +274,7 @@ namespace DotNetOutdated.Tests
             var projectDiscoveryService = new ProjectDiscoveryService(fileSystem);
 
             // Act
-            var exception = Assert.Throws<CommandValidationException>(() => projectDiscoveryService.DiscoverProjects(_path, true, includeFileBasedApps));
+            var exception = Assert.Throws<NoProjectsFoundException>(() => projectDiscoveryService.DiscoverProjects(_path, true, includeFileBasedApps));
 
             // Assert
             Assert.Equal(string.Format(CultureInfo.InvariantCulture, ValidationErrorMessages.DirectoryDoesNotContainSolutionsOrProjects, _path), exception.Message);
@@ -290,7 +290,7 @@ namespace DotNetOutdated.Tests
             // Act
 
             // Assert
-            var exception = Assert.Throws<CommandValidationException>(() => projectDiscoveryService.DiscoverProjects(_path));
+            var exception = Assert.Throws<NoProjectsFoundException>(() => projectDiscoveryService.DiscoverProjects(_path));
             Assert.Equal(string.Format(CultureInfo.InvariantCulture, ValidationErrorMessages.DirectoryDoesNotContainSolutionsOrProjects, _path), exception.Message);
         }
 

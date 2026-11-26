@@ -24,16 +24,16 @@ namespace DotNetOutdated.Core.Services
 
     internal sealed class NuGetPackageInfoService : INuGetPackageInfoService, IDisposable
     {
-        // The enabled sources and the package source mapping come from the same settings and are published together,
-        // so a concurrent first call never sees sources without their mapping (which would query unmapped sources).
-        private SourceSettings? _sourceSettings;
+        // Settings are scoped to the project's directory, and sources and mappings are published together.
+        private readonly ConcurrentDictionary<string, SourceSettings> _sourceSettings =
+            new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
 
         private readonly SourceCacheContext _context;
 
         private readonly ConcurrentDictionary<string, Task<PackageMetadataResource?>> _metadataResourceRequests = [];
 
         // The result of checking a package version against a target framework, null when the source doesn't have it.
-        private readonly ConcurrentDictionary<(string Source, string Id, NuGetVersion Version, NuGetFramework Framework, bool IsDependency), Task<bool?>> _supportChecks = [];
+        private readonly ConcurrentDictionary<(string SettingsDirectory, string Source, string Id, NuGetVersion Version, NuGetFramework Framework, bool IsDependency), Task<bool?>> _supportChecks = [];
 
         private readonly ILogger _logger;
 
@@ -78,16 +78,18 @@ namespace DotNetOutdated.Core.Services
 
         private SourceSettings GetSourceSettings(string? root)
         {
-            if (_sourceSettings == null)
+            var directory = GetSettingsDirectory(root);
+            return _sourceSettings.GetOrAdd(directory, static directory =>
             {
-                var settings = Settings.LoadDefaultSettings(root);
-                _sourceSettings = new SourceSettings(
+                var settings = Settings.LoadDefaultSettings(directory.Length == 0 ? null : directory);
+                return new SourceSettings(
                     SettingsUtility.GetEnabledSources(settings),
                     PackageSourceMapping.GetPackageSourceMapping(settings));
-            }
-
-            return _sourceSettings;
+            });
         }
+
+        private static string GetSettingsDirectory(string? root) =>
+            root == null ? string.Empty : Path.GetDirectoryName(Path.GetFullPath(root)) ?? string.Empty;
 
         /// <summary>
         /// The repository for a source, created from the enabled sources in the NuGet settings when it is one of them,
@@ -120,7 +122,7 @@ namespace DotNetOutdated.Core.Services
         {
             try
             {
-                string resourceUrl = source.AbsoluteUri;
+                string resourceUrl = $"{source.AbsoluteUri}|{projectFilePath}";
                 var sourceRepository = GetSourceRepository(source, projectFilePath, packageId);
                 if (sourceRepository == null)
                 {
@@ -235,8 +237,10 @@ namespace DotNetOutdated.Core.Services
             foreach (var source in query.Sources)
             {
                 SourceRepository? repository;
+                string settingsDirectory;
                 try
                 {
+                    settingsDirectory = GetSettingsDirectory(query.ProjectFilePath);
                     repository = GetSourceRepository(source, query.ProjectFilePath, query.PackageId);
                 }
                 catch (Exception)
@@ -249,7 +253,7 @@ namespace DotNetOutdated.Core.Services
                     continue;
                 }
 
-                var unsupported = await CheckAsync(repository, new PackageIdentity(query.PackageId, query.Version), query.TargetFramework, isDependency: false)
+                var unsupported = await CheckAsync(repository, new PackageIdentity(query.PackageId, query.Version), query.TargetFramework, isDependency: false, settingsDirectory: settingsDirectory)
                     .WaitAsync(cancellationToken).ConfigureAwait(false);
                 if (unsupported != null)
                 {
@@ -261,10 +265,10 @@ namespace DotNetOutdated.Core.Services
         }
 
         // Shared by every caller with the same key, so it doesn't take one caller's cancellation token.
-        private Task<bool?> CheckAsync(SourceRepository repository, PackageIdentity identity, NuGetFramework targetFramework, bool isDependency) =>
+        private Task<bool?> CheckAsync(SourceRepository repository, PackageIdentity identity, NuGetFramework targetFramework, bool isDependency, string settingsDirectory) =>
             _supportChecks.GetOrAdd(
-                (repository.PackageSource.Source, identity.Id.ToUpperInvariant(), identity.Version, targetFramework, isDependency),
-                _ => ReadDeclaresUnsupportedAsync(repository, identity, targetFramework, isDependency));
+                (settingsDirectory, repository.PackageSource.Source, identity.Id.ToUpperInvariant(), identity.Version, targetFramework, isDependency),
+                _ => ReadDeclaresUnsupportedAsync(repository, identity, targetFramework, isDependency, settingsDirectory));
 
         /// <summary>
         /// Whether the package declares <paramref name="targetFramework"/> unsupported, or <see langword="null"/> when
@@ -275,7 +279,7 @@ namespace DotNetOutdated.Core.Services
         /// ones that warn.
         /// </summary>
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A source that fails is skipped, like one that doesn't have the package")]
-        private async Task<bool?> ReadDeclaresUnsupportedAsync(SourceRepository repository, PackageIdentity identity, NuGetFramework targetFramework, bool isDependency)
+        private async Task<bool?> ReadDeclaresUnsupportedAsync(SourceRepository repository, PackageIdentity identity, NuGetFramework targetFramework, bool isDependency, string settingsDirectory)
         {
             try
             {
@@ -318,7 +322,7 @@ namespace DotNetOutdated.Core.Services
                 var dependencies = NuGetFrameworkUtility.GetNearest(info.DependencyGroups, targetFramework, group => group.TargetFramework);
                 var dependencyChecks = await Task.WhenAll((dependencies?.Packages ?? [])
                     .Where(dependency => dependency.VersionRange.MinVersion != null)
-                    .Select(dependency => CheckAsync(repository, new PackageIdentity(dependency.Id, dependency.VersionRange.MinVersion), targetFramework, isDependency: true)))
+                    .Select(dependency => CheckAsync(repository, new PackageIdentity(dependency.Id, dependency.VersionRange.MinVersion), targetFramework, isDependency: true, settingsDirectory: settingsDirectory)))
                     .ConfigureAwait(false);
                 return dependencyChecks.Any(unsupported => unsupported == true);
             }

@@ -94,6 +94,7 @@ Options:
                                                         Default value is: 0.
   -n|--no-restore                                       Add the reference without performing restore preview and compatibility check.
   -r|--recursive                                        Recursively search for all projects within the provided directory.
+  -nt|--no-tools                                        Skip local tools from manifests in the target directory and its parents.
   -fba|--include-file-based-apps                        Include loose file-based apps when recursively searching a directory.
   -ifs|--ignore-failed-sources                          Treat package source failures as warnings.
   -utd|--include-up-to-date                             Include all dependencies in the report even the ones not outdated.
@@ -118,6 +119,8 @@ You can also pass a directory in the `Path` argument, in which case the same log
 Lastly, you can specify the path to a solution (`.sln` or `.slnx`), project (`.csproj` or `.fsproj`), or .NET file-based app (`.cs`) which **dotnet-outdated** must analyze. File-based apps require .NET SDK 10.0.300 or later.
 
 When `--recursive --include-file-based-apps` is used, **dotnet-outdated** also discovers loose `.cs` file-based apps that start with a shebang (`#!`). `.cs` files under a `.csproj` directory tree are ignored during recursive file-based app discovery.
+
+Local tools from `.config/dotnet-tools.json` and `dotnet-tools.json` in the target directory and its parents are included by default. Use `-nt` or `--no-tools` to skip them. Discovery stops at a manifest with `isRoot: true`; subdirectories are not searched. Tool updates use the same version and name filters, NuGet settings and report formats as packages. `--upgrade` reports the selected tool versions but does not change local-tool manifests, because changing a version without refreshing `commands` can leave stale command metadata. To update a tool and its commands at the selected version, run `dotnet tool update --local <package-id> --version <version> --tool-manifest <path>` using the package ID, version, and manifest path printed by the tool. For a manifest outside `.config`, use .NET SDK 10 or later so the update uses the manifest directory's NuGet settings together with user-wide settings; check `dotnet --version` because `global.json` may select an older SDK. Also, `--fail-on-updates` includes available tool updates. A manifest that cannot be read or parsed is skipped with a warning during discovery.
 
 File-based apps can declare NuGet packages with `#:package` and MSBuild SDK packages with `#:sdk` (for example `#:sdk Cake.Sdk@6.0.0`). Variable-backed versions use `#:property` the same way as for packages.
 
