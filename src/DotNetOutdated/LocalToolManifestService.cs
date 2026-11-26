@@ -182,13 +182,15 @@ internal sealed class LocalToolManifestService(IFileSystem fileSystem, INuGetPac
             using var document = JsonDocument.Parse(bytes.AsMemory(offset));
             var root = document.RootElement;
             var isRoot = root.TryGetProperty("isRoot", out var rootFlag) && rootFlag.GetBoolean();
-            var toolsElement = root.GetProperty("tools");
             var versions = new Dictionary<string, NuGetVersion>(StringComparer.OrdinalIgnoreCase);
-            foreach (var tool in toolsElement.EnumerateObject())
+            if (root.TryGetProperty("tools", out var toolsElement))
             {
-                if (!NuGetVersion.TryParse(tool.Value.GetProperty("version").GetString(), out var version) ||
-                    !versions.TryAdd(tool.Name, version))
-                    throw new JsonException($"Invalid or duplicate tool version for '{tool.Name}'.");
+                foreach (var tool in toolsElement.EnumerateObject())
+                {
+                    if (!NuGetVersion.TryParse(tool.Value.GetProperty("version").GetString(), out var version) ||
+                        !versions.TryAdd(tool.Name, version))
+                        throw new JsonException($"Invalid or duplicate tool version for '{tool.Name}'.");
+                }
             }
 
             var tools = new List<Tool>();
