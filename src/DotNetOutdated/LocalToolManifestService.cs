@@ -125,10 +125,16 @@ internal sealed class LocalToolManifestService(IFileSystem fileSystem, INuGetPac
     {
         foreach (var project in projects)
         {
+            var manifestDirectory = _fileSystem.Path.GetDirectoryName(project.FilePath);
+            var isConfigDirectory = string.Equals(_fileSystem.Path.GetFileName(manifestDirectory), ".config",
+                OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
             foreach (var dependency in project.TargetFrameworks.SelectMany(framework => framework.Dependencies))
             {
                 if (dependency.LatestVersion == null || dependency.LatestVersion <= dependency.Dependency.ResolvedVersion)
                     continue;
+
+                if (!isConfigDirectory)
+                    console.WriteLine("Use .NET SDK 10 or later for this command so NuGet loads the manifest directory's settings as well as user-wide settings. Check 'dotnet --version'; a global.json may select an older SDK.");
 
                 console.WriteLine(
                     $"Skipped local tool {dependency.Dependency.Name}: --upgrade cannot refresh the manifest's command metadata. " +

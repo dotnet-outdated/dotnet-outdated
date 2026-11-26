@@ -345,6 +345,39 @@ public static class EndToEndTests
         Assert.Contains($"--tool-manifest \"{second}\"", console.WrittenOut);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public static void LocalToolUpgradeGuidanceAccountsForManifestSettingsDirectory(bool configDirectory)
+    {
+        using var directory = new TemporaryDirectory();
+        var manifestDirectory = configDirectory ? Path.Combine(directory.Path, ".config") : directory.Path;
+        var path = Path.Combine(manifestDirectory, "dotnet-tools.json");
+        var project = new OutdatedProject
+        {
+            Name = "tools",
+            FilePath = path,
+            TargetFrameworks = [new OutdatedTargetFramework
+            {
+                Name = NuGet.Frameworks.NuGetFramework.AnyFramework,
+                Dependencies = [new OutdatedDependency
+                {
+                    Dependency = new Dependency { Name = "Fake.Tool", VersionRange = VersionRange.Parse("1.0.0"), ResolvedVersion = NuGetVersion.Parse("1.0.0") },
+                    LatestVersion = NuGetVersion.Parse("2.0.0"),
+                }],
+            }],
+        };
+        var service = new LocalToolManifestService(new System.IO.Abstractions.FileSystem(), null!);
+        using var console = new MockConsole();
+
+        Assert.True(service.Upgrade([project], console));
+        Assert.Contains($"dotnet tool update --local Fake.Tool --version 2.0.0 --tool-manifest \"{path}\"", console.WrittenOut);
+        if (configDirectory)
+            Assert.DoesNotContain("SDK 10", console.WrittenOut);
+        else
+            Assert.Contains("SDK 10 or later", console.WrittenOut);
+    }
+
     [Fact]
     public static void InvalidLocalToolManifestIsSkippedWithWarning()
     {
