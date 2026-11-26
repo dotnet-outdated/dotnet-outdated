@@ -273,7 +273,7 @@ internal sealed class LocalToolManifestService(IFileSystem fileSystem, INuGetPac
     private static void WriteRestoreHint(bool upgradedAny, IConsole console)
     {
         if (upgradedAny)
-            console.WriteLine("Run 'dotnet tool restore' from the analyzed directory (or pass '--tool-manifest <path>') to install the upgraded local tools. Tool commands in the manifest are not changed; use 'dotnet tool update --local' if a new version renames its commands.");
+            console.WriteLine("Run 'dotnet tool restore' from the analyzed directory (or pass '--tool-manifest <path>') to install the upgraded local tools. Tool commands in the manifest are not changed; to refresh renamed commands, uninstall and reinstall the tool at the exact version selected by --upgrade: 'dotnet tool uninstall <package-id> --local' followed by 'dotnet tool install <package-id> --local --version <version>' (add '--tool-manifest <path>' when needed).");
     }
 
     private Manifest ReadManifest(string path)

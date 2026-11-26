@@ -350,6 +350,9 @@ public static class EndToEndTests
         Assert.Contains("\"version\":\"2.0.0\"", File.ReadAllText(first));
         Assert.Contains("\"version\":\"1.0.0\"", File.ReadAllText(second));
         Assert.Contains("dotnet tool restore", console.WrittenOut);
+        Assert.Contains("dotnet tool uninstall <package-id> --local", console.WrittenOut);
+        Assert.Contains("dotnet tool install <package-id> --local --version <version>", console.WrittenOut);
+        Assert.DoesNotContain("dotnet tool update --local", console.WrittenOut);
     }
 
     [Fact]
