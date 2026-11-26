@@ -394,6 +394,7 @@ public static class EndToEndTests
         var manifests = new LocalToolManifestService(new System.IO.Abstractions.FileSystem(), null!).Discover(directory.Path, warnings.Add);
 
         Assert.DoesNotContain(Path.Combine(directory.Path, "dotnet-tools.json"), manifests);
+        Assert.Contains(warnings, warning => warning.Contains("dotnet-tools.json"));
     }
 
     [Theory]
