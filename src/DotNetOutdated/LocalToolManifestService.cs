@@ -54,14 +54,13 @@ internal sealed class LocalToolManifestService(IFileSystem fileSystem, INuGetPac
         if (manifests.Count == 0)
             return [];
 
-        var fullPath = _fileSystem.Path.GetFullPath(path);
-        var directory = _fileSystem.Directory.Exists(fullPath) ? fullPath : _fileSystem.Path.GetDirectoryName(fullPath);
-        var sources = SettingsUtility.GetEnabledSources(Settings.LoadDefaultSettings(directory))
-            .Select(source => source.SourceUri).ToList();
         var projects = new List<OutdatedProject>();
 
         foreach (var manifestPath in manifests)
         {
+            var manifestDirectory = _fileSystem.Path.GetDirectoryName(_fileSystem.Path.GetFullPath(manifestPath));
+            var sources = SettingsUtility.GetEnabledSources(Settings.LoadDefaultSettings(manifestDirectory))
+                .Select(source => source.SourceUri).ToList();
             var manifest = ReadManifest(manifestPath);
             var dependencies = new List<OutdatedDependency>();
             foreach (var tool in manifest.Tools)
@@ -78,7 +77,7 @@ internal sealed class LocalToolManifestService(IFileSystem fileSystem, INuGetPac
                     AllowedRange = range,
                     Sources = sources,
                     TargetFramework = NuGetFramework.AnyFramework,
-                    ProjectFilePath = _fileSystem.Path.Combine(directory, "dotnet-tools.json"),
+                    ProjectFilePath = manifestPath,
                     IsDevelopmentDependency = true,
                     VersionLock = options.VersionLock,
                     Prerelease = options.Prerelease,
