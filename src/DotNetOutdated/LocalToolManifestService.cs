@@ -20,7 +20,7 @@ internal sealed class LocalToolManifestService(IFileSystem fileSystem, INuGetPac
     private readonly IFileSystem _fileSystem = fileSystem;
     private readonly INuGetPackageResolutionService _resolutionService = resolutionService;
 
-    public List<string> Discover(string path)
+    public List<string> Discover(string path, Action<string> warn = null)
     {
         var fullPath = _fileSystem.Path.GetFullPath(path);
         if (!_fileSystem.Directory.Exists(fullPath) && !_fileSystem.File.Exists(fullPath))
@@ -38,8 +38,20 @@ internal sealed class LocalToolManifestService(IFileSystem fileSystem, INuGetPac
                 if (!_fileSystem.File.Exists(candidate))
                     continue;
 
+                Manifest manifest;
+                try
+                {
+                    manifest = ReadManifest(candidate);
+                }
+                catch (CommandValidationException ex)
+                {
+                    // An unusable manifest must not block analysis of the project; it is not analyzed or modified.
+                    warn?.Invoke($"Skipped local tool manifest {candidate}: {ex.Message}");
+                    continue;
+                }
+
                 manifests.Add(candidate);
-                if (ReadManifest(candidate).IsRoot)
+                if (manifest.IsRoot)
                     return manifests;
             }
 
@@ -172,6 +184,8 @@ internal sealed class LocalToolManifestService(IFileSystem fileSystem, INuGetPac
                 continue;
             }
 
+            var approved = new List<OutdatedDependency>();
+            var stopped = false;
             foreach (var dependency in project.TargetFrameworks.SelectMany(framework => framework.Dependencies))
             {
                 if (dependency.LatestVersion == null || dependency.LatestVersion <= dependency.Dependency.ResolvedVersion)
@@ -184,20 +198,40 @@ internal sealed class LocalToolManifestService(IFileSystem fileSystem, INuGetPac
                     if (answer is null)
                     {
                         console.WriteLine("No input is available to answer the prompt, so the remaining tool upgrades were skipped.");
-                        return true;
+                        stopped = true;
+                        break;
                     }
                     if (!answer.Value)
                         continue;
                 }
 
-                var manifest = ReadManifest(project.FilePath);
-                var tool = manifest.Tools.SingleOrDefault(tool => string.Equals(tool.Name, dependency.Dependency.Name, StringComparison.OrdinalIgnoreCase));
-                if (tool == null || tool.Version != dependency.Dependency.ResolvedVersion)
-                    throw new CommandValidationException($"Local tool {dependency.Dependency.Name} in {project.FilePath} changed since it was analyzed.");
+                approved.Add(dependency);
+            }
 
-                var replacement = JsonSerializer.SerializeToUtf8Bytes(dependency.LatestVersion.ToString());
+            if (approved.Count != 0)
+            {
+                // All approved changes to one manifest are committed with a single replacement, so a manifest is never left half-upgraded.
+                if (!IsWritable(project.FilePath, scope))
+                    throw new CommandValidationException($"Local tool manifest '{project.FilePath}' changed location or became a link while it was being upgraded; it was left unchanged.");
+
+                var manifest = ReadManifest(project.FilePath);
+                var changes = new List<(Tool Tool, OutdatedDependency Dependency)>();
+                foreach (var dependency in approved)
+                {
+                    var tool = manifest.Tools.SingleOrDefault(tool => string.Equals(tool.Name, dependency.Dependency.Name, StringComparison.OrdinalIgnoreCase));
+                    if (tool == null || tool.Version != dependency.Dependency.ResolvedVersion)
+                        throw new CommandValidationException($"Local tool {dependency.Dependency.Name} in {project.FilePath} changed since it was analyzed.");
+                    changes.Add((tool, dependency));
+                }
+
                 var bytes = manifest.Bytes;
-                byte[] updated = [.. bytes.AsSpan(0, tool.Start), .. replacement, .. bytes.AsSpan(tool.End)];
+                var updated = bytes;
+                foreach (var (tool, dependency) in changes.OrderByDescending(change => change.Tool.Start))
+                {
+                    var replacement = JsonSerializer.SerializeToUtf8Bytes(dependency.LatestVersion.ToString());
+                    updated = [.. updated.AsSpan(0, tool.Start), .. replacement, .. updated.AsSpan(tool.End)];
+                }
+
                 var temporaryPath = project.FilePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
                 try
                 {
@@ -222,10 +256,16 @@ internal sealed class LocalToolManifestService(IFileSystem fileSystem, INuGetPac
                     {
                     }
                 }
-                console.WriteLine($"Upgraded local tool {tool.Name} in {project.FilePath} to {dependency.LatestVersion}.");
+                foreach (var (tool, dependency) in changes)
+                {
+                    console.WriteLine($"Upgraded local tool {tool.Name} in {project.FilePath} to {dependency.LatestVersion}.");
+                    committed.Add($"{tool.Name} in {project.FilePath}");
+                }
                 upgradedAny = true;
-                committed.Add($"{tool.Name} in {project.FilePath}");
             }
+
+            if (stopped)
+                return true;
         }
         return true;
     }

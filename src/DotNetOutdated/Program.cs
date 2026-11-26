@@ -129,7 +129,7 @@ namespace DotNetOutdated
 
             var options = CreateOutdatedOptions();
             var toolService = NoTools ? null : new LocalToolManifestService(_fileSystem, _packageResolutionService);
-            var manifests = toolService?.Discover(Path) ?? [];
+            var manifests = toolService?.Discover(Path, message => console.Error.WriteLine(message)) ?? [];
             OutdatedReport report;
             try
             {

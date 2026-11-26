@@ -384,13 +384,16 @@ public static class EndToEndTests
     }
 
     [Fact]
-    public static void InvalidLocalToolManifestReturnsValidationError()
+    public static void InvalidLocalToolManifestIsSkippedWithWarning()
     {
         using var directory = new TemporaryDirectory();
         File.WriteAllText(Path.Combine(directory.Path, "dotnet-tools.json"),
             """{"version":1,"isRoot":true,"tools":{"broken":{"version":"invalid","commands":["broken"]}}}""");
+        var warnings = new List<string>();
 
-        Assert.Equal(1, Program.Main([directory.Path]));
+        var manifests = new LocalToolManifestService(new System.IO.Abstractions.FileSystem(), null!).Discover(directory.Path, warnings.Add);
+
+        Assert.DoesNotContain(Path.Combine(directory.Path, "dotnet-tools.json"), manifests);
     }
 
     [Theory]
